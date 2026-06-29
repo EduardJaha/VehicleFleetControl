@@ -1,100 +1,531 @@
-# Vehicle Fleet Control - Next.js + FastAPI
+# VehicleFleetControl
 
-This is a reorganized version of the original VehicleManagement project.
+VehicleFleetControl is a full-stack vehicle fleet management system designed to help companies manage their vehicles, service history, fuel records, vehicle papers, accidents, and reservations from one centralized platform.
 
-The old solution was:
+The project is built with a **Next.js + TypeScript frontend** and a **Python FastAPI backend**. It uses a local SQLite database for development and provides a clean API structure that can later be extended to support production databases such as PostgreSQL.
+
+---
+
+## Tech Stack
+
+### Frontend
+
+* Next.js
+* TypeScript
+* React
+* CSS Modules / global styling
+* Fetch-based API integration
+
+### Backend
+
+* Python
+* FastAPI
+* SQLAlchemy
+* Pydantic
+* SQLite
+* Uvicorn
+
+### Development Tools
+
+* Git
+* Node.js / npm
+* Python virtual environment
+* FastAPI Swagger documentation
+
+---
+
+## Main Features
+
+VehicleFleetControl currently includes the following modules:
+
+### Dashboard
+
+* Fleet overview
+* Vehicle statistics
+* Reservation summary
+* Vehicle status overview
+* Vehicle location overview
+
+### Vehicle Management
+
+* Add new vehicles
+* Edit vehicle details
+* Delete vehicles
+* Search and filter vehicles
+* Track vehicle status
+* Track vehicle location
+* Track odometer readings
+* Validate vehicle license plate format
+
+### Service Management
+
+* Register vehicle services
+* Upload service bills
+* Upload bills later
+* View service history
+* Delete service records
+* Search and filter services
+* Track service costs
+* Track service workshops
+* Support kilometer-based and date-based service reminders
+
+### Fuel Management
+
+* Register fuel records
+* Edit fuel records
+* Delete fuel records
+* Upload fuel bills
+* Track liters, cost per liter, and total fuel cost
+* Search and filter fuel records
+* View fuel history by vehicle
+
+### Vehicle Papers
+
+* Upload vehicle papers
+* Manage registration documents
+* Manage insurance documents
+* View uploaded files
+* Delete vehicle papers
+* Search and filter vehicle documents
+
+### Accident Management
+
+* Report vehicle accidents
+* Upload accident files or photos
+* View accident history
+* Search and filter accident records by vehicle, location, or date
+
+### Reservation Management
+
+* Create vehicle reservations
+* Approve reservations
+* Reject reservations
+* Track reservation status
+* Prevent overlapping active reservations
+* Search and filter reservations
+
+---
+
+## Project Structure
 
 ```text
-VehicleManagement.API      ASP.NET Core Web API
-VehicleManagement.App      Blazor WebAssembly frontend
-VehicleManagement.Shared   C# DTOs/enums shared between API and Blazor
+VehicleFleetControl/
+  backend/
+    app/
+      api/
+        v1/
+          endpoints/
+      core/
+      db/
+      utils/
+      main.py
+      models.py
+      schemas.py
+    data/
+    uploads/
+    requirements.txt
+
+  frontend/
+    app/
+      dashboard/
+      vehicles/
+      services/
+      fuel/
+      papers/
+      accidents/
+      reservations/
+    src/
+      components/
+      lib/
+    package.json
+    tsconfig.json
+
+  docs/
+  scripts/
+  docker-compose.yml
+  README.md
 ```
 
-The new structure is:
+---
 
-```text
-VehicleManagement_Next_FastAPI/
-  backend/        Python FastAPI API, SQLAlchemy models, Pydantic schemas
-  frontend/       Next.js App Router frontend with TypeScript
-  docs/           Migration notes and structure analysis
-  scripts/        Local run helpers
-```
+## Prerequisites
 
-## What changed
+Before running the project, install the following tools:
 
-- `VehicleManagement.App` was replaced by `frontend/`.
-- `VehicleManagement.API` was replaced by `backend/`.
-- `VehicleManagement.Shared` was replaced by:
-  - `backend/app/schemas.py` for API contracts.
-  - `frontend/src/lib/types.ts` for frontend TypeScript contracts.
-- The SQLite database is copied to `backend/data/vehiclemanagement.db`.
-- Uploads are served by FastAPI from `backend/uploads`.
+### Required
 
-## Run backend
+* Git
+* Python 3.11 or newer
+* Node.js 18 or newer
+* npm
+
+Check your installed versions:
 
 ```bash
+git --version
+python --version
+node --version
+npm --version
+```
+
+On some Linux or macOS systems, Python may be available as `python3` instead of `python`.
+
+```bash
+python3 --version
+```
+
+---
+
+## Clone the Repository
+
+```bash
+git clone https://github.com/EduardJaha/VehicleFleetControl.git
+cd VehicleFleetControl
+```
+
+---
+
+# Running the Project
+
+The project has two applications:
+
+1. FastAPI backend
+2. Next.js frontend
+
+You need to run both applications at the same time.
+
+---
+
+## Backend Setup
+
+The backend is located inside the `backend` folder.
+
+### Windows PowerShell
+
+```powershell
 cd backend
+
 python -m venv .venv
-source .venv/bin/activate     # Windows: .venv\Scripts\activate
+
+.venv\Scripts\Activate.ps1
+
 pip install -r requirements.txt
+
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API docs:
+### Windows Command Prompt
+
+```bat
+cd backend
+
+python -m venv .venv
+
+.venv\Scripts\activate
+
+pip install -r requirements.txt
+
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### macOS / Linux
+
+```bash
+cd backend
+
+python3 -m venv .venv
+
+source .venv/bin/activate
+
+pip install -r requirements.txt
+
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The backend will run at:
+
+```text
+http://localhost:8000
+```
+
+FastAPI documentation will be available at:
 
 ```text
 http://localhost:8000/docs
 ```
 
-API base URL:
+Health check endpoint:
 
 ```text
-http://localhost:8000/api/v1
+http://localhost:8000/health
 ```
 
-## Run frontend
+---
+
+## Frontend Setup
+
+Open a second terminal and run the frontend.
+
+The frontend is located inside the `frontend` folder.
+
+### Windows / macOS / Linux
 
 ```bash
 cd frontend
+
 npm install
+
 npm run dev
 ```
 
-Frontend URL:
+The frontend will run at:
 
 ```text
 http://localhost:3000
 ```
 
-The frontend expects:
+---
 
-```text
-NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
-```
+## Local Development URLs
 
-## Windows one-click run
+| Service           | URL                                 |
+| ----------------- | ----------------------------------- |
+| Frontend          | `http://localhost:3000`             |
+| Backend API       | `http://localhost:8000`             |
+| API Documentation | `http://localhost:8000/docs`        |
+| Health Check      | `http://localhost:8000/health`      |
+| Uploaded Files    | `http://localhost:8000/uploads/...` |
 
-```powershell
+---
+
+## Running with Local Scripts
+
+The repository includes helper scripts for local development.
+
+### Windows
+
+From the project root:
+
+```bat
 scripts\run-local.bat
 ```
 
-## Important migration note
+### macOS / Linux
 
-This scaffold preserves the domain model and the main API operations from the current C# project, but it is a modernization scaffold, not a pixel-perfect rewrite of every Blazor screen. The backend has full FastAPI route modules for vehicles, dashboard, papers, services, fuel, accidents, and reservations. The frontend is structured with matching Next.js pages and typed API calls so you can continue rebuilding each Blazor page cleanly.
+From the project root:
 
-## Frontend features added in this version
+```bash
+chmod +x scripts/run-local.sh
+./scripts/run-local.sh
+```
 
-The Next.js frontend now includes operational forms and actions for the main fleet modules:
+These scripts start the backend and frontend locally.
 
-- Vehicle search/filtering and vehicle delete buttons.
-- Service registration form, including reminder fields for kilometer-based and date-based service types.
-- Service bill upload during registration and separate bill upload after registration.
-- Service history filtering and service delete buttons.
-- Fuel registration form with liters, cost per liter, station, location, odometer, and optional bill upload.
-- Inline fuel edit/save/cancel controls and fuel delete buttons.
-- Paper/document upload form, document filtering, file open links, and paper delete buttons.
-- Accident report form with multiple file/photo upload and accident search/filtering.
-- Reservation creation form, reservation filtering, and approve/reject buttons.
-- Service reminder filtering.
+---
 
-A small backend compatibility change was also added: service overview rows now return the service `id`, which is required for safe service deletion from the frontend.
+## Database
+
+The project uses SQLite for local development.
+
+The local database is stored in:
+
+```text
+backend/data/vehiclemanagement.db
+```
+
+The database file is not committed to GitHub because it is local development data.
+
+If the database does not exist, the backend can create the required database structure when the application starts.
+
+---
+
+## Uploads
+
+Uploaded files are stored locally in:
+
+```text
+backend/uploads/
+```
+
+This includes files such as:
+
+* Service bills
+* Fuel bills
+* Vehicle papers
+* Accident photos or documents
+
+Uploaded user files are not committed to GitHub.
+
+---
+
+## API Documentation
+
+FastAPI automatically generates API documentation.
+
+After starting the backend, open:
+
+```text
+http://localhost:8000/docs
+```
+
+From there you can test backend endpoints directly in the browser.
+
+---
+
+## Useful Commands
+
+### Start Backend
+
+```bash
+cd backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Start Frontend
+
+```bash
+cd frontend
+npm run dev
+```
+
+### Install Backend Dependencies
+
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+### Install Frontend Dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### Build Frontend
+
+```bash
+cd frontend
+npm run build
+```
+
+---
+
+## Recommended Development Workflow
+
+1. Start the backend first.
+2. Confirm the backend is running at `http://localhost:8000/docs`.
+3. Open a second terminal.
+4. Start the frontend.
+5. Open the app at `http://localhost:3000`.
+6. Use the browser UI to manage vehicles, services, fuel records, papers, accidents, and reservations.
+
+---
+
+## Environment Notes
+
+For local development, the frontend expects the backend API to be available at:
+
+```text
+http://localhost:8000/api/v1
+```
+
+Make sure the backend is running before using the frontend.
+
+---
+
+## Common Issues
+
+### `python` is not recognized
+
+Use:
+
+```bash
+python3 --version
+```
+
+If `python3` works, use `python3` instead of `python` when creating the virtual environment.
+
+---
+
+### PowerShell blocks virtual environment activation
+
+Run PowerShell as Administrator and execute:
+
+```powershell
+Set-ExecutionPolicy RemoteSigned
+```
+
+Then activate the virtual environment again:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+---
+
+### Port 8000 is already in use
+
+Stop the application currently using port `8000`, or run the backend on another port:
+
+```bash
+uvicorn app.main:app --reload --port 8001
+```
+
+If you change the backend port, update the frontend API base URL accordingly.
+
+---
+
+### Port 3000 is already in use
+
+Run the frontend on another port:
+
+```bash
+npm run dev -- -p 3001
+```
+
+---
+
+### Frontend cannot connect to backend
+
+Make sure the backend is running:
+
+```text
+http://localhost:8000/docs
+```
+
+Also confirm the frontend is using the correct backend API URL:
+
+```text
+http://localhost:8000/api/v1
+```
+
+---
+
+## Git Ignore
+
+The repository should not include generated or local-only files such as:
+
+```text
+frontend/node_modules/
+frontend/.next/
+backend/.venv/
+backend/data/*.db
+backend/uploads/
+__pycache__/
+.env
+```
+
+These files are generated locally and should stay outside GitHub.
+
+---
+
+## License
+
+This project is currently private/internal. Add a license file if the repository will be made public or shared with external contributors.
+
+---
+
+## Project Status
+
+VehicleFleetControl is under active development. The current version provides the core structure and main fleet management functionality for vehicles, services, fuel, documents, accidents, and reservations.

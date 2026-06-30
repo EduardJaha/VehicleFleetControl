@@ -31,6 +31,31 @@ export type AuthResponse = {
 
 export type VehiclePayload = Omit<Vehicle, "id" | "status_name">;
 
+export type DriverStatus = "Active" | "Suspended" | "Left Company";
+
+export type Driver = {
+  id: number;
+  full_name: string;
+  phone_number?: string | null;
+  email?: string | null;
+  employee_number: string;
+  department?: string | null;
+  license_number: string;
+  license_category: string;
+  license_expiry_date: string;
+  assigned_vehicle_id?: number | null;
+  assigned_license_plate?: string | null;
+  user_id?: number | null;
+  status: DriverStatus;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DriverPayload = Omit<Driver, "id" | "assigned_vehicle_id" | "created_at" | "updated_at"> & {
+  assigned_vehicle_id?: number | null;
+};
+
 export type DashboardSummary = {
   total_vehicles: number;
   status_summary: Array<{ status: number; count: number }>;

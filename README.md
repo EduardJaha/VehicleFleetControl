@@ -57,6 +57,13 @@ VehicleFleetControl currently includes the following modules:
 * Track odometer readings
 * Validate vehicle license plate format
 
+### Driver Management
+
+* Create, edit, delete, search, and filter driver records
+* Track employee number, department, license number, license category, and license expiry
+* Optionally link drivers to users and assigned vehicles
+* Highlight expired or soon-expiring driver licenses
+
 ### Service Management
 
 * Register vehicle services

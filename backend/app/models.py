@@ -18,6 +18,8 @@ class User(Base):
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    driver_profile = relationship("Driver", back_populates="user", uselist=False)
+
 
 class Vehicle(Base):
     __tablename__ = "Vehicles"
@@ -40,6 +42,35 @@ class Vehicle(Base):
     fuels = relationship("VehicleFuel", back_populates="vehicle", cascade="all, delete-orphan")
     accidents = relationship("VehicleAccident", back_populates="vehicle", cascade="all, delete-orphan")
     reservations = relationship("VehicleReservation", back_populates="vehicle", cascade="all, delete-orphan")
+    assigned_drivers = relationship("Driver", back_populates="assigned_vehicle")
+
+
+class Driver(Base):
+    __tablename__ = "Drivers"
+    __table_args__ = (
+        UniqueConstraint("Email", name="uq_drivers_email"),
+        UniqueConstraint("EmployeeNumber", name="uq_drivers_employee_number"),
+        UniqueConstraint("LicenseNumber", name="uq_drivers_license_number"),
+    )
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    full_name = Column("FullName", String(255), nullable=False)
+    phone_number = Column("PhoneNumber", String(50), nullable=True)
+    email = Column("Email", String(255), nullable=True, index=True)
+    employee_number = Column("EmployeeNumber", String(100), nullable=False, index=True)
+    department = Column("Department", String(100), nullable=True)
+    license_number = Column("LicenseNumber", String(100), nullable=False, index=True)
+    license_category = Column("LicenseCategory", String(50), nullable=False)
+    license_expiry_date = Column("LicenseExpiryDate", DateTime, nullable=False)
+    assigned_vehicle_id = Column("AssignedVehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="SET NULL"), nullable=True)
+    user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True, unique=True)
+    status = Column("Status", String(50), nullable=False, default="Active")
+    notes = Column("Notes", Text, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    assigned_vehicle = relationship("Vehicle", back_populates="assigned_drivers")
+    user = relationship("User", back_populates="driver_profile")
 
 
 class VehiclePaper(Base):

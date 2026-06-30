@@ -31,3 +31,4 @@ export const SERVICE_TYPES = ["General Service", "Oil Change", "Tire Change/Cont
 export const SERVICE_KM_INTERVALS = [5000, 10000, 15000];
 export const DOCUMENT_TYPES = ["Registration", "Insurance", "Technical Control", "Ownership", "Other"];
 export const RESERVATION_TYPES = ["Business Trip", "Personal Use", "Replacement Vehicle", "Maintenance", "Other"];
+export const DRIVER_STATUSES = ["Active", "Suspended", "Left Company"];

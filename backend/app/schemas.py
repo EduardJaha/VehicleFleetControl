@@ -29,6 +29,12 @@ class UserRole(str, Enum):
     viewer = "viewer"
 
 
+class DriverStatus(str, Enum):
+    active = "Active"
+    suspended = "Suspended"
+    left_company = "Left Company"
+
+
 class UserBase(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     full_name: str = Field(min_length=1, max_length=255)
@@ -91,6 +97,60 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class DriverBase(BaseModel):
+    full_name: str = Field(min_length=1, max_length=255)
+    phone_number: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=255)
+    employee_number: str = Field(min_length=1, max_length=100)
+    department: str | None = Field(default=None, max_length=100)
+    license_number: str = Field(min_length=1, max_length=100)
+    license_category: str = Field(min_length=1, max_length=50)
+    license_expiry_date: str
+    assigned_vehicle_id: int | None = None
+    assigned_license_plate: str | None = None
+    user_id: int | None = None
+    status: DriverStatus = DriverStatus.active
+    notes: str | None = None
+
+    @field_validator("full_name", "employee_number", "license_number", "license_category")
+    @classmethod
+    def required_text(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("This field is required.")
+        return text
+
+    @field_validator("email")
+    @classmethod
+    def normalize_optional_email(cls, value: str | None) -> str | None:
+        if value is None or value.strip() == "":
+            return None
+        return UserBase.normalize_email(value)
+
+    @field_validator("phone_number", "department", "assigned_license_plate", "notes")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class DriverCreate(DriverBase):
+    pass
+
+
+class DriverUpdate(DriverBase):
+    pass
+
+
+class DriverOut(DriverBase):
+    id: int
+    created_at: str
+    updated_at: str
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VehicleBase(BaseModel):

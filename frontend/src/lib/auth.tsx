@@ -15,6 +15,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 
 export const PERMISSIONS = {
   vehiclesWrite: ["admin", "fleet_manager"],
+  driversWrite: ["admin", "fleet_manager"],
   papersWrite: ["admin", "fleet_manager"],
   reservationsCreate: ["admin", "fleet_manager", "driver"],
   reservationsApprove: ["admin", "fleet_manager"],

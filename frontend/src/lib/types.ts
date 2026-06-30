@@ -13,6 +13,22 @@ export type Vehicle = {
   status_name: string;
 };
 
+export type UserRole = "admin" | "fleet_manager" | "mechanic" | "driver" | "finance" | "viewer";
+
+export type CurrentUser = {
+  id: number;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+};
+
+export type AuthResponse = {
+  access_token: string;
+  token_type: "bearer";
+  user: CurrentUser;
+};
+
 export type VehiclePayload = Omit<Vehicle, "id" | "status_name">;
 
 export type DashboardSummary = {

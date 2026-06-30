@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet, apiPut } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { Vehicle, VehiclePayload } from "@/lib/types";
 import { FUEL_TYPES } from "@/lib/constants";
 
 export default function EditVehiclePage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const { can } = useAuth();
   const [form, setForm] = useState<VehiclePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +31,10 @@ export default function EditVehiclePage({ params }: { params: { id: string } }) 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update vehicle");
     }
+  }
+
+  if (!can("vehiclesWrite")) {
+    return <div className="error">You do not have permission to edit vehicles.</div>;
   }
 
   if (!form) return <div className="card">Loading vehicle...</div>;

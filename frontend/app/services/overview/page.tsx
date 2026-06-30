@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPostForm, buildQuery, fileHref } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { SERVICE_KM_INTERVALS, SERVICE_TYPES } from "@/lib/constants";
 import { toApiDate, todayInputDate } from "@/lib/format";
 import type { ApiMessage, VehicleServiceOverview } from "@/lib/types";
@@ -31,6 +32,8 @@ const initialServiceForm: ServiceForm = {
 };
 
 export default function ServicesOverviewPage() {
+  const { can } = useAuth();
+  const canWrite = can("servicesWrite");
   const [services, setServices] = useState<VehicleServiceOverview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -163,7 +166,7 @@ export default function ServicesOverviewPage() {
       {error && <div className="error spaced">{error}</div>}
       {message && <div className="success spaced">{message}</div>}
 
-      <div className="grid cols-2 spaced">
+      {canWrite && <div className="grid cols-2 spaced">
         <form onSubmit={registerService} className="form card fullWidthForm">
           <h2>Register service</h2>
           <div className="formGrid">
@@ -190,7 +193,7 @@ export default function ServicesOverviewPage() {
           </div>
           <button className="button" type="submit">Upload bill</button>
         </form>
-      </div>
+      </div>}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.plate} onChange={(e) => setFilters({ ...filters, plate: e.target.value })} placeholder="Plate" />
@@ -204,17 +207,17 @@ export default function ServicesOverviewPage() {
       <p className="muted">Showing {serviceCount} service record(s).</p>
       {loading ? <div className="card">Loading services...</div> : (
         <table className="table">
-          <thead><tr><th>Plate</th><th>Type</th><th>Date</th><th>Workshop</th><th>Cost</th><th>Odometer</th><th>Next</th><th>Bill</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Plate</th><th>Type</th><th>Date</th><th>Workshop</th><th>Cost</th><th>Odometer</th><th>Next</th><th>Bill</th>{canWrite && <th>Actions</th>}</tr></thead>
           <tbody>
             {services.map((s) => (
               <tr key={s.id}>
                 <td><strong>{s.license_plate}</strong></td><td>{s.service_type}</td><td>{s.service_date}</td><td>{s.workshop ?? "-"}</td><td>{s.cost ?? "-"}</td><td>{s.odometer_km ?? "-"}</td>
                 <td>{s.next_service_odometer_km ? `${s.next_service_odometer_km} km` : s.next_service_date ?? "-"}</td>
                 <td>{s.bill_file_path ? <a className="link" href={fileHref(s.bill_file_path)} target="_blank">Open</a> : "-"}</td>
-                <td><button className="dangerButton smallButton" type="button" onClick={() => void deleteService(s)}>Delete</button></td>
+                {canWrite && <td><button className="dangerButton smallButton" type="button" onClick={() => void deleteService(s)}>Delete</button></td>}
               </tr>
             ))}
-            {services.length === 0 && <tr><td colSpan={9} className="muted">No service records found.</td></tr>}
+            {services.length === 0 && <tr><td colSpan={canWrite ? 9 : 8} className="muted">No service records found.</td></tr>}
           </tbody>
         </table>
       )}

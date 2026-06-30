@@ -2,14 +2,15 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
+from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
-from app.models import Vehicle, VehicleFuel
-from app.schemas import FuelOverviewOut, FuelRecordOut, FuelUpdate
+from app.models import User, Vehicle, VehicleFuel
+from app.schemas import FuelOverviewOut, FuelRecordOut, FuelUpdate, UserRole
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate
 from app.utils.files import delete_upload, save_upload
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 VALID_FUEL_TYPES = {"Petrol", "Diesel", "Hybrid", "Electric", "LPG", "CNG", "Gas"}
 
 
@@ -56,6 +57,7 @@ async def add_fuel_record(
     odometer_km: int | None = Form(None),
     bill_file: UploadFile | None = File(None),
     db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin, UserRole.finance)),
 ):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
@@ -95,7 +97,7 @@ def get_fuel_record(record_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{record_id}")
-def update_fuel_record(record_id: int, payload: FuelUpdate, db: Session = Depends(get_db)):
+def update_fuel_record(record_id: int, payload: FuelUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.finance))):
     record = db.query(VehicleFuel).options(joinedload(VehicleFuel.vehicle)).filter(VehicleFuel.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Fuel record with id '{record_id}' was not found.")
@@ -170,7 +172,7 @@ def by_license_plate(license_plate: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{record_id}")
-def delete_fuel_record(record_id: int, db: Session = Depends(get_db)):
+def delete_fuel_record(record_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.finance))):
     record = db.query(VehicleFuel).filter(VehicleFuel.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Fuel record with id '{record_id}' was not found.")

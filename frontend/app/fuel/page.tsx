@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPostForm, apiPut, fileHref } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { FUEL_TYPES } from "@/lib/constants";
 import { toApiDate, toInputDate, todayInputDate } from "@/lib/format";
 import type { ApiMessage, FuelRecord } from "@/lib/types";
@@ -29,6 +30,8 @@ const initialFuelForm: FuelForm = {
 };
 
 export default function FuelPage() {
+  const { can } = useAuth();
+  const canWrite = can("fuelWrite");
   const [records, setRecords] = useState<FuelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -153,21 +156,23 @@ export default function FuelPage() {
       {error && <div className="error spaced">{error}</div>}
       {message && <div className="success spaced">{message}</div>}
 
-      <form onSubmit={registerFuel} className="form card fullWidthForm spaced">
-        <h2>Register fuel</h2>
-        <div className="formGrid">
-          <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
-          <div className="formRow"><label>Refuel date</label><input className="input" type="date" value={form.refuel_date} onChange={(e) => setForm({ ...form, refuel_date: e.target.value })} required /></div>
-          <div className="formRow"><label>Fuel type</label><select className="select" value={form.fuel_type} onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}>{FUEL_TYPES.map((fuel) => <option key={fuel}>{fuel}</option>)}</select></div>
-          <div className="formRow"><label>Liters</label><input className="input" type="number" step="0.01" value={form.liters} onChange={(e) => setForm({ ...form, liters: e.target.value })} required /></div>
-          <div className="formRow"><label>Cost per liter</label><input className="input" type="number" step="0.01" value={form.cost_per_liter} onChange={(e) => setForm({ ...form, cost_per_liter: e.target.value })} /></div>
-          <div className="formRow"><label>Odometer KM</label><input className="input" type="number" value={form.odometer_km} onChange={(e) => setForm({ ...form, odometer_km: e.target.value })} /></div>
-          <div className="formRow"><label>Location</label><input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></div>
-          <div className="formRow"><label>Station</label><input className="input" value={form.station_name} onChange={(e) => setForm({ ...form, station_name: e.target.value })} /></div>
-          <div className="formRow span2"><label>Bill file optional</label><input className="input" type="file" onChange={(e) => setBillFile(e.target.files?.[0] ?? null)} /></div>
-        </div>
-        <button className="button" type="submit">Save fuel record</button>
-      </form>
+      {canWrite && (
+        <form onSubmit={registerFuel} className="form card fullWidthForm spaced">
+          <h2>Register fuel</h2>
+          <div className="formGrid">
+            <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label>Refuel date</label><input className="input" type="date" value={form.refuel_date} onChange={(e) => setForm({ ...form, refuel_date: e.target.value })} required /></div>
+            <div className="formRow"><label>Fuel type</label><select className="select" value={form.fuel_type} onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}>{FUEL_TYPES.map((fuel) => <option key={fuel}>{fuel}</option>)}</select></div>
+            <div className="formRow"><label>Liters</label><input className="input" type="number" step="0.01" value={form.liters} onChange={(e) => setForm({ ...form, liters: e.target.value })} required /></div>
+            <div className="formRow"><label>Cost per liter</label><input className="input" type="number" step="0.01" value={form.cost_per_liter} onChange={(e) => setForm({ ...form, cost_per_liter: e.target.value })} /></div>
+            <div className="formRow"><label>Odometer KM</label><input className="input" type="number" value={form.odometer_km} onChange={(e) => setForm({ ...form, odometer_km: e.target.value })} /></div>
+            <div className="formRow"><label>Location</label><input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></div>
+            <div className="formRow"><label>Station</label><input className="input" value={form.station_name} onChange={(e) => setForm({ ...form, station_name: e.target.value })} /></div>
+            <div className="formRow span2"><label>Bill file optional</label><input className="input" type="file" onChange={(e) => setBillFile(e.target.files?.[0] ?? null)} /></div>
+          </div>
+          <button className="button" type="submit">Save fuel record</button>
+        </form>
+      )}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, vehicle, location" />
@@ -180,7 +185,7 @@ export default function FuelPage() {
 
       {loading ? <div className="card">Loading fuel records...</div> : (
         <table className="table">
-          <thead><tr><th>Plate</th><th>Vehicle</th><th>Date</th><th>Fuel</th><th>Liters</th><th>Cost/L</th><th>Total</th><th>Location</th><th>Station</th><th>Odometer</th><th>Bill</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Plate</th><th>Vehicle</th><th>Date</th><th>Fuel</th><th>Liters</th><th>Cost/L</th><th>Total</th><th>Location</th><th>Station</th><th>Odometer</th><th>Bill</th>{canWrite && <th>Actions</th>}</tr></thead>
           <tbody>
             {filtered.map((record) => {
               const isEditing = editingId === record.id && editForm;
@@ -188,25 +193,25 @@ export default function FuelPage() {
                 <tr key={record.id}>
                   <td><strong>{record.license_plate}</strong></td>
                   <td>{record.brand} {record.model}</td>
-                  <td>{isEditing ? <input className="input compactInput" type="date" value={editForm.refuel_date} onChange={(e) => setEditForm({ ...editForm, refuel_date: e.target.value })} /> : record.refuel_date}</td>
-                  <td>{isEditing ? <select className="select compactInput" value={editForm.fuel_type} onChange={(e) => setEditForm({ ...editForm, fuel_type: e.target.value })}>{FUEL_TYPES.map((fuel) => <option key={fuel}>{fuel}</option>)}</select> : record.fuel_type}</td>
-                  <td>{isEditing ? <input className="input compactInput" type="number" step="0.01" value={editForm.liters} onChange={(e) => setEditForm({ ...editForm, liters: e.target.value })} /> : record.liters}</td>
-                  <td>{isEditing ? <input className="input compactInput" type="number" step="0.01" value={editForm.cost_per_liter} onChange={(e) => setEditForm({ ...editForm, cost_per_liter: e.target.value })} /> : record.cost_per_liter}</td>
+                  <td>{canWrite && isEditing ? <input className="input compactInput" type="date" value={editForm.refuel_date} onChange={(e) => setEditForm({ ...editForm, refuel_date: e.target.value })} /> : record.refuel_date}</td>
+                  <td>{canWrite && isEditing ? <select className="select compactInput" value={editForm.fuel_type} onChange={(e) => setEditForm({ ...editForm, fuel_type: e.target.value })}>{FUEL_TYPES.map((fuel) => <option key={fuel}>{fuel}</option>)}</select> : record.fuel_type}</td>
+                  <td>{canWrite && isEditing ? <input className="input compactInput" type="number" step="0.01" value={editForm.liters} onChange={(e) => setEditForm({ ...editForm, liters: e.target.value })} /> : record.liters}</td>
+                  <td>{canWrite && isEditing ? <input className="input compactInput" type="number" step="0.01" value={editForm.cost_per_liter} onChange={(e) => setEditForm({ ...editForm, cost_per_liter: e.target.value })} /> : record.cost_per_liter}</td>
                   <td>{record.total_cost}</td>
-                  <td>{isEditing ? <input className="input compactInput" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /> : record.location}</td>
-                  <td>{isEditing ? <input className="input compactInput" value={editForm.station_name} onChange={(e) => setEditForm({ ...editForm, station_name: e.target.value })} /> : record.station_name}</td>
-                  <td>{isEditing ? <input className="input compactInput" type="number" value={editForm.odometer_km} onChange={(e) => setEditForm({ ...editForm, odometer_km: e.target.value })} /> : record.odometer_km}</td>
+                  <td>{canWrite && isEditing ? <input className="input compactInput" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /> : record.location}</td>
+                  <td>{canWrite && isEditing ? <input className="input compactInput" value={editForm.station_name} onChange={(e) => setEditForm({ ...editForm, station_name: e.target.value })} /> : record.station_name}</td>
+                  <td>{canWrite && isEditing ? <input className="input compactInput" type="number" value={editForm.odometer_km} onChange={(e) => setEditForm({ ...editForm, odometer_km: e.target.value })} /> : record.odometer_km}</td>
                   <td>{record.bill_file_path ? <a className="link" href={fileHref(record.bill_file_path)} target="_blank">Open</a> : "-"}</td>
-                  <td>
+                  {canWrite && <td>
                     <div className="actions">
                       {isEditing ? <><button className="button smallButton" type="button" onClick={() => void saveEdit(record.id)}>Save</button><button className="secondaryButton smallButton" type="button" onClick={() => { setEditingId(null); setEditForm(null); }}>Cancel</button></> : <button className="secondaryButton smallButton" type="button" onClick={() => startEdit(record)}>Edit</button>}
                       <button className="dangerButton smallButton" type="button" onClick={() => void deleteFuel(record)}>Delete</button>
                     </div>
-                  </td>
+                  </td>}
                 </tr>
               );
             })}
-            {filtered.length === 0 && <tr><td colSpan={12} className="muted">No fuel records match your filters.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canWrite ? 12 : 11} className="muted">No fuel records match your filters.</td></tr>}
           </tbody>
         </table>
       )}

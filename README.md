@@ -260,6 +260,18 @@ Health check endpoint:
 http://localhost:8000/health
 ```
 
+### First Admin User
+
+Authentication is required for `/api/v1` application endpoints. For a new local database, start the backend and frontend, open `http://localhost:3000/login`, and choose **Create first Admin user**. The public first-admin registration is only available while the `Users` table is empty; after that, an Admin must create additional users through the authenticated API.
+
+Auth-related backend environment variables can be set in `backend/.env`:
+
+```text
+SECRET_KEY=replace-with-a-long-random-secret
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+```
+
 ---
 
 ## Frontend Setup

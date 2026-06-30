@@ -1,5 +1,5 @@
 from decimal import Decimal
-from enum import IntEnum
+from enum import Enum, IntEnum
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 import re
 
@@ -18,6 +18,79 @@ class VehicleReservationStatus(IntEnum):
     approved = 1
     rejected = 2
     cancelled = 3
+
+
+class UserRole(str, Enum):
+    admin = "admin"
+    fleet_manager = "fleet_manager"
+    mechanic = "mechanic"
+    driver = "driver"
+    finance = "finance"
+    viewer = "viewer"
+
+
+class UserBase(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
+    role: UserRole = UserRole.viewer
+    is_active: bool = True
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if "@" not in email or "." not in email.rsplit("@", 1)[-1]:
+            raise ValueError("Enter a valid email address.")
+        return email
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("Full name is required.")
+        return name
+
+
+class UserCreate(UserBase):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class FirstAdminCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return UserBase.normalize_email(value)
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value: str) -> str:
+        return UserBase.normalize_full_name(value)
+
+
+class UserOut(UserBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
 
 
 class VehicleBase(BaseModel):

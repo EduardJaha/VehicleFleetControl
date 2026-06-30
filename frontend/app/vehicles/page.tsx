@@ -3,10 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, buildQuery } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { ApiMessage, Vehicle } from "@/lib/types";
 import { FUEL_TYPES, VEHICLE_STATUS_LABELS, VEHICLE_STATUSES } from "@/lib/constants";
 
 export default function VehiclesPage() {
+  const { can } = useAuth();
+  const canWrite = can("vehiclesWrite");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +66,7 @@ export default function VehiclesPage() {
           <h1>Vehicles</h1>
           <p className="muted">Vehicle registry, search, filtering, edit, and delete actions.</p>
         </div>
-        <Link href="/vehicles/new" className="button">Add vehicle</Link>
+        {canWrite && <Link href="/vehicles/new" className="button">Add vehicle</Link>}
       </div>
 
       <div className="card filtersGrid">
@@ -88,7 +91,7 @@ export default function VehiclesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Plate</th><th>Brand</th><th>Model</th><th>Fuel</th><th>Location</th><th>Odometer</th><th>Status</th><th>Actions</th>
+              <th>Plate</th><th>Brand</th><th>Model</th><th>Fuel</th><th>Location</th><th>Odometer</th><th>Status</th>{canWrite && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -101,15 +104,17 @@ export default function VehiclesPage() {
                 <td>{vehicle.vehicle_location}</td>
                 <td>{vehicle.odometer_km ?? "-"}</td>
                 <td><span className="badge">{VEHICLE_STATUS_LABELS[vehicle.status] ?? vehicle.status_name}</span></td>
-                <td>
-                  <div className="actions">
-                    <Link className="secondaryButton smallButton" href={`/vehicles/edit/${vehicle.id}`}>Edit</Link>
-                    <button className="dangerButton smallButton" type="button" onClick={() => void deleteVehicle(vehicle)}>Delete</button>
-                  </div>
-                </td>
+                {canWrite && (
+                  <td>
+                    <div className="actions">
+                      <Link className="secondaryButton smallButton" href={`/vehicles/edit/${vehicle.id}`}>Edit</Link>
+                      <button className="dangerButton smallButton" type="button" onClick={() => void deleteVehicle(vehicle)}>Delete</button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={8} className="muted">No vehicles match your filters.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canWrite ? 8 : 7} className="muted">No vehicles match your filters.</td></tr>}
           </tbody>
         </table>
       )}

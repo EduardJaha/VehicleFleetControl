@@ -1,6 +1,22 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.db.session import Base
+
+
+class User(Base):
+    __tablename__ = "Users"
+    __table_args__ = (UniqueConstraint("Email", name="uq_users_email"),)
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    email = Column("Email", String(255), nullable=False, index=True)
+    full_name = Column("FullName", String(255), nullable=False)
+    hashed_password = Column("HashedPassword", String(255), nullable=False)
+    role = Column("Role", String(50), nullable=False, default="viewer")
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Vehicle(Base):

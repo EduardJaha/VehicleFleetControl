@@ -56,6 +56,43 @@ export type DriverPayload = Omit<Driver, "id" | "assigned_vehicle_id" | "created
   assigned_vehicle_id?: number | null;
 };
 
+export type InspectionType = "Daily" | "Weekly" | "Before Trip" | "After Trip" | "Return Inspection";
+export type InspectionItemStatus = "Pass" | "Fail" | "Not Checked";
+export type InspectionOverallStatus = "Passed" | "Failed" | "Needs Review";
+
+export type InspectionItem = {
+  id?: number;
+  item_name: string;
+  status: InspectionItemStatus;
+  comment?: string | null;
+};
+
+export type Inspection = {
+  id: number;
+  vehicle_id: number;
+  license_plate: string;
+  driver_id?: number | null;
+  driver_name?: string | null;
+  inspection_type: InspectionType;
+  inspection_date: string;
+  overall_status: InspectionOverallStatus;
+  notes?: string | null;
+  items: InspectionItem[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type InspectionPayload = {
+  vehicle_id?: number | null;
+  license_plate?: string | null;
+  driver_id?: number | null;
+  inspection_type: InspectionType;
+  inspection_date: string;
+  overall_status?: InspectionOverallStatus | null;
+  notes?: string | null;
+  items: InspectionItem[];
+};
+
 export type DashboardSummary = {
   total_vehicles: number;
   status_summary: Array<{ status: number; count: number }>;

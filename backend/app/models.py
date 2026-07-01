@@ -43,6 +43,7 @@ class Vehicle(Base):
     accidents = relationship("VehicleAccident", back_populates="vehicle", cascade="all, delete-orphan")
     reservations = relationship("VehicleReservation", back_populates="vehicle", cascade="all, delete-orphan")
     assigned_drivers = relationship("Driver", back_populates="assigned_vehicle")
+    inspections = relationship("Inspection", back_populates="vehicle", cascade="all, delete-orphan")
 
 
 class Driver(Base):
@@ -71,6 +72,37 @@ class Driver(Base):
 
     assigned_vehicle = relationship("Vehicle", back_populates="assigned_drivers")
     user = relationship("User", back_populates="driver_profile")
+    inspections = relationship("Inspection", back_populates="driver")
+
+
+class Inspection(Base):
+    __tablename__ = "Inspections"
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
+    driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="SET NULL"), nullable=True)
+    inspection_type = Column("InspectionType", String(50), nullable=False)
+    inspection_date = Column("InspectionDate", DateTime, nullable=False)
+    overall_status = Column("OverallStatus", String(50), nullable=False, default="Needs Review")
+    notes = Column("Notes", Text, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    vehicle = relationship("Vehicle", back_populates="inspections")
+    driver = relationship("Driver", back_populates="inspections")
+    items = relationship("InspectionItem", back_populates="inspection", cascade="all, delete-orphan")
+
+
+class InspectionItem(Base):
+    __tablename__ = "InspectionItems"
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    inspection_id = Column("InspectionId", Integer, ForeignKey("Inspections.Id", ondelete="CASCADE"), nullable=False)
+    item_name = Column("ItemName", String(150), nullable=False)
+    status = Column("Status", String(50), nullable=False, default="Not Checked")
+    comment = Column("Comment", Text, nullable=True)
+
+    inspection = relationship("Inspection", back_populates="items")
 
 
 class VehiclePaper(Base):

@@ -64,6 +64,13 @@ VehicleFleetControl currently includes the following modules:
 * Optionally link drivers to users and assigned vehicles
 * Highlight expired or soon-expiring driver licenses
 
+### Vehicle Inspection Checklists
+
+* Create, edit, delete, search, and filter vehicle inspections
+* Use default daily/weekly/trip checklist items with pass/fail/not checked states
+* Track inspection type, date, driver, vehicle, overall status, notes, and failed items
+* Automatically flags inspections with failed checklist items
+
 ### Service Management
 
 * Register vehicle services

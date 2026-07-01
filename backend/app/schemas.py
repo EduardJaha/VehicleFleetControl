@@ -35,6 +35,26 @@ class DriverStatus(str, Enum):
     left_company = "Left Company"
 
 
+class InspectionType(str, Enum):
+    daily = "Daily"
+    weekly = "Weekly"
+    before_trip = "Before Trip"
+    after_trip = "After Trip"
+    return_inspection = "Return Inspection"
+
+
+class InspectionItemStatus(str, Enum):
+    pass_ = "Pass"
+    fail = "Fail"
+    not_checked = "Not Checked"
+
+
+class InspectionOverallStatus(str, Enum):
+    passed = "Passed"
+    failed = "Failed"
+    needs_review = "Needs Review"
+
+
 class UserBase(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     full_name: str = Field(min_length=1, max_length=255)
@@ -148,6 +168,80 @@ class DriverUpdate(DriverBase):
 
 class DriverOut(DriverBase):
     id: int
+    created_at: str
+    updated_at: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InspectionItemBase(BaseModel):
+    item_name: str = Field(min_length=1, max_length=150)
+    status: InspectionItemStatus = InspectionItemStatus.not_checked
+    comment: str | None = None
+
+    @field_validator("item_name")
+    @classmethod
+    def normalize_item_name(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("Item name is required.")
+        return text
+
+    @field_validator("comment")
+    @classmethod
+    def normalize_comment(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class InspectionItemCreate(InspectionItemBase):
+    pass
+
+
+class InspectionItemOut(InspectionItemBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InspectionBase(BaseModel):
+    vehicle_id: int | None = None
+    license_plate: str | None = None
+    driver_id: int | None = None
+    inspection_type: InspectionType
+    inspection_date: str
+    overall_status: InspectionOverallStatus | None = None
+    notes: str | None = None
+    items: list[InspectionItemCreate] = Field(default_factory=list)
+
+    @field_validator("license_plate", "notes")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class InspectionCreate(InspectionBase):
+    pass
+
+
+class InspectionUpdate(InspectionBase):
+    pass
+
+
+class InspectionOut(BaseModel):
+    id: int
+    vehicle_id: int
+    license_plate: str
+    driver_id: int | None = None
+    driver_name: str | None = None
+    inspection_type: InspectionType
+    inspection_date: str
+    overall_status: InspectionOverallStatus
+    notes: str | None = None
+    items: list[InspectionItemOut]
     created_at: str
     updated_at: str
     model_config = ConfigDict(from_attributes=True)

@@ -55,6 +55,22 @@ class InspectionOverallStatus(str, Enum):
     needs_review = "Needs Review"
 
 
+class WorkOrderStatus(str, Enum):
+    open = "Open"
+    assigned = "Assigned"
+    in_progress = "In Progress"
+    waiting_for_parts = "Waiting for Parts"
+    completed = "Completed"
+    cancelled = "Cancelled"
+
+
+class WorkOrderPriority(str, Enum):
+    low = "Low"
+    medium = "Medium"
+    high = "High"
+    critical = "Critical"
+
+
 class UserBase(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     full_name: str = Field(min_length=1, max_length=255)
@@ -242,6 +258,66 @@ class InspectionOut(BaseModel):
     overall_status: InspectionOverallStatus
     notes: str | None = None
     items: list[InspectionItemOut]
+    created_at: str
+    updated_at: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkOrderBase(BaseModel):
+    vehicle_id: int | None = None
+    license_plate: str | None = None
+    driver_id: int | None = None
+    inspection_id: int | None = None
+    title: str = Field(min_length=1, max_length=150)
+    description: str | None = None
+    reported_issue: str | None = None
+    priority: WorkOrderPriority = WorkOrderPriority.medium
+    status: WorkOrderStatus = WorkOrderStatus.open
+    requested_by: str | None = Field(default=None, max_length=150)
+    assigned_to: str | None = Field(default=None, max_length=150)
+    workshop: str | None = Field(default=None, max_length=150)
+    expected_completion_date: str | None = None
+    actual_completion_date: str | None = None
+    labor_cost: Decimal | None = Field(default=None, ge=0)
+    parts_cost: Decimal | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("Title is required.")
+        return text
+
+    @field_validator("license_plate", "description", "reported_issue", "requested_by", "assigned_to", "workshop", "notes")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class WorkOrderCreate(WorkOrderBase):
+    pass
+
+
+class WorkOrderUpdate(WorkOrderBase):
+    pass
+
+
+class WorkOrderStatusUpdate(BaseModel):
+    status: WorkOrderStatus
+    actual_completion_date: str | None = None
+
+
+class WorkOrderOut(WorkOrderBase):
+    id: int
+    vehicle_id: int
+    license_plate: str
+    driver_name: str | None = None
+    total_cost: Decimal | None = None
     created_at: str
     updated_at: str
     model_config = ConfigDict(from_attributes=True)

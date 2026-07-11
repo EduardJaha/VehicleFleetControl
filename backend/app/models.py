@@ -44,6 +44,7 @@ class Vehicle(Base):
     reservations = relationship("VehicleReservation", back_populates="vehicle", cascade="all, delete-orphan")
     assigned_drivers = relationship("Driver", back_populates="assigned_vehicle")
     inspections = relationship("Inspection", back_populates="vehicle", cascade="all, delete-orphan")
+    work_orders = relationship("WorkOrder", back_populates="vehicle", cascade="all, delete-orphan")
 
 
 class Driver(Base):
@@ -73,6 +74,7 @@ class Driver(Base):
     assigned_vehicle = relationship("Vehicle", back_populates="assigned_drivers")
     user = relationship("User", back_populates="driver_profile")
     inspections = relationship("Inspection", back_populates="driver")
+    work_orders = relationship("WorkOrder", back_populates="driver")
 
 
 class Inspection(Base):
@@ -91,6 +93,7 @@ class Inspection(Base):
     vehicle = relationship("Vehicle", back_populates="inspections")
     driver = relationship("Driver", back_populates="inspections")
     items = relationship("InspectionItem", back_populates="inspection", cascade="all, delete-orphan")
+    work_orders = relationship("WorkOrder", back_populates="inspection")
 
 
 class InspectionItem(Base):
@@ -103,6 +106,35 @@ class InspectionItem(Base):
     comment = Column("Comment", Text, nullable=True)
 
     inspection = relationship("Inspection", back_populates="items")
+
+
+class WorkOrder(Base):
+    __tablename__ = "WorkOrders"
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
+    driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="SET NULL"), nullable=True)
+    inspection_id = Column("InspectionId", Integer, ForeignKey("Inspections.Id", ondelete="SET NULL"), nullable=True)
+    title = Column("Title", String(150), nullable=False)
+    description = Column("Description", Text, nullable=True)
+    reported_issue = Column("ReportedIssue", Text, nullable=True)
+    priority = Column("Priority", String(50), nullable=False, default="Medium")
+    status = Column("Status", String(50), nullable=False, default="Open")
+    requested_by = Column("RequestedBy", String(150), nullable=True)
+    assigned_to = Column("AssignedTo", String(150), nullable=True)
+    workshop = Column("Workshop", String(150), nullable=True)
+    expected_completion_date = Column("ExpectedCompletionDate", DateTime, nullable=True)
+    actual_completion_date = Column("ActualCompletionDate", DateTime, nullable=True)
+    labor_cost = Column("LaborCost", String, nullable=True)
+    parts_cost = Column("PartsCost", String, nullable=True)
+    total_cost = Column("TotalCost", String, nullable=True)
+    notes = Column("Notes", Text, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    vehicle = relationship("Vehicle", back_populates="work_orders")
+    driver = relationship("Driver", back_populates="work_orders")
+    inspection = relationship("Inspection", back_populates="work_orders")
 
 
 class VehiclePaper(Base):

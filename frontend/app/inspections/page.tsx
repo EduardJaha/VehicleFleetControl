@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { apiDelete, apiGet, apiPost, apiPut, buildQuery } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DEFAULT_INSPECTION_ITEMS, INSPECTION_ITEM_STATUSES, INSPECTION_OVERALL_STATUSES, INSPECTION_TYPES } from "@/lib/constants";
@@ -229,6 +230,7 @@ export default function InspectionsPage() {
           <tbody>
             {inspections.map((inspection) => {
               const failed = inspection.items.filter((item) => item.status === "Fail").length;
+              const workOrderHref = `/work-orders?inspection_id=${inspection.id}&license_plate=${encodeURIComponent(inspection.license_plate)}&title=${encodeURIComponent(`Inspection ${inspection.id} issue`)}&reported_issue=${encodeURIComponent(`${failed} failed checklist item(s)`)}`;
               return (
                 <tr key={inspection.id}>
                   <td><strong>{inspection.license_plate}</strong></td>
@@ -238,7 +240,7 @@ export default function InspectionsPage() {
                   <td><span className={statusClass(inspection.overall_status)}>{inspection.overall_status}</span></td>
                   <td>{failed > 0 ? <span className="dangerBadge">{failed}</span> : "0"}</td>
                   <td>{inspection.notes ?? "-"}</td>
-                  {canWrite && <td><div className="actions"><button className="secondaryButton smallButton" type="button" onClick={() => startEdit(inspection)}>Edit</button><button className="dangerButton smallButton" type="button" onClick={() => void deleteInspection(inspection)}>Delete</button></div></td>}
+                  {canWrite && <td><div className="actions">{failed > 0 && <Link className="secondaryButton smallButton" href={workOrderHref}>Work order</Link>}<button className="secondaryButton smallButton" type="button" onClick={() => startEdit(inspection)}>Edit</button><button className="dangerButton smallButton" type="button" onClick={() => void deleteInspection(inspection)}>Delete</button></div></td>}
                 </tr>
               );
             })}

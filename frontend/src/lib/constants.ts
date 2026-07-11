@@ -50,3 +50,5 @@ export const DEFAULT_INSPECTION_ITEMS = [
   "Documents present",
   "Spare tire/tools"
 ];
+export const WORK_ORDER_STATUSES = ["Open", "Assigned", "In Progress", "Waiting for Parts", "Completed", "Cancelled"];
+export const WORK_ORDER_PRIORITIES = ["Low", "Medium", "High", "Critical"];

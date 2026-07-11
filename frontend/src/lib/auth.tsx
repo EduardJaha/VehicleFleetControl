@@ -17,6 +17,7 @@ export const PERMISSIONS = {
   vehiclesWrite: ["admin", "fleet_manager"],
   driversWrite: ["admin", "fleet_manager"],
   inspectionsWrite: ["admin", "mechanic"],
+  workOrdersWrite: ["admin", "mechanic"],
   papersWrite: ["admin", "fleet_manager"],
   reservationsCreate: ["admin", "fleet_manager", "driver"],
   reservationsApprove: ["admin", "fleet_manager"],

@@ -10,6 +10,7 @@ const navItems = [
   { href: "/vehicles", label: "Vehicles" },
   { href: "/drivers", label: "Drivers" },
   { href: "/inspections", label: "Inspections" },
+  { href: "/work-orders", label: "Work Orders" },
   { href: "/papers", label: "Documents" },
   { href: "/services/overview", label: "Services" },
   { href: "/services/reminders", label: "Reminders" },

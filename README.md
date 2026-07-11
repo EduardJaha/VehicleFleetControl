@@ -71,6 +71,13 @@ VehicleFleetControl currently includes the following modules:
 * Track inspection type, date, driver, vehicle, overall status, notes, and failed items
 * Automatically flags inspections with failed checklist items
 
+### Work Orders
+
+* Create, edit, delete, search, and filter vehicle work orders
+* Track status workflow, priority, assignee, workshop, expected and actual completion dates
+* Link work orders to vehicles, drivers, and inspections
+* Track labor, parts, and total costs with overdue and critical highlighting
+
 ### Service Management
 
 * Register vehicle services

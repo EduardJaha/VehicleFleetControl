@@ -93,6 +93,41 @@ export type InspectionPayload = {
   items: InspectionItem[];
 };
 
+export type WorkOrderStatus = "Open" | "Assigned" | "In Progress" | "Waiting for Parts" | "Completed" | "Cancelled";
+export type WorkOrderPriority = "Low" | "Medium" | "High" | "Critical";
+
+export type WorkOrder = {
+  id: number;
+  vehicle_id: number;
+  license_plate: string;
+  driver_id?: number | null;
+  driver_name?: string | null;
+  inspection_id?: number | null;
+  title: string;
+  description?: string | null;
+  reported_issue?: string | null;
+  priority: WorkOrderPriority;
+  status: WorkOrderStatus;
+  requested_by?: string | null;
+  assigned_to?: string | null;
+  workshop?: string | null;
+  expected_completion_date?: string | null;
+  actual_completion_date?: string | null;
+  labor_cost?: string | number | null;
+  parts_cost?: string | number | null;
+  total_cost?: string | number | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkOrderPayload = Omit<WorkOrder, "id" | "vehicle_id" | "license_plate" | "driver_name" | "total_cost" | "created_at" | "updated_at"> & {
+  vehicle_id?: number | null;
+  license_plate?: string | null;
+  labor_cost?: number | null;
+  parts_cost?: number | null;
+};
+
 export type DashboardSummary = {
   total_vehicles: number;
   status_summary: Array<{ status: number; count: number }>;

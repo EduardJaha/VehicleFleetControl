@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
+from app.models import User
 from app.models import Vehicle
-from app.schemas import VehicleCreate, VehicleOut, VehicleUpdate, UpdateLocation, UpdateStatus
+from app.schemas import UserRole, VehicleCreate, VehicleOut, VehicleUpdate, UpdateLocation, UpdateStatus
 from app.utils.domain import find_vehicle_by_plate, parse_vehicle_status, status_name
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def vehicle_out(vehicle: Vehicle) -> VehicleOut:
@@ -35,7 +37,7 @@ def list_vehicles(status: str | None = None, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=VehicleOut, status_code=201)
-def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db)):
+def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     vehicle = Vehicle(
         brand=payload.brand.strip(),
         model=payload.model.strip(),
@@ -75,7 +77,7 @@ def get_vehicle(vehicle_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{vehicle_id}", response_model=VehicleOut)
-def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depends(get_db)):
+def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
@@ -100,7 +102,7 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
 
 
 @router.put("/status/{license_plate}", response_model=VehicleOut)
-def update_vehicle_status(license_plate: str, payload: UpdateStatus, db: Session = Depends(get_db)):
+def update_vehicle_status(license_plate: str, payload: UpdateStatus, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
@@ -111,7 +113,7 @@ def update_vehicle_status(license_plate: str, payload: UpdateStatus, db: Session
 
 
 @router.put("/location/{license_plate}", response_model=VehicleOut)
-def update_vehicle_location(license_plate: str, payload: UpdateLocation, db: Session = Depends(get_db)):
+def update_vehicle_location(license_plate: str, payload: UpdateLocation, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
@@ -122,7 +124,7 @@ def update_vehicle_location(license_plate: str, payload: UpdateLocation, db: Ses
 
 
 @router.delete("/{vehicle_id}")
-def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db)):
+def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")

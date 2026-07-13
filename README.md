@@ -57,6 +57,33 @@ VehicleFleetControl currently includes the following modules:
 * Track odometer readings
 * Validate vehicle license plate format
 
+### Driver Management
+
+* Create, edit, delete, search, and filter driver records
+* Track employee number, department, license number, license category, and license expiry
+* Optionally link drivers to users and assigned vehicles
+* Highlight expired or soon-expiring driver licenses
+
+### Vehicle Inspection Checklists
+
+* Create, edit, delete, search, and filter vehicle inspections
+* Use default daily/weekly/trip checklist items with pass/fail/not checked states
+* Track inspection type, date, driver, vehicle, overall status, notes, and failed items
+* Automatically flags inspections with failed checklist items
+
+### Work Orders
+
+* Create, edit, delete, search, and filter vehicle work orders
+* Track status workflow, priority, assignee, workshop, expected and actual completion dates
+* Link work orders to vehicles, drivers, and inspections
+* Track labor, parts, and total costs with overdue and critical highlighting
+
+### Reports
+
+* View fleet summary, fuel costs, service costs, vehicle costs, reservations, document expiry, and work order reports
+* Filter reports by date range, license plate, vehicle status, department, and driver
+* Export report KPIs and rows to Excel files
+
 ### Service Management
 
 * Register vehicle services
@@ -258,6 +285,18 @@ Health check endpoint:
 
 ```text
 http://localhost:8000/health
+```
+
+### First Admin User
+
+Authentication is required for `/api/v1` application endpoints. For a new local database, start the backend and frontend, open `http://localhost:3000/login`, and choose **Create first Admin user**. The public first-admin registration is only available while the `Users` table is empty; after that, an Admin must create additional users through the authenticated API.
+
+Auth-related backend environment variables can be set in `backend/.env`:
+
+```text
+SECRET_KEY=replace-with-a-long-random-secret
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=480
 ```
 
 ---

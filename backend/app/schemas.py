@@ -1,5 +1,5 @@
 from decimal import Decimal
-from enum import IntEnum
+from enum import Enum, IntEnum
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 import re
 
@@ -18,6 +18,309 @@ class VehicleReservationStatus(IntEnum):
     approved = 1
     rejected = 2
     cancelled = 3
+
+
+class UserRole(str, Enum):
+    admin = "admin"
+    fleet_manager = "fleet_manager"
+    mechanic = "mechanic"
+    driver = "driver"
+    finance = "finance"
+    viewer = "viewer"
+
+
+class DriverStatus(str, Enum):
+    active = "Active"
+    suspended = "Suspended"
+    left_company = "Left Company"
+
+
+class InspectionType(str, Enum):
+    daily = "Daily"
+    weekly = "Weekly"
+    before_trip = "Before Trip"
+    after_trip = "After Trip"
+    return_inspection = "Return Inspection"
+
+
+class InspectionItemStatus(str, Enum):
+    pass_ = "Pass"
+    fail = "Fail"
+    not_checked = "Not Checked"
+
+
+class InspectionOverallStatus(str, Enum):
+    passed = "Passed"
+    failed = "Failed"
+    needs_review = "Needs Review"
+
+
+class WorkOrderStatus(str, Enum):
+    open = "Open"
+    assigned = "Assigned"
+    in_progress = "In Progress"
+    waiting_for_parts = "Waiting for Parts"
+    completed = "Completed"
+    cancelled = "Cancelled"
+
+
+class WorkOrderPriority(str, Enum):
+    low = "Low"
+    medium = "Medium"
+    high = "High"
+    critical = "Critical"
+
+
+class UserBase(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
+    role: UserRole = UserRole.viewer
+    is_active: bool = True
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if "@" not in email or "." not in email.rsplit("@", 1)[-1]:
+            raise ValueError("Enter a valid email address.")
+        return email
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("Full name is required.")
+        return name
+
+
+class UserCreate(UserBase):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class FirstAdminCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return UserBase.normalize_email(value)
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_full_name(cls, value: str) -> str:
+        return UserBase.normalize_full_name(value)
+
+
+class UserOut(UserBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+
+class DriverBase(BaseModel):
+    full_name: str = Field(min_length=1, max_length=255)
+    phone_number: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=255)
+    employee_number: str = Field(min_length=1, max_length=100)
+    department: str | None = Field(default=None, max_length=100)
+    license_number: str = Field(min_length=1, max_length=100)
+    license_category: str = Field(min_length=1, max_length=50)
+    license_expiry_date: str
+    assigned_vehicle_id: int | None = None
+    assigned_license_plate: str | None = None
+    user_id: int | None = None
+    status: DriverStatus = DriverStatus.active
+    notes: str | None = None
+
+    @field_validator("full_name", "employee_number", "license_number", "license_category")
+    @classmethod
+    def required_text(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("This field is required.")
+        return text
+
+    @field_validator("email")
+    @classmethod
+    def normalize_optional_email(cls, value: str | None) -> str | None:
+        if value is None or value.strip() == "":
+            return None
+        return UserBase.normalize_email(value)
+
+    @field_validator("phone_number", "department", "assigned_license_plate", "notes")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class DriverCreate(DriverBase):
+    pass
+
+
+class DriverUpdate(DriverBase):
+    pass
+
+
+class DriverOut(DriverBase):
+    id: int
+    created_at: str
+    updated_at: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InspectionItemBase(BaseModel):
+    item_name: str = Field(min_length=1, max_length=150)
+    status: InspectionItemStatus = InspectionItemStatus.not_checked
+    comment: str | None = None
+
+    @field_validator("item_name")
+    @classmethod
+    def normalize_item_name(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("Item name is required.")
+        return text
+
+    @field_validator("comment")
+    @classmethod
+    def normalize_comment(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class InspectionItemCreate(InspectionItemBase):
+    pass
+
+
+class InspectionItemOut(InspectionItemBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InspectionBase(BaseModel):
+    vehicle_id: int | None = None
+    license_plate: str | None = None
+    driver_id: int | None = None
+    inspection_type: InspectionType
+    inspection_date: str
+    overall_status: InspectionOverallStatus | None = None
+    notes: str | None = None
+    items: list[InspectionItemCreate] = Field(default_factory=list)
+
+    @field_validator("license_plate", "notes")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class InspectionCreate(InspectionBase):
+    pass
+
+
+class InspectionUpdate(InspectionBase):
+    pass
+
+
+class InspectionOut(BaseModel):
+    id: int
+    vehicle_id: int
+    license_plate: str
+    driver_id: int | None = None
+    driver_name: str | None = None
+    inspection_type: InspectionType
+    inspection_date: str
+    overall_status: InspectionOverallStatus
+    notes: str | None = None
+    items: list[InspectionItemOut]
+    created_at: str
+    updated_at: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkOrderBase(BaseModel):
+    vehicle_id: int | None = None
+    license_plate: str | None = None
+    driver_id: int | None = None
+    inspection_id: int | None = None
+    title: str = Field(min_length=1, max_length=150)
+    description: str | None = None
+    reported_issue: str | None = None
+    priority: WorkOrderPriority = WorkOrderPriority.medium
+    status: WorkOrderStatus = WorkOrderStatus.open
+    requested_by: str | None = Field(default=None, max_length=150)
+    assigned_to: str | None = Field(default=None, max_length=150)
+    workshop: str | None = Field(default=None, max_length=150)
+    expected_completion_date: str | None = None
+    actual_completion_date: str | None = None
+    labor_cost: Decimal | None = Field(default=None, ge=0)
+    parts_cost: Decimal | None = Field(default=None, ge=0)
+    notes: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("Title is required.")
+        return text
+
+    @field_validator("license_plate", "description", "reported_issue", "requested_by", "assigned_to", "workshop", "notes")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class WorkOrderCreate(WorkOrderBase):
+    pass
+
+
+class WorkOrderUpdate(WorkOrderBase):
+    pass
+
+
+class WorkOrderStatusUpdate(BaseModel):
+    status: WorkOrderStatus
+    actual_completion_date: str | None = None
+
+
+class WorkOrderOut(WorkOrderBase):
+    id: int
+    vehicle_id: int
+    license_plate: str
+    driver_name: str | None = None
+    total_cost: Decimal | None = None
+    created_at: str
+    updated_at: str
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VehicleBase(BaseModel):

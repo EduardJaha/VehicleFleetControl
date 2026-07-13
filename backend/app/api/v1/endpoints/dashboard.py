@@ -1,12 +1,13 @@
 from collections import Counter
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import Vehicle, VehicleReservation
 from app.schemas import DashboardSummaryOut, DashboardStatusItem, DashboardLocationItem, DashboardReservationStatusItem
 from app.utils.domain import reservation_status_name, parse_vehicle_status
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/summary", response_model=DashboardSummaryOut)

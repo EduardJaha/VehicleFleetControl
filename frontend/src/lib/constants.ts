@@ -31,3 +31,33 @@ export const SERVICE_TYPES = ["General Service", "Oil Change", "Tire Change/Cont
 export const SERVICE_KM_INTERVALS = [5000, 10000, 15000];
 export const DOCUMENT_TYPES = ["Registration", "Insurance", "Technical Control", "Ownership", "Other"];
 export const RESERVATION_TYPES = ["Business Trip", "Personal Use", "Replacement Vehicle", "Maintenance", "Other"];
+export const DRIVER_STATUSES = ["Active", "Suspended", "Left Company"];
+export const INSPECTION_TYPES = ["Daily", "Weekly", "Before Trip", "After Trip", "Return Inspection"];
+export const INSPECTION_ITEM_STATUSES = ["Pass", "Fail", "Not Checked"];
+export const INSPECTION_OVERALL_STATUSES = ["Passed", "Failed", "Needs Review"];
+export const DEFAULT_INSPECTION_ITEMS = [
+  "Tires",
+  "Lights",
+  "Brakes",
+  "Oil level",
+  "Coolant level",
+  "Windshield",
+  "Mirrors",
+  "Body damage",
+  "Interior condition",
+  "Fuel level",
+  "Warning lights",
+  "Documents present",
+  "Spare tire/tools"
+];
+export const WORK_ORDER_STATUSES = ["Open", "Assigned", "In Progress", "Waiting for Parts", "Completed", "Cancelled"];
+export const WORK_ORDER_PRIORITIES = ["Low", "Medium", "High", "Critical"];
+export const REPORTS = [
+  { value: "fleet-summary", label: "Fleet Summary" },
+  { value: "fuel-costs", label: "Fuel Costs" },
+  { value: "service-costs", label: "Service Costs" },
+  { value: "vehicle-costs", label: "Vehicle Costs" },
+  { value: "reservations", label: "Reservations" },
+  { value: "document-expiry", label: "Document Expiry" },
+  { value: "work-orders", label: "Work Orders" }
+];

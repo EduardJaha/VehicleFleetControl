@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiPost } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { Vehicle, VehiclePayload } from "@/lib/types";
 import { FUEL_TYPES } from "@/lib/constants";
 
@@ -21,6 +22,7 @@ const initial: VehiclePayload = {
 
 export default function NewVehiclePage() {
   const router = useRouter();
+  const { can } = useAuth();
   const [form, setForm] = useState<VehiclePayload>(initial);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +36,10 @@ export default function NewVehiclePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create vehicle");
     }
+  }
+
+  if (!can("vehiclesWrite")) {
+    return <div className="error">You do not have permission to create vehicles.</div>;
   }
 
   return (

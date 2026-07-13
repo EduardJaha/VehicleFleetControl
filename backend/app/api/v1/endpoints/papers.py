@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session, joinedload
+from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
-from app.models import VehiclePaper
-from app.schemas import VehiclePaperListOut
+from app.models import User, VehiclePaper
+from app.schemas import UserRole, VehiclePaperListOut
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate
 from app.utils.files import delete_upload, file_url, save_upload
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.post("/upload")
@@ -18,6 +19,7 @@ async def upload_paper(
     expiry_date: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager)),
 ):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
@@ -57,7 +59,7 @@ def all_papers(request: Request, db: Session = Depends(get_db)):
 
 
 @router.delete("/{paper_id}")
-def delete_paper(paper_id: int, db: Session = Depends(get_db)):
+def delete_paper(paper_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     paper = db.get(VehiclePaper, paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Document not found.")

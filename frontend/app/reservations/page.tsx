@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { RESERVATION_STATUS_LABELS, RESERVATION_STATUSES, RESERVATION_TYPES } from "@/lib/constants";
 import { toApiDate, todayInputDate } from "@/lib/format";
 import type { ApiMessage, Reservation } from "@/lib/types";
@@ -16,6 +17,9 @@ const initialForm = {
 };
 
 export default function ReservationsPage() {
+  const { can } = useAuth();
+  const canCreate = can("reservationsCreate");
+  const canApprove = can("reservationsApprove");
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,18 +98,20 @@ export default function ReservationsPage() {
       {error && <div className="error spaced">{error}</div>}
       {message && <div className="success spaced">{message}</div>}
 
-      <form onSubmit={createReservation} className="form card fullWidthForm spaced">
-        <h2>Create reservation</h2>
-        <div className="formGrid">
-          <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
-          <div className="formRow"><label>Reserved by</label><input className="input" value={form.reserved_by} onChange={(e) => setForm({ ...form, reserved_by: e.target.value })} required /></div>
-          <div className="formRow"><label>Type</label><select className="select" value={form.reservation_type} onChange={(e) => setForm({ ...form, reservation_type: e.target.value })}>{RESERVATION_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
-          <div className="formRow"><label>Start date</label><input className="input" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} required /></div>
-          <div className="formRow"><label>End date</label><input className="input" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} required /></div>
-          <div className="formRow span2"><label>Notes</label><textarea className="input textarea" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
-        </div>
-        <button className="button" type="submit">Create reservation</button>
-      </form>
+      {canCreate && (
+        <form onSubmit={createReservation} className="form card fullWidthForm spaced">
+          <h2>Create reservation</h2>
+          <div className="formGrid">
+            <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label>Reserved by</label><input className="input" value={form.reserved_by} onChange={(e) => setForm({ ...form, reserved_by: e.target.value })} required /></div>
+            <div className="formRow"><label>Type</label><select className="select" value={form.reservation_type} onChange={(e) => setForm({ ...form, reservation_type: e.target.value })}>{RESERVATION_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
+            <div className="formRow"><label>Start date</label><input className="input" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} required /></div>
+            <div className="formRow"><label>End date</label><input className="input" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} required /></div>
+            <div className="formRow span2"><label>Notes</label><textarea className="input textarea" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+          </div>
+          <button className="button" type="submit">Create reservation</button>
+        </form>
+      )}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, person, notes" />
@@ -117,10 +123,10 @@ export default function ReservationsPage() {
 
       {loading ? <div className="card">Loading reservations...</div> : (
         <table className="table">
-          <thead><tr><th>Plate</th><th>Reserved by</th><th>Type</th><th>Start</th><th>End</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Plate</th><th>Reserved by</th><th>Type</th><th>Start</th><th>End</th><th>Status</th><th>Notes</th>{canApprove && <th>Actions</th>}</tr></thead>
           <tbody>
-            {filtered.map((r) => <tr key={r.id}><td><strong>{r.license_plate}</strong></td><td>{r.reserved_by}</td><td>{r.reservation_type}</td><td>{r.start_date}</td><td>{r.end_date}</td><td><span className="badge">{RESERVATION_STATUS_LABELS[r.status] ?? r.status_name}</span></td><td>{r.notes ?? ""}</td><td><div className="actions"><button className="button smallButton" type="button" disabled={r.status === 1} onClick={() => void updateReservationStatus(r.id, "approve")}>Approve</button><button className="dangerButton smallButton" type="button" disabled={r.status === 2} onClick={() => void updateReservationStatus(r.id, "reject")}>Reject</button></div></td></tr>)}
-            {filtered.length === 0 && <tr><td colSpan={8} className="muted">No reservations match your filters.</td></tr>}
+            {filtered.map((r) => <tr key={r.id}><td><strong>{r.license_plate}</strong></td><td>{r.reserved_by}</td><td>{r.reservation_type}</td><td>{r.start_date}</td><td>{r.end_date}</td><td><span className="badge">{RESERVATION_STATUS_LABELS[r.status] ?? r.status_name}</span></td><td>{r.notes ?? ""}</td>{canApprove && <td><div className="actions"><button className="button smallButton" type="button" disabled={r.status === 1} onClick={() => void updateReservationStatus(r.id, "approve")}>Approve</button><button className="dangerButton smallButton" type="button" disabled={r.status === 2} onClick={() => void updateReservationStatus(r.id, "reject")}>Reject</button></div></td>}</tr>)}
+            {filtered.length === 0 && <tr><td colSpan={canApprove ? 8 : 7} className="muted">No reservations match your filters.</td></tr>}
           </tbody>
         </table>
       )}

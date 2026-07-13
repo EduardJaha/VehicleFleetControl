@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPostForm, fileHref } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { toApiDate, todayInputDate } from "@/lib/format";
 import type { Accident, ApiMessage } from "@/lib/types";
 
@@ -13,6 +14,8 @@ const initialForm = {
 };
 
 export default function AccidentsPage() {
+  const { can } = useAuth();
+  const canWrite = can("accidentsWrite");
   const [accidents, setAccidents] = useState<Accident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,17 +84,19 @@ export default function AccidentsPage() {
       {error && <div className="error spaced">{error}</div>}
       {message && <div className="success spaced">{message}</div>}
 
-      <form onSubmit={reportAccident} className="form card fullWidthForm spaced">
-        <h2>Report accident</h2>
-        <div className="formGrid">
-          <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
-          <div className="formRow"><label>Accident date</label><input className="input" type="date" value={form.accident_date} onChange={(e) => setForm({ ...form, accident_date: e.target.value })} required /></div>
-          <div className="formRow"><label>Location</label><input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} required /></div>
-          <div className="formRow"><label>Files/photos</label><input className="input" type="file" multiple onChange={(e) => setFiles(e.target.files)} /></div>
-          <div className="formRow span2"><label>Description</label><textarea className="input textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-        </div>
-        <button className="button" type="submit">Save accident report</button>
-      </form>
+      {canWrite && (
+        <form onSubmit={reportAccident} className="form card fullWidthForm spaced">
+          <h2>Report accident</h2>
+          <div className="formGrid">
+            <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label>Accident date</label><input className="input" type="date" value={form.accident_date} onChange={(e) => setForm({ ...form, accident_date: e.target.value })} required /></div>
+            <div className="formRow"><label>Location</label><input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} required /></div>
+            <div className="formRow"><label>Files/photos</label><input className="input" type="file" multiple onChange={(e) => setFiles(e.target.files)} /></div>
+            <div className="formRow span2"><label>Description</label><textarea className="input textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+          </div>
+          <button className="button" type="submit">Save accident report</button>
+        </form>
+      )}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, vehicle, description" />

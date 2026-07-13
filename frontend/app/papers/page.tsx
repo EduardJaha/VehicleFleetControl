@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPostForm, fileHref } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { DOCUMENT_TYPES } from "@/lib/constants";
 import { toApiDate, todayInputDate } from "@/lib/format";
 import type { ApiMessage, VehiclePaper } from "@/lib/types";
@@ -14,6 +15,8 @@ const initialForm = {
 };
 
 export default function PapersPage() {
+  const { can } = useAuth();
+  const canWrite = can("papersWrite");
   const [papers, setPapers] = useState<VehiclePaper[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,17 +101,19 @@ export default function PapersPage() {
       {error && <div className="error spaced">{error}</div>}
       {message && <div className="success spaced">{message}</div>}
 
-      <form onSubmit={uploadPaper} className="form card fullWidthForm spaced">
-        <h2>Upload paper</h2>
-        <div className="formGrid">
-          <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
-          <div className="formRow"><label>Document type</label><select className="select" value={form.document_type} onChange={(e) => setForm({ ...form, document_type: e.target.value })}>{DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
-          <div className="formRow"><label>Issue date</label><input className="input" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} required /></div>
-          <div className="formRow"><label>Expiry date</label><input className="input" type="date" value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} required /></div>
-          <div className="formRow span2"><label>Document file</label><input className="input" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required /></div>
-        </div>
-        <button className="button" type="submit">Upload paper</button>
-      </form>
+      {canWrite && (
+        <form onSubmit={uploadPaper} className="form card fullWidthForm spaced">
+          <h2>Upload paper</h2>
+          <div className="formGrid">
+            <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label>Document type</label><select className="select" value={form.document_type} onChange={(e) => setForm({ ...form, document_type: e.target.value })}>{DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
+            <div className="formRow"><label>Issue date</label><input className="input" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} required /></div>
+            <div className="formRow"><label>Expiry date</label><input className="input" type="date" value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} required /></div>
+            <div className="formRow span2"><label>Document file</label><input className="input" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required /></div>
+          </div>
+          <button className="button" type="submit">Upload paper</button>
+        </form>
+      )}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, vehicle, document" />
@@ -119,10 +124,10 @@ export default function PapersPage() {
 
       {loading ? <div className="card">Loading papers...</div> : (
         <table className="table">
-          <thead><tr><th>Plate</th><th>Vehicle</th><th>Location</th><th>Document</th><th>Issue</th><th>Expiry</th><th>File</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Plate</th><th>Vehicle</th><th>Location</th><th>Document</th><th>Issue</th><th>Expiry</th><th>File</th>{canWrite && <th>Actions</th>}</tr></thead>
           <tbody>
-            {filtered.map((p) => <tr key={p.id}><td><strong>{p.license_plate}</strong></td><td>{p.brand} {p.model}</td><td>{p.vehicle_location}</td><td>{p.document_type}</td><td>{p.issue_date}</td><td>{p.expiry_date}</td><td>{p.file_path ? <a className="link" href={fileHref(p.file_path)} target="_blank">Open</a> : "-"}</td><td><button className="dangerButton smallButton" type="button" onClick={() => void deletePaper(p)}>Delete</button></td></tr>)}
-            {filtered.length === 0 && <tr><td colSpan={8} className="muted">No papers match your filters.</td></tr>}
+            {filtered.map((p) => <tr key={p.id}><td><strong>{p.license_plate}</strong></td><td>{p.brand} {p.model}</td><td>{p.vehicle_location}</td><td>{p.document_type}</td><td>{p.issue_date}</td><td>{p.expiry_date}</td><td>{p.file_path ? <a className="link" href={fileHref(p.file_path)} target="_blank">Open</a> : "-"}</td>{canWrite && <td><button className="dangerButton smallButton" type="button" onClick={() => void deletePaper(p)}>Delete</button></td>}</tr>)}
+            {filtered.length === 0 && <tr><td colSpan={canWrite ? 8 : 7} className="muted">No papers match your filters.</td></tr>}
           </tbody>
         </table>
       )}

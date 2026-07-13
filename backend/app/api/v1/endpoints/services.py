@@ -2,14 +2,15 @@ from datetime import datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session, joinedload
+from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
-from app.models import ServiceBill, Vehicle, VehicleService
-from app.schemas import AddService, ServiceReminderOut, VehicleServiceListOut, VehicleServiceOverviewOut
+from app.models import ServiceBill, User, Vehicle, VehicleService
+from app.schemas import AddService, ServiceReminderOut, UserRole, VehicleServiceListOut, VehicleServiceOverviewOut
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.utils.files import delete_upload, save_upload
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 MILEAGE_TYPES = {"General Service", "Oil Change"}
 DATE_TYPES = {"Tire Change/Control"}
@@ -64,7 +65,7 @@ def sync_vehicle_odometer(vehicle: Vehicle, odometer_km: int | None) -> None:
 
 
 @router.post("")
-def add_service(payload: AddService, db: Session = Depends(get_db)):
+def add_service(payload: AddService, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.mechanic))):
     vehicle = find_vehicle_by_plate(db, payload.license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail=f"No vehicle found with license plate '{payload.license_plate}'.")
@@ -102,6 +103,7 @@ async def register_with_bill(
     next_service_km_interval: int | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin, UserRole.mechanic)),
 ):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
@@ -135,6 +137,7 @@ async def upload_bill_later(
     service_type: str = Form(...),
     bill_file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin, UserRole.mechanic)),
 ):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
@@ -252,7 +255,7 @@ def get_by_license_plate(license_plate: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{service_id}")
-def delete_service(service_id: int, db: Session = Depends(get_db)):
+def delete_service(service_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.mechanic))):
     service = db.query(VehicleService).options(joinedload(VehicleService.bills)).filter(VehicleService.id == service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail=f"Service with id '{service_id}' was not found.")

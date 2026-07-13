@@ -13,7 +13,127 @@ export type Vehicle = {
   status_name: string;
 };
 
+export type UserRole = "admin" | "fleet_manager" | "mechanic" | "driver" | "finance" | "viewer";
+
+export type CurrentUser = {
+  id: number;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+};
+
+export type AuthResponse = {
+  access_token: string;
+  token_type: "bearer";
+  user: CurrentUser;
+};
+
 export type VehiclePayload = Omit<Vehicle, "id" | "status_name">;
+
+export type DriverStatus = "Active" | "Suspended" | "Left Company";
+
+export type Driver = {
+  id: number;
+  full_name: string;
+  phone_number?: string | null;
+  email?: string | null;
+  employee_number: string;
+  department?: string | null;
+  license_number: string;
+  license_category: string;
+  license_expiry_date: string;
+  assigned_vehicle_id?: number | null;
+  assigned_license_plate?: string | null;
+  user_id?: number | null;
+  status: DriverStatus;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DriverPayload = Omit<Driver, "id" | "assigned_vehicle_id" | "created_at" | "updated_at"> & {
+  assigned_vehicle_id?: number | null;
+};
+
+export type InspectionType = "Daily" | "Weekly" | "Before Trip" | "After Trip" | "Return Inspection";
+export type InspectionItemStatus = "Pass" | "Fail" | "Not Checked";
+export type InspectionOverallStatus = "Passed" | "Failed" | "Needs Review";
+
+export type InspectionItem = {
+  id?: number;
+  item_name: string;
+  status: InspectionItemStatus;
+  comment?: string | null;
+};
+
+export type Inspection = {
+  id: number;
+  vehicle_id: number;
+  license_plate: string;
+  driver_id?: number | null;
+  driver_name?: string | null;
+  inspection_type: InspectionType;
+  inspection_date: string;
+  overall_status: InspectionOverallStatus;
+  notes?: string | null;
+  items: InspectionItem[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type InspectionPayload = {
+  vehicle_id?: number | null;
+  license_plate?: string | null;
+  driver_id?: number | null;
+  inspection_type: InspectionType;
+  inspection_date: string;
+  overall_status?: InspectionOverallStatus | null;
+  notes?: string | null;
+  items: InspectionItem[];
+};
+
+export type WorkOrderStatus = "Open" | "Assigned" | "In Progress" | "Waiting for Parts" | "Completed" | "Cancelled";
+export type WorkOrderPriority = "Low" | "Medium" | "High" | "Critical";
+
+export type WorkOrder = {
+  id: number;
+  vehicle_id: number;
+  license_plate: string;
+  driver_id?: number | null;
+  driver_name?: string | null;
+  inspection_id?: number | null;
+  title: string;
+  description?: string | null;
+  reported_issue?: string | null;
+  priority: WorkOrderPriority;
+  status: WorkOrderStatus;
+  requested_by?: string | null;
+  assigned_to?: string | null;
+  workshop?: string | null;
+  expected_completion_date?: string | null;
+  actual_completion_date?: string | null;
+  labor_cost?: string | number | null;
+  parts_cost?: string | number | null;
+  total_cost?: string | number | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkOrderPayload = Omit<WorkOrder, "id" | "vehicle_id" | "license_plate" | "driver_name" | "total_cost" | "created_at" | "updated_at"> & {
+  vehicle_id?: number | null;
+  license_plate?: string | null;
+  labor_cost?: number | null;
+  parts_cost?: number | null;
+};
+
+export type ReportValue = string | number | boolean | null;
+
+export type ReportData = {
+  kpis: Record<string, ReportValue>;
+  rows: Array<Record<string, ReportValue>>;
+};
 
 export type DashboardSummary = {
   total_vehicles: number;

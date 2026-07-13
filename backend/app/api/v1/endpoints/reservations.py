@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
+from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
-from app.models import VehicleReservation
-from app.schemas import AddReservation, ReservationStatusUpdate, VehicleReservationListOut
+from app.models import User, VehicleReservation
+from app.schemas import AddReservation, ReservationStatusUpdate, UserRole, VehicleReservationListOut
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, parse_reservation_status, reservation_status_name
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def reservation_out(reservation: VehicleReservation) -> VehicleReservationListOut:
@@ -24,7 +25,7 @@ def reservation_out(reservation: VehicleReservation) -> VehicleReservationListOu
 
 
 @router.post("")
-def add_reservation(payload: AddReservation, db: Session = Depends(get_db)):
+def add_reservation(payload: AddReservation, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.driver))):
     vehicle = find_vehicle_by_plate(db, payload.license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail=f"No vehicle found with license plate '{payload.license_plate}'.")
@@ -72,7 +73,7 @@ def by_plate(license_plate: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{reservation_id}/status")
-def update_status(reservation_id: int, payload: ReservationStatusUpdate, db: Session = Depends(get_db)):
+def update_status(reservation_id: int, payload: ReservationStatusUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")
@@ -82,7 +83,7 @@ def update_status(reservation_id: int, payload: ReservationStatusUpdate, db: Ses
 
 
 @router.put("/{reservation_id}/approve")
-def approve(reservation_id: int, db: Session = Depends(get_db)):
+def approve(reservation_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")
@@ -92,7 +93,7 @@ def approve(reservation_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{reservation_id}/reject")
-def reject(reservation_id: int, db: Session = Depends(get_db)):
+def reject(reservation_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")

@@ -128,6 +128,13 @@ export type WorkOrderPayload = Omit<WorkOrder, "id" | "vehicle_id" | "license_pl
   parts_cost?: number | null;
 };
 
+export type ReportValue = string | number | boolean | null;
+
+export type ReportData = {
+  kpis: Record<string, ReportValue>;
+  rows: Array<Record<string, ReportValue>>;
+};
+
 export type DashboardSummary = {
   total_vehicles: number;
   status_summary: Array<{ status: number; count: number }>;

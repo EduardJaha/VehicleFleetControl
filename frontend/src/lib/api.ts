@@ -105,3 +105,23 @@ export async function apiDelete<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { method: "DELETE", headers: authHeaders() });
   return handleResponse<T>(response);
 }
+
+export async function apiDownload(path: string, fallbackFilename: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store", headers: authHeaders() });
+  if (!response.ok) {
+    await handleResponse<never>(response);
+    return;
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^"]+)"?/i.exec(disposition);
+  const filename = match?.[1] ?? fallbackFilename;
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+}

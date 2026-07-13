@@ -11,6 +11,7 @@ const navItems = [
   { href: "/drivers", label: "Drivers" },
   { href: "/inspections", label: "Inspections" },
   { href: "/work-orders", label: "Work Orders" },
+  { href: "/reports", label: "Reports" },
   { href: "/papers", label: "Documents" },
   { href: "/services/overview", label: "Services" },
   { href: "/services/reminders", label: "Reminders" },

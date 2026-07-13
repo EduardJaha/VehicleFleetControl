@@ -52,3 +52,12 @@ export const DEFAULT_INSPECTION_ITEMS = [
 ];
 export const WORK_ORDER_STATUSES = ["Open", "Assigned", "In Progress", "Waiting for Parts", "Completed", "Cancelled"];
 export const WORK_ORDER_PRIORITIES = ["Low", "Medium", "High", "Critical"];
+export const REPORTS = [
+  { value: "fleet-summary", label: "Fleet Summary" },
+  { value: "fuel-costs", label: "Fuel Costs" },
+  { value: "service-costs", label: "Service Costs" },
+  { value: "vehicle-costs", label: "Vehicle Costs" },
+  { value: "reservations", label: "Reservations" },
+  { value: "document-expiry", label: "Document Expiry" },
+  { value: "work-orders", label: "Work Orders" }
+];

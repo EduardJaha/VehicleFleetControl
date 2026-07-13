@@ -78,6 +78,12 @@ VehicleFleetControl currently includes the following modules:
 * Link work orders to vehicles, drivers, and inspections
 * Track labor, parts, and total costs with overdue and critical highlighting
 
+### Reports
+
+* View fleet summary, fuel costs, service costs, vehicle costs, reservations, document expiry, and work order reports
+* Filter reports by date range, license plate, vehicle status, department, and driver
+* Export report KPIs and rows to Excel files
+
 ### Service Management
 
 * Register vehicle services

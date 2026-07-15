@@ -6,6 +6,8 @@ from app.db.session import get_db
 from app.models import User
 from app.models import Vehicle
 from app.schemas import UserRole, VehicleCreate, VehicleOut, VehicleUpdate, UpdateLocation, UpdateStatus
+from app.schemas import MaintenanceTimelinePage, VehicleMaintenanceSummaryOut
+from app.api.v1.endpoints.maintenance import vehicle_summary, vehicle_timeline
 from app.utils.domain import find_vehicle_by_plate, parse_vehicle_status, status_name
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -74,6 +76,16 @@ def get_vehicle(vehicle_id: int, db: Session = Depends(get_db)):
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
     return vehicle_out(vehicle)
+
+
+@router.get("/{vehicle_id}/maintenance-summary", response_model=VehicleMaintenanceSummaryOut)
+def get_vehicle_maintenance_summary(vehicle_id: int, db: Session = Depends(get_db)):
+    return vehicle_summary(db, vehicle_id)
+
+
+@router.get("/{vehicle_id}/maintenance-timeline", response_model=MaintenanceTimelinePage)
+def get_vehicle_maintenance_timeline(vehicle_id: int, page: int = 1, page_size: int = 20, db: Session = Depends(get_db)):
+    return vehicle_timeline(db, vehicle_id, page, page_size)
 
 
 @router.put("/{vehicle_id}", response_model=VehicleOut)

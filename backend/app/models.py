@@ -87,6 +87,8 @@ class Inspection(Base):
     inspection_date = Column("InspectionDate", DateTime, nullable=False)
     overall_status = Column("OverallStatus", String(50), nullable=False, default="Needs Review")
     notes = Column("Notes", Text, nullable=True)
+    inspector = Column("Inspector", String(150), nullable=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -115,6 +117,8 @@ class WorkOrder(Base):
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
     driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="SET NULL"), nullable=True)
     inspection_id = Column("InspectionId", Integer, ForeignKey("Inspections.Id", ondelete="SET NULL"), nullable=True)
+    reminder_service_id = Column("ReminderServiceId", Integer, ForeignKey("VehicleServices.Id", ondelete="SET NULL"), nullable=True)
+    source = Column("Source", String(50), nullable=False, default="Manual")
     title = Column("Title", String(150), nullable=False)
     description = Column("Description", Text, nullable=True)
     reported_issue = Column("ReportedIssue", Text, nullable=True)
@@ -129,12 +133,19 @@ class WorkOrder(Base):
     parts_cost = Column("PartsCost", String, nullable=True)
     total_cost = Column("TotalCost", String, nullable=True)
     notes = Column("Notes", Text, nullable=True)
+    completed_odometer_km = Column("CompletedOdometerKm", Integer, nullable=True)
+    completion_notes = Column("CompletionNotes", Text, nullable=True)
+    completed_by = Column("CompletedBy", String(150), nullable=True)
+    created_by = Column("CreatedBy", String(150), nullable=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     vehicle = relationship("Vehicle", back_populates="work_orders")
     driver = relationship("Driver", back_populates="work_orders")
     inspection = relationship("Inspection", back_populates="work_orders")
+    reminder_service = relationship("VehicleService", foreign_keys=[reminder_service_id], back_populates="reminder_work_orders")
+    linked_service = relationship("VehicleService", foreign_keys="VehicleService.work_order_id", back_populates="work_order", uselist=False)
 
 
 class VehiclePaper(Base):
@@ -155,18 +166,29 @@ class VehicleService(Base):
 
     id = Column("Id", Integer, primary_key=True, index=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
+    work_order_id = Column("WorkOrderId", Integer, ForeignKey("WorkOrders.Id", ondelete="SET NULL"), nullable=True, unique=True)
     service_type = Column("ServiceType", String(100), nullable=False)
     description = Column("Description", Text, nullable=True)
     service_date = Column("ServiceDate", DateTime, nullable=False)
     odometer_km = Column("OdometerKm", Integer, nullable=True)
     cost = Column("Cost", String, nullable=True)
+    labor_cost = Column("LaborCost", String, nullable=True)
+    parts_cost = Column("PartsCost", String, nullable=True)
     workshop = Column("Workshop", String(100), nullable=True)
     next_service_date = Column("NextServiceDate", DateTime, nullable=True)
     next_service_km_interval = Column("NextServiceKmInterval", Integer, nullable=True)
     next_service_odometer_km = Column("NextServiceOdometerKm", Integer, nullable=True)
+    source = Column("Source", String(50), nullable=False, default="Manual")
+    status = Column("Status", String(50), nullable=False, default="Completed")
+    reminder_status = Column("ReminderStatus", String(50), nullable=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     vehicle = relationship("Vehicle", back_populates="services")
     bills = relationship("ServiceBill", back_populates="service", cascade="all, delete-orphan")
+    work_order = relationship("WorkOrder", foreign_keys=[work_order_id], back_populates="linked_service")
+    reminder_work_orders = relationship("WorkOrder", foreign_keys="WorkOrder.reminder_service_id", back_populates="reminder_service")
 
 
 class ServiceBill(Base):

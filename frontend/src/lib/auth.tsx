@@ -16,12 +16,13 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const PERMISSIONS = {
   vehiclesWrite: ["admin", "fleet_manager"],
   driversWrite: ["admin", "fleet_manager"],
-  inspectionsWrite: ["admin", "mechanic"],
-  workOrdersWrite: ["admin", "mechanic"],
+  inspectionsCreate: ["admin", "fleet_manager", "mechanic", "driver"],
+  inspectionsWrite: ["admin", "fleet_manager", "mechanic"],
+  workOrdersWrite: ["admin", "fleet_manager", "mechanic"],
   papersWrite: ["admin", "fleet_manager"],
   reservationsCreate: ["admin", "fleet_manager", "driver"],
   reservationsApprove: ["admin", "fleet_manager"],
-  servicesWrite: ["admin", "mechanic"],
+  servicesWrite: ["admin", "fleet_manager", "mechanic"],
   fuelWrite: ["admin", "finance"],
   accidentsWrite: ["admin", "fleet_manager"],
   reportsRead: ["admin", "fleet_manager", "finance"]

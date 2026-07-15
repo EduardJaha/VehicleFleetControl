@@ -71,6 +71,33 @@ class WorkOrderPriority(str, Enum):
     critical = "Critical"
 
 
+class WorkOrderSource(str, Enum):
+    manual = "Manual"
+    inspection = "Inspection"
+    service_reminder = "Service Reminder"
+    breakdown = "Breakdown"
+    other = "Other"
+
+
+class ServiceSource(str, Enum):
+    manual = "Manual"
+    work_order = "Work Order"
+    imported = "Imported"
+
+
+class ReminderStatus(str, Enum):
+    upcoming = "Upcoming"
+    due_soon = "Due Soon"
+    due = "Due"
+    overdue = "Overdue"
+    resolved = "Resolved"
+    dismissed = "Dismissed"
+
+
+class ReminderStatusUpdate(BaseModel):
+    status: ReminderStatus
+
+
 class UserBase(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     full_name: str = Field(min_length=1, max_length=255)
@@ -228,9 +255,11 @@ class InspectionBase(BaseModel):
     inspection_date: str
     overall_status: InspectionOverallStatus | None = None
     notes: str | None = None
+    inspector: str | None = Field(default=None, max_length=150)
+    archived: bool = False
     items: list[InspectionItemCreate] = Field(default_factory=list)
 
-    @field_validator("license_plate", "notes")
+    @field_validator("license_plate", "notes", "inspector")
     @classmethod
     def normalize_optional_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -251,6 +280,7 @@ class InspectionOut(BaseModel):
     id: int
     vehicle_id: int
     license_plate: str
+    vehicle_name: str
     driver_id: int | None = None
     driver_name: str | None = None
     inspection_type: InspectionType
@@ -258,6 +288,10 @@ class InspectionOut(BaseModel):
     overall_status: InspectionOverallStatus
     notes: str | None = None
     items: list[InspectionItemOut]
+    failed_item_count: int = 0
+    inspector: str | None = None
+    archived: bool = False
+    linked_work_order: "LinkedWorkOrder | None" = None
     created_at: str
     updated_at: str
     model_config = ConfigDict(from_attributes=True)
@@ -268,6 +302,8 @@ class WorkOrderBase(BaseModel):
     license_plate: str | None = None
     driver_id: int | None = None
     inspection_id: int | None = None
+    reminder_service_id: int | None = None
+    source: WorkOrderSource = WorkOrderSource.manual
     title: str = Field(min_length=1, max_length=150)
     description: str | None = None
     reported_issue: str | None = None
@@ -281,6 +317,10 @@ class WorkOrderBase(BaseModel):
     labor_cost: Decimal | None = Field(default=None, ge=0)
     parts_cost: Decimal | None = Field(default=None, ge=0)
     notes: str | None = None
+    completed_odometer_km: int | None = Field(default=None, ge=0)
+    completion_notes: str | None = None
+    completed_by: str | None = Field(default=None, max_length=150)
+    archived: bool = False
 
     @field_validator("title")
     @classmethod
@@ -290,7 +330,7 @@ class WorkOrderBase(BaseModel):
             raise ValueError("Title is required.")
         return text
 
-    @field_validator("license_plate", "description", "reported_issue", "requested_by", "assigned_to", "workshop", "notes")
+    @field_validator("license_plate", "description", "reported_issue", "requested_by", "assigned_to", "workshop", "notes", "completion_notes", "completed_by")
     @classmethod
     def normalize_optional_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -316,8 +356,13 @@ class WorkOrderOut(WorkOrderBase):
     id: int
     vehicle_id: int
     license_plate: str
+    vehicle_name: str
     driver_name: str | None = None
     total_cost: Decimal | None = None
+    created_by: str | None = None
+    source_inspection: "LinkedInspection | None" = None
+    source_reminder: "LinkedServiceReminder | None" = None
+    linked_service: "LinkedService | None" = None
     created_at: str
     updated_at: str
     model_config = ConfigDict(from_attributes=True)
@@ -376,10 +421,16 @@ class AddService(BaseModel):
     workshop: str | None = None
     next_service_date: str | None = None
     next_service_km_interval: int | None = None
+    work_order_id: int | None = None
+    labor_cost: Decimal | None = Field(default=None, ge=0)
+    parts_cost: Decimal | None = Field(default=None, ge=0)
+    source: ServiceSource = ServiceSource.manual
 
 
 class VehicleServiceListOut(BaseModel):
     id: int
+    license_plate: str
+    vehicle_name: str
     service_type: str
     service_date: str
     odometer_km: int | None = None
@@ -390,11 +441,22 @@ class VehicleServiceListOut(BaseModel):
     next_service_date: str | None = None
     next_service_km_interval: int | None = None
     next_service_odometer_km: int | None = None
+    vehicle_id: int
+    labor_cost: Decimal | None = None
+    parts_cost: Decimal | None = None
+    total_cost: Decimal | None = None
+    source: ServiceSource = ServiceSource.manual
+    status: str = "Completed"
+    archived: bool = False
+    linked_work_order: "LinkedWorkOrder | None" = None
+    reminder_status: ReminderStatus | None = None
+    bills: list["ServiceAttachment"] = []
 
 
 class VehicleServiceOverviewOut(BaseModel):
     id: int
     license_plate: str
+    vehicle_name: str
     service_type: str
     service_date: str
     odometer_km: int | None = None
@@ -405,10 +467,22 @@ class VehicleServiceOverviewOut(BaseModel):
     next_service_date: str | None = None
     next_service_km_interval: int | None = None
     next_service_odometer_km: int | None = None
+    vehicle_id: int
+    labor_cost: Decimal | None = None
+    parts_cost: Decimal | None = None
+    total_cost: Decimal | None = None
+    source: ServiceSource = ServiceSource.manual
+    status: str = "Completed"
+    archived: bool = False
+    linked_work_order: "LinkedWorkOrder | None" = None
+    reminder_status: ReminderStatus | None = None
 
 
 class ServiceReminderOut(BaseModel):
+    id: int
+    vehicle_id: int
     license_plate: str
+    vehicle_name: str
     service_type: str
     service_date: str
     reminder_mode: str
@@ -418,6 +492,158 @@ class ServiceReminderOut(BaseModel):
     next_service_odometer_km: int | None = None
     next_service_km_interval: int | None = None
     km_left: int | None = None
+    status: ReminderStatus
+    priority: WorkOrderPriority
+    linked_work_order: "LinkedWorkOrder | None" = None
+
+
+class LinkedWorkOrder(BaseModel):
+    id: int
+    title: str
+    status: WorkOrderStatus
+    priority: WorkOrderPriority
+
+
+class LinkedService(BaseModel):
+    id: int
+    service_type: str
+    service_date: str
+    total_cost: Decimal | None = None
+
+
+class LinkedInspection(BaseModel):
+    id: int
+    inspection_type: InspectionType
+    inspection_date: str
+    overall_status: InspectionOverallStatus
+
+
+class LinkedServiceReminder(BaseModel):
+    id: int
+    service_type: str
+    due_date: str | None = None
+    due_odometer_km: int | None = None
+    status: ReminderStatus
+
+
+class ServiceAttachment(BaseModel):
+    id: int
+    file_path: str
+    uploaded_at: str
+    attachment_type: str = "Bill"
+
+
+class WorkOrderPage(BaseModel):
+    items: list[WorkOrderOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class ServicePage(BaseModel):
+    items: list[VehicleServiceOverviewOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class ReminderPage(BaseModel):
+    items: list[ServiceReminderOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class InspectionPage(BaseModel):
+    items: list[InspectionOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class MaintenanceRecordSummary(BaseModel):
+    id: int
+    record_type: str
+    vehicle_id: int
+    vehicle: str
+    license_plate: str
+    title: str
+    status: str
+    priority: str | None = None
+    date: str | None = None
+    due_date: str | None = None
+    assigned_to: str | None = None
+    cost: Decimal | None = None
+    href: str
+    description: str | None = None
+
+
+class MaintenanceSummaryOut(BaseModel):
+    work_orders_by_status: dict[str, int]
+    work_orders_by_priority: dict[str, int]
+    open_work_orders: int
+    assigned_work_orders: int
+    in_progress_work_orders: int
+    waiting_for_parts_work_orders: int
+    critical_work_orders_count: int
+    overdue_work_orders_count: int
+    completed_work_orders_this_month: int
+    services_completed_this_month: int
+    upcoming_reminders_count: int
+    overdue_reminders_count: int
+    failed_inspections_count: int
+    inspections_needing_review_count: int
+    vehicles_in_service_count: int
+    monthly_maintenance_cost: Decimal
+    critical_work_orders: list[MaintenanceRecordSummary]
+    overdue_work_orders: list[MaintenanceRecordSummary]
+    overdue_service_reminders: list[MaintenanceRecordSummary]
+    failed_inspections: list[MaintenanceRecordSummary]
+    vehicles_in_service: list[MaintenanceRecordSummary]
+    recently_created_work_orders: list[MaintenanceRecordSummary]
+    recently_completed_work_orders: list[MaintenanceRecordSummary]
+    recent_services: list[MaintenanceRecordSummary]
+    recent_inspections: list[MaintenanceRecordSummary]
+
+
+class VehicleMaintenanceSummaryOut(BaseModel):
+    vehicle_id: int
+    license_plate: str
+    open_work_orders: int
+    critical_work_orders: int
+    last_service: LinkedService | None = None
+    next_service: LinkedServiceReminder | None = None
+    overdue_reminders: int
+    failed_inspections: int
+    maintenance_cost_this_month: Decimal
+    maintenance_cost_this_year: Decimal
+    lifetime_maintenance_cost: Decimal
+
+
+class MaintenanceTimelineEvent(BaseModel):
+    id: str
+    occurred_at: str
+    event_type: str
+    title: str
+    description: str | None = None
+    status: str | None = None
+    priority: str | None = None
+    actor: str | None = None
+    related_record_type: str
+    related_record_id: int
+    href: str
+
+
+class MaintenanceTimelinePage(BaseModel):
+    items: list[MaintenanceTimelineEvent]
+    page: int
+    page_size: int
+    total: int
+    pages: int
 
 
 class FuelUpdate(BaseModel):

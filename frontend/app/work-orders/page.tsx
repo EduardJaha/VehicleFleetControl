@@ -1,283 +1,199 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { apiDelete, apiGet, apiPost, apiPut, buildQuery } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { apiPost, apiPut, maintenanceApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { WORK_ORDER_PRIORITIES, WORK_ORDER_STATUSES } from "@/lib/constants";
+import { WORK_ORDER_PRIORITIES, WORK_ORDER_SOURCES, WORK_ORDER_STATUSES } from "@/lib/constants";
 import { toApiDate, toInputDate, todayInputDate } from "@/lib/format";
-import type { ApiMessage, WorkOrder, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/lib/types";
+import type { PageResult, WorkOrder, WorkOrderPayload, WorkOrderPriority, WorkOrderSource, WorkOrderStatus } from "@/lib/types";
+import { formatMoney, MaintenanceEmptyState, MaintenancePageHeader, MaintenancePriorityBadge, MaintenanceStatusBadge, MaintenanceTable, Pagination } from "@/components/maintenance/Maintenance";
 
-type WorkOrderForm = {
-  license_plate: string;
-  driver_id: string;
-  inspection_id: string;
-  title: string;
-  description: string;
-  reported_issue: string;
-  priority: WorkOrderPriority;
-  status: WorkOrderStatus;
-  requested_by: string;
-  assigned_to: string;
-  workshop: string;
-  expected_completion_date: string;
-  actual_completion_date: string;
-  labor_cost: string;
-  parts_cost: string;
-  notes: string;
+type FormState = {
+  license_plate: string; driver_id: string; inspection_id: string; reminder_service_id: string;
+  title: string; description: string; reported_issue: string; source: WorkOrderSource;
+  priority: WorkOrderPriority; status: WorkOrderStatus; requested_by: string; assigned_to: string;
+  workshop: string; expected_completion_date: string; actual_completion_date: string;
+  labor_cost: string; parts_cost: string; completed_odometer_km: string; completion_notes: string; completed_by: string; notes: string;
 };
 
-function initialFormFromParams(searchParams?: URLSearchParams): WorkOrderForm {
+type Filters = { search: string; license_plate: string; status: string; priority: string; source: string; assigned_to: string; workshop: string; from_date: string; to_date: string; overdue_only: boolean; has_linked_service: string };
+
+function initialForm(params?: URLSearchParams): FormState {
+  const inspectionId = params?.get("inspection_id") ?? "";
+  const reminderId = params?.get("reminder_service_id") ?? "";
   return {
-    license_plate: searchParams?.get("license_plate") ?? "",
-    driver_id: "",
-    inspection_id: searchParams?.get("inspection_id") ?? "",
-    title: searchParams?.get("title") ?? "",
-    description: "",
-    reported_issue: searchParams?.get("reported_issue") ?? "",
-    priority: "Medium",
-    status: "Open",
-    requested_by: "",
-    assigned_to: "",
-    workshop: "",
-    expected_completion_date: "",
-    actual_completion_date: "",
-    labor_cost: "",
-    parts_cost: "",
-    notes: ""
+    license_plate: params?.get("license_plate") ?? "", driver_id: "", inspection_id: inspectionId, reminder_service_id: reminderId,
+    title: params?.get("title") ?? "", description: "", reported_issue: params?.get("reported_issue") ?? "",
+    source: inspectionId ? "Inspection" : reminderId ? "Service Reminder" : "Manual", priority: "Medium", status: "Open",
+    requested_by: "", assigned_to: "", workshop: "", expected_completion_date: "", actual_completion_date: "",
+    labor_cost: "", parts_cost: "", completed_odometer_km: "", completion_notes: "", completed_by: "", notes: ""
   };
 }
 
-function workOrderToForm(workOrder: WorkOrder): WorkOrderForm {
+function toForm(order: WorkOrder): FormState {
   return {
-    license_plate: workOrder.license_plate,
-    driver_id: workOrder.driver_id ? String(workOrder.driver_id) : "",
-    inspection_id: workOrder.inspection_id ? String(workOrder.inspection_id) : "",
-    title: workOrder.title,
-    description: workOrder.description ?? "",
-    reported_issue: workOrder.reported_issue ?? "",
-    priority: workOrder.priority,
-    status: workOrder.status,
-    requested_by: workOrder.requested_by ?? "",
-    assigned_to: workOrder.assigned_to ?? "",
-    workshop: workOrder.workshop ?? "",
-    expected_completion_date: toInputDate(workOrder.expected_completion_date ?? ""),
-    actual_completion_date: toInputDate(workOrder.actual_completion_date ?? ""),
-    labor_cost: workOrder.labor_cost ? String(workOrder.labor_cost) : "",
-    parts_cost: workOrder.parts_cost ? String(workOrder.parts_cost) : "",
-    notes: workOrder.notes ?? ""
+    license_plate: order.license_plate, driver_id: order.driver_id ? String(order.driver_id) : "",
+    inspection_id: order.inspection_id ? String(order.inspection_id) : "", reminder_service_id: order.reminder_service_id ? String(order.reminder_service_id) : "",
+    title: order.title, description: order.description ?? "", reported_issue: order.reported_issue ?? "", source: order.source,
+    priority: order.priority, status: order.status, requested_by: order.requested_by ?? "", assigned_to: order.assigned_to ?? "", workshop: order.workshop ?? "",
+    expected_completion_date: toInputDate(order.expected_completion_date ?? ""), actual_completion_date: toInputDate(order.actual_completion_date ?? ""),
+    labor_cost: order.labor_cost ? String(order.labor_cost) : "", parts_cost: order.parts_cost ? String(order.parts_cost) : "",
+    completed_odometer_km: order.completed_odometer_km ? String(order.completed_odometer_km) : "", completion_notes: order.completion_notes ?? "",
+    completed_by: order.completed_by ?? "", notes: order.notes ?? ""
   };
 }
 
-function formToPayload(form: WorkOrderForm): WorkOrderPayload {
+function payload(form: FormState): WorkOrderPayload {
   return {
-    license_plate: form.license_plate || null,
-    driver_id: form.driver_id ? Number(form.driver_id) : null,
+    license_plate: form.license_plate, driver_id: form.driver_id ? Number(form.driver_id) : null,
     inspection_id: form.inspection_id ? Number(form.inspection_id) : null,
-    title: form.title,
-    description: form.description || null,
-    reported_issue: form.reported_issue || null,
-    priority: form.priority,
-    status: form.status,
-    requested_by: form.requested_by || null,
-    assigned_to: form.assigned_to || null,
-    workshop: form.workshop || null,
+    reminder_service_id: form.reminder_service_id ? Number(form.reminder_service_id) : null,
+    title: form.title, description: form.description || null, reported_issue: form.reported_issue || null,
+    source: form.source, priority: form.priority, status: form.status, requested_by: form.requested_by || null,
+    assigned_to: form.assigned_to || null, workshop: form.workshop || null,
     expected_completion_date: form.expected_completion_date ? toApiDate(form.expected_completion_date) : null,
     actual_completion_date: form.actual_completion_date ? toApiDate(form.actual_completion_date) : null,
-    labor_cost: form.labor_cost ? Number(form.labor_cost) : null,
-    parts_cost: form.parts_cost ? Number(form.parts_cost) : null,
-    notes: form.notes || null
+    labor_cost: form.labor_cost ? Number(form.labor_cost) : null, parts_cost: form.parts_cost ? Number(form.parts_cost) : null,
+    completed_odometer_km: form.completed_odometer_km ? Number(form.completed_odometer_km) : null,
+    completion_notes: form.completion_notes || null, completed_by: form.completed_by || null, notes: form.notes || null, archived: false
   };
 }
 
-function statusClass(status: WorkOrderStatus) {
-  if (status === "Completed") return "badge";
-  if (status === "Cancelled") return "secondaryButton smallButton";
-  if (status === "Waiting for Parts") return "warningBadge";
-  return "badge";
-}
-
-function isOverdue(workOrder: WorkOrder) {
-  if (!workOrder.expected_completion_date || ["Completed", "Cancelled"].includes(workOrder.status)) return false;
-  const expected = new Date(toInputDate(workOrder.expected_completion_date));
-  const today = new Date(todayInputDate());
-  return expected < today;
+function overdue(order: WorkOrder) {
+  return !!order.expected_completion_date && !["Completed", "Cancelled"].includes(order.status) && new Date(toInputDate(order.expected_completion_date)) < new Date(todayInputDate());
 }
 
 export default function WorkOrdersPage() {
   const searchParams = useSearchParams();
   const { can } = useAuth();
   const canWrite = can("workOrdersWrite");
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const initialFilters = useMemo<Filters>(() => ({
+    search: searchParams.get("search") ?? "", license_plate: searchParams.get("license_plate") ?? "", status: searchParams.get("status") ?? "",
+    priority: searchParams.get("priority") ?? "", source: searchParams.get("source") ?? "", assigned_to: searchParams.get("assigned_to") ?? "",
+    workshop: searchParams.get("workshop") ?? "", from_date: searchParams.get("from_date") ?? "", to_date: searchParams.get("to_date") ?? "",
+    overdue_only: searchParams.get("overdue_only") === "true", has_linked_service: searchParams.get("has_linked_service") ?? ""
+  }), [searchParams]);
+  const [result, setResult] = useState<PageResult<WorkOrder>>({ items: [], page: 1, page_size: 20, total: 0, pages: 0 });
+  const [filters, setFilters] = useState(initialFilters);
+  const [form, setForm] = useState<FormState>(() => initialForm(searchParams));
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [form, setForm] = useState<WorkOrderForm>(() => initialFormFromParams(searchParams));
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [filters, setFilters] = useState({ search: "", license_plate: "", status: "", priority: "", workshop: "", from_date: "", to_date: "" });
 
-  async function loadWorkOrders(currentFilters = filters) {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (page = 1, values = filters) => {
+    setLoading(true); setError(null);
     try {
-      const query = buildQuery({
-        search: currentFilters.search,
-        license_plate: currentFilters.license_plate,
-        status: currentFilters.status,
-        priority: currentFilters.priority,
-        workshop: currentFilters.workshop,
-        from_date: toApiDate(currentFilters.from_date),
-        to_date: toApiDate(currentFilters.to_date)
+      const data = await maintenanceApi.getWorkOrders({
+        page, page_size: 20, ...values, from_date: toApiDate(values.from_date), to_date: toApiDate(values.to_date),
+        overdue_only: values.overdue_only || undefined,
+        has_linked_service: values.has_linked_service === "" ? undefined : values.has_linked_service === "true"
       });
-      setWorkOrders(await apiGet<WorkOrder[]>(`/work-orders${query}`));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load work orders");
-    } finally {
-      setLoading(false);
-    }
+      setResult(data);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not load Work Orders"); }
+    finally { setLoading(false); }
+  }, [filters]);
+
+  useEffect(() => { void load(Number(searchParams.get("page") ?? 1), initialFilters); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function applyFilters() {
+    const query = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => { if (value !== "" && value !== false) query.set(key, String(value)); });
+    window.history.replaceState(null, "", `/work-orders${query.size ? `?${query}` : ""}`);
+    void load(1, filters);
   }
 
-  useEffect(() => {
-    void loadWorkOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const totals = useMemo(() => workOrders.reduce((sum, order) => sum + Number(order.total_cost ?? 0), 0), [workOrders]);
-
-  async function saveWorkOrder(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
-    setMessage(null);
+  async function save(event: React.FormEvent) {
+    event.preventDefault(); setError(null); setMessage(null);
     try {
-      if (editingId) {
-        const updated = await apiPut<WorkOrder>(`/work-orders/${editingId}`, formToPayload(form));
-        setMessage(`Work order ${updated.id} updated.`);
-      } else {
-        const created = await apiPost<WorkOrder>("/work-orders", formToPayload(form));
-        setMessage(`Work order ${created.id} created.`);
-      }
-      setForm(initialFormFromParams());
-      setEditingId(null);
-      await loadWorkOrders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save work order");
-    }
+      const saved = editingId ? await apiPut<WorkOrder>(`/work-orders/${editingId}`, payload(form)) : await apiPost<WorkOrder>("/work-orders", payload(form));
+      setMessage(`Work Order #${saved.id} ${editingId ? "updated" : "created"}.`); setEditingId(null); setForm(initialForm()); await load(result.page);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not save Work Order"); }
   }
 
-  function startEdit(workOrder: WorkOrder) {
-    setEditingId(workOrder.id);
-    setForm(workOrderToForm(workOrder));
-    setMessage(null);
-    setError(null);
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setForm(initialFormFromParams());
-  }
-
-  async function updateStatus(workOrder: WorkOrder, status: WorkOrderStatus) {
-    setError(null);
-    setMessage(null);
+  async function changeStatus(order: WorkOrder, status: WorkOrderStatus) {
     try {
-      const payload = {
-        status,
-        actual_completion_date: status === "Completed" && !workOrder.actual_completion_date ? toApiDate(todayInputDate()) : workOrder.actual_completion_date
-      };
-      const updated = await apiPut<WorkOrder>(`/work-orders/${workOrder.id}/status`, payload);
-      setMessage(`Work order ${updated.id} status updated.`);
-      await loadWorkOrders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update status");
-    }
+      await apiPut(`/work-orders/${order.id}/status`, { status, actual_completion_date: status === "Completed" ? (order.actual_completion_date ?? toApiDate(todayInputDate())) : order.actual_completion_date });
+      setMessage(`Work Order #${order.id} is now ${status}.`); await load(result.page);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not update Work Order status"); }
   }
 
-  async function deleteWorkOrder(workOrder: WorkOrder) {
-    if (!confirm(`Delete work order ${workOrder.id}: ${workOrder.title}?`)) return;
-    setError(null);
-    setMessage(null);
-    try {
-      const result = await apiDelete<ApiMessage>(`/work-orders/${workOrder.id}`);
-      setMessage(result.message ?? "Work order deleted.");
-      await loadWorkOrders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete work order");
-    }
+  async function archive(order: WorkOrder) {
+    if (!confirm(`Archive Work Order #${order.id}?`)) return;
+    try { await apiPut(`/work-orders/${order.id}/archive`, {}); setMessage(`Work Order #${order.id} archived.`); await load(result.page); }
+    catch (err) { setError(err instanceof Error ? err.message : "Could not archive Work Order"); }
   }
 
   return (
     <section>
-      <div className="header">
-        <div>
-          <h1>Work Orders</h1>
-          <p className="muted">Track maintenance requests, priorities, status, workshops, and costs.</p>
+      <MaintenancePageHeader title="Work Orders" description="Plan, assign, track, and complete maintenance work from Inspections, Service Reminders, breakdowns, or manual requests." />
+      {error && <div className="error spaced">{error}</div>}{message && <div className="success spaced">{message}</div>}
+
+      {canWrite && <form className="form card fullWidthForm spaced" onSubmit={save}>
+        <h2>{editingId ? `Edit Work Order #${editingId}` : "Create Work Order"}</h2>
+        <div className="formGrid">
+          <div className="formRow"><label>License plate</label><input className="input" required value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} /></div>
+          <div className="formRow"><label>Title</label><input className="input" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
+          <div className="formRow"><label>Source</label><select className="select" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value as WorkOrderSource })}>{WORK_ORDER_SOURCES.map((source) => <option key={source}>{source}</option>)}</select></div>
+          <div className="formRow"><label>Priority</label><select className="select" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as WorkOrderPriority })}>{WORK_ORDER_PRIORITIES.map((value) => <option key={value}>{value}</option>)}</select></div>
+          <div className="formRow"><label>Status</label><select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as WorkOrderStatus })}>{WORK_ORDER_STATUSES.map((value) => <option key={value}>{value}</option>)}</select></div>
+          <div className="formRow"><label>Inspection ID</label><input className="input" type="number" value={form.inspection_id} onChange={(e) => setForm({ ...form, inspection_id: e.target.value, source: e.target.value ? "Inspection" : form.source })} /></div>
+          <div className="formRow"><label>Service Reminder ID</label><input className="input" type="number" value={form.reminder_service_id} onChange={(e) => setForm({ ...form, reminder_service_id: e.target.value, source: e.target.value ? "Service Reminder" : form.source })} /></div>
+          <div className="formRow"><label>Driver ID</label><input className="input" type="number" value={form.driver_id} onChange={(e) => setForm({ ...form, driver_id: e.target.value })} /></div>
+          <div className="formRow"><label>Requested by</label><input className="input" value={form.requested_by} onChange={(e) => setForm({ ...form, requested_by: e.target.value })} /></div>
+          <div className="formRow"><label>Assigned person</label><input className="input" value={form.assigned_to} onChange={(e) => setForm({ ...form, assigned_to: e.target.value })} /></div>
+          <div className="formRow"><label>Workshop</label><input className="input" value={form.workshop} onChange={(e) => setForm({ ...form, workshop: e.target.value })} /></div>
+          <div className="formRow"><label>Expected completion</label><input className="input" type="date" value={form.expected_completion_date} onChange={(e) => setForm({ ...form, expected_completion_date: e.target.value })} /></div>
+          <div className="formRow"><label>Actual completion</label><input className="input" type="date" required={form.status === "Completed"} value={form.actual_completion_date} onChange={(e) => setForm({ ...form, actual_completion_date: e.target.value })} /></div>
+          <div className="formRow"><label>Labor cost</label><input className="input" type="number" min="0" step="0.01" value={form.labor_cost} onChange={(e) => setForm({ ...form, labor_cost: e.target.value })} /></div>
+          <div className="formRow"><label>Parts cost</label><input className="input" type="number" min="0" step="0.01" value={form.parts_cost} onChange={(e) => setForm({ ...form, parts_cost: e.target.value })} /></div>
+          <div className="formRow"><label>Completed odometer</label><input className="input" type="number" min="0" value={form.completed_odometer_km} onChange={(e) => setForm({ ...form, completed_odometer_km: e.target.value })} /></div>
+          <div className="formRow"><label>Completed by</label><input className="input" value={form.completed_by} onChange={(e) => setForm({ ...form, completed_by: e.target.value })} /></div>
+          <div className="formRow span2"><label>Reported issue</label><textarea className="input textarea" value={form.reported_issue} onChange={(e) => setForm({ ...form, reported_issue: e.target.value })} /></div>
+          <div className="formRow span2"><label>Description</label><textarea className="input textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+          <div className="formRow span2"><label>Completion notes</label><textarea className="input textarea" value={form.completion_notes} onChange={(e) => setForm({ ...form, completion_notes: e.target.value })} /></div>
+          <div className="formRow span2"><label>Internal notes</label><textarea className="input textarea" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
         </div>
-      </div>
-
-      {error && <div className="error spaced">{error}</div>}
-      {message && <div className="success spaced">{message}</div>}
-
-      {canWrite && (
-        <form onSubmit={saveWorkOrder} className="form card fullWidthForm spaced">
-          <h2>{editingId ? "Edit work order" : "Create work order"}</h2>
-          <div className="formGrid">
-            <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(event) => setForm({ ...form, license_plate: event.target.value })} placeholder="01-123-AB" required /></div>
-            <div className="formRow"><label>Title</label><input className="input" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></div>
-            <div className="formRow"><label>Driver ID optional</label><input className="input" type="number" value={form.driver_id} onChange={(event) => setForm({ ...form, driver_id: event.target.value })} /></div>
-            <div className="formRow"><label>Inspection ID optional</label><input className="input" type="number" value={form.inspection_id} onChange={(event) => setForm({ ...form, inspection_id: event.target.value })} /></div>
-            <div className="formRow"><label>Priority</label><select className="select" value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value as WorkOrderPriority })}>{WORK_ORDER_PRIORITIES.map((priority) => <option key={priority}>{priority}</option>)}</select></div>
-            <div className="formRow"><label>Status</label><select className="select" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as WorkOrderStatus })}>{WORK_ORDER_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></div>
-            <div className="formRow"><label>Requested by</label><input className="input" value={form.requested_by} onChange={(event) => setForm({ ...form, requested_by: event.target.value })} /></div>
-            <div className="formRow"><label>Assigned to</label><input className="input" value={form.assigned_to} onChange={(event) => setForm({ ...form, assigned_to: event.target.value })} /></div>
-            <div className="formRow"><label>Workshop</label><input className="input" value={form.workshop} onChange={(event) => setForm({ ...form, workshop: event.target.value })} /></div>
-            <div className="formRow"><label>Expected completion</label><input className="input" type="date" value={form.expected_completion_date} onChange={(event) => setForm({ ...form, expected_completion_date: event.target.value })} /></div>
-            <div className="formRow"><label>Actual completion</label><input className="input" type="date" value={form.actual_completion_date} onChange={(event) => setForm({ ...form, actual_completion_date: event.target.value })} required={form.status === "Completed"} /></div>
-            <div className="formRow"><label>Labor cost</label><input className="input" type="number" step="0.01" value={form.labor_cost} onChange={(event) => setForm({ ...form, labor_cost: event.target.value })} /></div>
-            <div className="formRow"><label>Parts cost</label><input className="input" type="number" step="0.01" value={form.parts_cost} onChange={(event) => setForm({ ...form, parts_cost: event.target.value })} /></div>
-            <div className="formRow span2"><label>Reported issue</label><textarea className="input textarea" value={form.reported_issue} onChange={(event) => setForm({ ...form, reported_issue: event.target.value })} /></div>
-            <div className="formRow span2"><label>Description</label><textarea className="input textarea" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></div>
-            <div className="formRow span2"><label>Notes</label><textarea className="input textarea" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></div>
-          </div>
-          <div className="actions">
-            <button className="button" type="submit">{editingId ? "Update work order" : "Create work order"}</button>
-            {editingId && <button className="secondaryButton" type="button" onClick={cancelEdit}>Cancel</button>}
-          </div>
-        </form>
-      )}
+        <div className="actions"><button className="button" type="submit">{editingId ? "Update Work Order" : "Create Work Order"}</button>{editingId && <button className="secondaryButton" type="button" onClick={() => { setEditingId(null); setForm(initialForm()); }}>Cancel</button>}</div>
+      </form>}
 
       <div className="card filtersGrid spaced">
-        <input className="input" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Search title, issue, assignee" />
-        <input className="input" value={filters.license_plate} onChange={(event) => setFilters({ ...filters, license_plate: event.target.value })} placeholder="Plate" />
-        <select className="select" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">All statuses</option>{WORK_ORDER_STATUSES.map((status) => <option key={status}>{status}</option>)}</select>
-        <select className="select" value={filters.priority} onChange={(event) => setFilters({ ...filters, priority: event.target.value })}><option value="">All priorities</option>{WORK_ORDER_PRIORITIES.map((priority) => <option key={priority}>{priority}</option>)}</select>
-        <input className="input" value={filters.workshop} onChange={(event) => setFilters({ ...filters, workshop: event.target.value })} placeholder="Workshop" />
-        <input className="input" type="date" value={filters.from_date} onChange={(event) => setFilters({ ...filters, from_date: event.target.value })} />
-        <input className="input" type="date" value={filters.to_date} onChange={(event) => setFilters({ ...filters, to_date: event.target.value })} />
-        <button className="button" type="button" onClick={() => void loadWorkOrders()}>Apply filters</button>
+        <input className="input" placeholder="Search title, issue, assignee" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} />
+        <input className="input" placeholder="License plate" value={filters.license_plate} onChange={(e) => setFilters({ ...filters, license_plate: e.target.value })} />
+        <select className="select" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}><option value="">All statuses</option>{WORK_ORDER_STATUSES.map((v) => <option key={v}>{v}</option>)}</select>
+        <select className="select" value={filters.priority} onChange={(e) => setFilters({ ...filters, priority: e.target.value })}><option value="">All priorities</option>{WORK_ORDER_PRIORITIES.map((v) => <option key={v}>{v}</option>)}</select>
+        <select className="select" value={filters.source} onChange={(e) => setFilters({ ...filters, source: e.target.value })}><option value="">All sources</option>{WORK_ORDER_SOURCES.map((v) => <option key={v}>{v}</option>)}</select>
+        <input className="input" placeholder="Assigned person" value={filters.assigned_to} onChange={(e) => setFilters({ ...filters, assigned_to: e.target.value })} />
+        <input className="input" placeholder="Workshop" value={filters.workshop} onChange={(e) => setFilters({ ...filters, workshop: e.target.value })} />
+        <input className="input" type="date" value={filters.from_date} onChange={(e) => setFilters({ ...filters, from_date: e.target.value })} />
+        <input className="input" type="date" value={filters.to_date} onChange={(e) => setFilters({ ...filters, to_date: e.target.value })} />
+        <select className="select" value={filters.has_linked_service} onChange={(e) => setFilters({ ...filters, has_linked_service: e.target.value })}><option value="">Any Service link</option><option value="true">Has linked Service</option><option value="false">No linked Service</option></select>
+        <label className="actions"><input type="checkbox" checked={filters.overdue_only} onChange={(e) => setFilters({ ...filters, overdue_only: e.target.checked })} /> Overdue only</label>
+        <button className="button" type="button" onClick={applyFilters}>Apply filters</button>
       </div>
 
-      <p className="muted">Showing {workOrders.length} work order(s). Total visible cost: {totals.toFixed(2)}</p>
-      {loading ? <div className="card">Loading work orders...</div> : (
-        <table className="table">
-          <thead><tr><th>Plate</th><th>Title</th><th>Priority</th><th>Status</th><th>Workshop</th><th>Expected</th><th>Assigned</th><th>Total</th>{canWrite && <th>Actions</th>}</tr></thead>
-          <tbody>
-            {workOrders.map((workOrder) => (
-              <tr key={workOrder.id} className={workOrder.priority === "Critical" ? "criticalRow" : isOverdue(workOrder) ? "overdueRow" : undefined}>
-                <td><strong>{workOrder.license_plate}</strong></td>
-                <td>{workOrder.title}<br />{workOrder.inspection_id && <span className="muted">Inspection #{workOrder.inspection_id}</span>}</td>
-                <td><span className={workOrder.priority === "Critical" ? "dangerBadge" : workOrder.priority === "High" ? "warningBadge" : "badge"}>{workOrder.priority}</span></td>
-                <td>{canWrite ? <select className="select compactInput" value={workOrder.status} onChange={(event) => void updateStatus(workOrder, event.target.value as WorkOrderStatus)}>{WORK_ORDER_STATUSES.map((status) => <option key={status}>{status}</option>)}</select> : <span className={statusClass(workOrder.status)}>{workOrder.status}</span>}</td>
-                <td>{workOrder.workshop ?? "-"}</td>
-                <td>{workOrder.expected_completion_date ? <>{workOrder.expected_completion_date}{isOverdue(workOrder) && <br />}{isOverdue(workOrder) && <span className="dangerBadge">Overdue</span>}</> : "-"}</td>
-                <td>{workOrder.assigned_to ?? workOrder.driver_name ?? "-"}</td>
-                <td>{workOrder.total_cost ?? "-"}</td>
-                {canWrite && <td><div className="actions"><button className="secondaryButton smallButton" type="button" onClick={() => startEdit(workOrder)}>Edit</button><button className="dangerButton smallButton" type="button" onClick={() => void deleteWorkOrder(workOrder)}>Delete</button></div></td>}
-              </tr>
-            ))}
-            {workOrders.length === 0 && <tr><td colSpan={canWrite ? 9 : 8} className="muted">No work orders match your filters.</td></tr>}
-          </tbody>
-        </table>
-      )}
+      {loading ? <div className="card">Loading Work Orders...</div> : result.items.length === 0 ? <MaintenanceEmptyState>No Work Orders match the current filters.</MaintenanceEmptyState> : <MaintenanceTable>
+        <thead><tr><th>ID / Vehicle</th><th>Title / Issue</th><th>Source</th><th>Priority</th><th>Status</th><th>Assigned / Workshop</th><th>Completion</th><th>Total cost</th><th>Linked Service</th><th>Actions</th></tr></thead>
+        <tbody>{result.items.map((order) => <tr key={order.id} className={order.priority === "Critical" ? "criticalRow" : overdue(order) ? "overdueRow" : undefined}>
+          <td><Link className="link" href={`/work-orders/${order.id}`}>#{order.id}</Link><br /><strong>{order.vehicle_name}</strong><br /><span className="muted">{order.license_plate}</span></td>
+          <td><strong>{order.title}</strong><br /><span className="muted">{order.reported_issue ?? order.description ?? "-"}</span></td>
+          <td>{order.source}</td><td><MaintenancePriorityBadge priority={order.priority} /></td><td><MaintenanceStatusBadge status={order.status} />{overdue(order) && <><br /><span className="dangerBadge">Overdue</span></>}</td>
+          <td>{order.assigned_to ?? order.driver_name ?? "-"}<br /><span className="muted">{order.workshop ?? "No workshop"}</span></td>
+          <td>{order.expected_completion_date ?? "-"}<br /><span className="muted">Actual: {order.actual_completion_date ?? "-"}</span></td><td>{formatMoney(order.total_cost)}</td>
+          <td>{order.linked_service ? <Link className="link" href={`/services/${order.linked_service.id}`}>Service #{order.linked_service.id}</Link> : "-"}</td>
+          <td><div className="actions"><Link className="secondaryButton smallButton" href={`/work-orders/${order.id}`}>View</Link>{canWrite && <>
+            <button className="secondaryButton smallButton" type="button" onClick={() => { setEditingId(order.id); setForm(toForm(order)); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Edit</button>
+            {order.status === "Assigned" && <button className="secondaryButton smallButton" onClick={() => void changeStatus(order, "In Progress")}>Start Work</button>}
+            {order.status === "In Progress" && <button className="secondaryButton smallButton" onClick={() => void changeStatus(order, "Waiting for Parts")}>Waiting for Parts</button>}
+            {["In Progress", "Waiting for Parts"].includes(order.status) && <button className="button smallButton" onClick={() => void changeStatus(order, "Completed")}>Complete</button>}
+            {order.status === "Completed" && !order.linked_service && <Link className="secondaryButton smallButton" href={`/services/overview?work_order_id=${order.id}&license_plate=${encodeURIComponent(order.license_plate)}`}>Create Service</Link>}
+            {["Completed", "Cancelled"].includes(order.status) && <button className="secondaryButton smallButton" onClick={() => void archive(order)}>Archive</button>}
+          </>}</div></td>
+        </tr>)}</tbody>
+      </MaintenanceTable>}
+      <Pagination page={result.page} pages={result.pages} total={result.total} onPageChange={(page) => void load(page)} />
     </section>
   );
 }

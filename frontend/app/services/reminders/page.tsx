@@ -1,60 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { apiGet } from "@/lib/api";
-import { SERVICE_TYPES } from "@/lib/constants";
-import type { ServiceReminder } from "@/lib/types";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { apiPut, maintenanceApi } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { REMINDER_STATUSES, SERVICE_TYPES, WORK_ORDER_PRIORITIES } from "@/lib/constants";
+import { toApiDate } from "@/lib/format";
+import type { PageResult, ServiceReminder } from "@/lib/types";
+import { MaintenanceEmptyState, MaintenancePageHeader, MaintenancePriorityBadge, MaintenanceStatusBadge, MaintenanceTable, Pagination } from "@/components/maintenance/Maintenance";
+
+type Filters = { search: string; license_plate: string; reminder_type: string; status: string; priority: string; from_date: string; to_date: string; overdue_only: boolean; has_linked_work_order: string };
 
 export default function ServiceRemindersPage() {
-  const [reminders, setReminders] = useState<ServiceReminder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState({ search: "", service_type: "", mode: "" });
-
-  async function loadReminders() {
-    setLoading(true);
-    setError(null);
-    try {
-      setReminders(await apiGet<ServiceReminder[]>("/services/reminders"));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load service reminders");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadReminders();
-  }, []);
-
-  const filtered = useMemo(() => {
-    const text = filters.search.trim().toLowerCase();
-    return reminders.filter((reminder) => {
-      const matchesText = !text || [reminder.license_plate, reminder.service_type].some((value) => value.toLowerCase().includes(text));
-      const matchesType = !filters.service_type || reminder.service_type === filters.service_type;
-      const matchesMode = !filters.mode || reminder.reminder_mode === filters.mode;
-      return matchesText && matchesType && matchesMode;
-    });
-  }, [reminders, filters]);
-
-  return (
-    <section>
-      <div className="header"><div><h1>Service reminders</h1><p className="muted">Kilometer and date reminders with quick filtering.</p></div><button className="secondaryButton" type="button" onClick={() => void loadReminders()}>Refresh</button></div>
-      {error && <div className="error spaced">{error}</div>}
-      <div className="card filtersGrid spaced">
-        <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate or service" />
-        <select className="select" value={filters.service_type} onChange={(e) => setFilters({ ...filters, service_type: e.target.value })}><option value="">All service types</option>{SERVICE_TYPES.map((type) => <option key={type}>{type}</option>)}</select>
-        <select className="select" value={filters.mode} onChange={(e) => setFilters({ ...filters, mode: e.target.value })}><option value="">All modes</option><option value="Kilometers">Kilometers</option><option value="Date">Date</option></select>
-      </div>
-      {loading ? <div className="card">Loading reminders...</div> : (
-        <table className="table">
-          <thead><tr><th>Plate</th><th>Service</th><th>Service date</th><th>Mode</th><th>Next date</th><th>Days left</th><th>Current KM</th><th>Next KM</th><th>KM left</th></tr></thead>
-          <tbody>
-            {filtered.map((r, idx) => <tr key={`${r.license_plate}-${r.service_type}-${idx}`}><td><strong>{r.license_plate}</strong></td><td>{r.service_type}</td><td>{r.service_date}</td><td>{r.reminder_mode}</td><td>{r.next_service_date ?? "-"}</td><td>{r.days_left ?? "-"}</td><td>{r.current_odometer_km ?? "-"}</td><td>{r.next_service_odometer_km ?? "-"}</td><td>{r.km_left ?? "-"}</td></tr>)}
-            {filtered.length === 0 && <tr><td colSpan={9} className="muted">No reminders match your filters.</td></tr>}
-          </tbody>
-        </table>
-      )}
-    </section>
-  );
+  const params = useSearchParams(); const { can } = useAuth(); const canWrite = can("servicesWrite");
+  const highlighted = Number(params.get("reminder_id") ?? 0);
+  const [filters, setFilters] = useState<Filters>({ search: params.get("search") ?? "", license_plate: params.get("license_plate") ?? "", reminder_type: params.get("reminder_type") ?? "", status: params.get("status") ?? "", priority: params.get("priority") ?? "", from_date: params.get("from_date") ?? "", to_date: params.get("to_date") ?? "", overdue_only: params.get("overdue_only") === "true", has_linked_work_order: params.get("has_linked_work_order") ?? "" });
+  const [result, setResult] = useState<PageResult<ServiceReminder>>({ items: [], page: 1, page_size: 20, total: 0, pages: 0 }); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null); const [message, setMessage] = useState<string | null>(null);
+  const load = useCallback(async (page = 1, values = filters) => { setLoading(true); setError(null); try { setResult(await maintenanceApi.getReminders({ page, page_size: 20, ...values, from_date: toApiDate(values.from_date), to_date: toApiDate(values.to_date), overdue_only: values.overdue_only || undefined, has_linked_work_order: values.has_linked_work_order === "" ? undefined : values.has_linked_work_order === "true" })); } catch (err) { setError(err instanceof Error ? err.message : "Could not load Service Reminders"); } finally { setLoading(false); } }, [filters]);
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  function applyFilters() { const query = new URLSearchParams(); Object.entries(filters).forEach(([key, value]) => { if (value !== "" && value !== false) query.set(key, String(value)); }); window.history.replaceState(null, "", `/services/reminders${query.size ? `?${query}` : ""}`); void load(1, filters); }
+  async function setStatus(reminder: ServiceReminder, status: "Resolved" | "Dismissed") { try { await apiPut(`/services/reminders/${reminder.id}/status`, { status }); setMessage(`${reminder.service_type} reminder ${status.toLowerCase()}.`); await load(result.page); } catch (err) { setError(err instanceof Error ? err.message : "Could not update reminder"); } }
+  return <section>
+    <MaintenancePageHeader title="Service Reminders" description="Upcoming, due, and overdue maintenance generated from the latest Service records." actions={<button className="secondaryButton" onClick={() => void load(result.page)}>Refresh</button>} />
+    {error && <div className="error spaced">{error}</div>}{message && <div className="success spaced">{message}</div>}
+    <div className="card filtersGrid spaced"><input className="input" placeholder="Search plate or service" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} /><input className="input" placeholder="License plate" value={filters.license_plate} onChange={(e) => setFilters({ ...filters, license_plate: e.target.value })} /><select className="select" value={filters.reminder_type} onChange={(e) => setFilters({ ...filters, reminder_type: e.target.value })}><option value="">All reminder types</option>{SERVICE_TYPES.map((v) => <option key={v}>{v}</option>)}</select><select className="select" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}><option value="">All statuses</option>{REMINDER_STATUSES.map((v) => <option key={v}>{v}</option>)}</select><select className="select" value={filters.priority} onChange={(e) => setFilters({ ...filters, priority: e.target.value })}><option value="">All priorities</option>{WORK_ORDER_PRIORITIES.map((v) => <option key={v}>{v}</option>)}</select><input className="input" type="date" value={filters.from_date} onChange={(e) => setFilters({ ...filters, from_date: e.target.value })} /><input className="input" type="date" value={filters.to_date} onChange={(e) => setFilters({ ...filters, to_date: e.target.value })} /><select className="select" value={filters.has_linked_work_order} onChange={(e) => setFilters({ ...filters, has_linked_work_order: e.target.value })}><option value="">Any Work Order link</option><option value="true">Has linked Work Order</option><option value="false">No linked Work Order</option></select><label className="actions"><input type="checkbox" checked={filters.overdue_only} onChange={(e) => setFilters({ ...filters, overdue_only: e.target.checked })} /> Overdue only</label><button className="button" onClick={applyFilters}>Apply filters</button></div>
+    {loading ? <div className="card">Loading Service Reminders...</div> : !result.items.length ? <MaintenanceEmptyState>No upcoming Service Reminders match the current filters.</MaintenanceEmptyState> : <MaintenanceTable><thead><tr><th>Vehicle</th><th>Reminder / Service</th><th>Due</th><th>Remaining</th><th>Status</th><th>Priority</th><th>Linked Work Order</th><th>Actions</th></tr></thead><tbody>{result.items.map((reminder) => <tr key={reminder.id} className={reminder.status === "Overdue" || reminder.id === highlighted ? "overdueRow" : undefined}><td><Link className="link" href={`/vehicles/${reminder.vehicle_id}`}>{reminder.vehicle_name}</Link><br /><span className="muted">{reminder.license_plate} · Current: {reminder.current_odometer_km?.toLocaleString() ?? "-"} km</span></td><td>{reminder.service_type}<br /><span className="muted">{reminder.reminder_mode} · Last service {reminder.service_date}</span></td><td>{reminder.next_service_date ?? "-"}<br /><span className="muted">{reminder.next_service_odometer_km ? `${reminder.next_service_odometer_km.toLocaleString()} km` : "-"}</span></td><td>{reminder.days_left !== null && reminder.days_left !== undefined ? `${reminder.days_left} days` : "-"}<br /><span className="muted">{reminder.km_left !== null && reminder.km_left !== undefined ? `${reminder.km_left.toLocaleString()} km` : "-"}</span></td><td><MaintenanceStatusBadge status={reminder.status} /></td><td><MaintenancePriorityBadge priority={reminder.priority} /></td><td>{reminder.linked_work_order ? <Link className="link" href={`/work-orders/${reminder.linked_work_order.id}`}>Work Order #{reminder.linked_work_order.id}</Link> : "-"}</td><td><div className="actions">{reminder.linked_work_order ? <Link className="secondaryButton smallButton" href={`/work-orders/${reminder.linked_work_order.id}`}>View Existing Work Order</Link> : canWrite && !["Resolved", "Dismissed"].includes(reminder.status) ? <Link className="button smallButton" href={`/work-orders?reminder_service_id=${reminder.id}&license_plate=${encodeURIComponent(reminder.license_plate)}&title=${encodeURIComponent(`${reminder.service_type} due`)}&reported_issue=${encodeURIComponent(`Service reminder is ${reminder.status.toLowerCase()}.`)}`}>Create Work Order</Link> : null}{canWrite && !["Resolved", "Dismissed"].includes(reminder.status) && <><button className="secondaryButton smallButton" onClick={() => void setStatus(reminder, "Resolved")}>Resolve</button><button className="secondaryButton smallButton" onClick={() => void setStatus(reminder, "Dismissed")}>Dismiss</button></>}</div></td></tr>)}</tbody></MaintenanceTable>}
+    <Pagination page={result.page} pages={result.pages} total={result.total} onPageChange={(page) => void load(page)} />
+  </section>;
 }

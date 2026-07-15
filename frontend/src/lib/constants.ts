@@ -52,6 +52,9 @@ export const DEFAULT_INSPECTION_ITEMS = [
 ];
 export const WORK_ORDER_STATUSES = ["Open", "Assigned", "In Progress", "Waiting for Parts", "Completed", "Cancelled"];
 export const WORK_ORDER_PRIORITIES = ["Low", "Medium", "High", "Critical"];
+export const WORK_ORDER_SOURCES = ["Manual", "Inspection", "Service Reminder", "Breakdown", "Other"];
+export const SERVICE_SOURCES = ["Manual", "Work Order", "Imported"];
+export const REMINDER_STATUSES = ["Upcoming", "Due Soon", "Due", "Overdue", "Resolved", "Dismissed"];
 export const REPORTS = [
   { value: "fleet-summary", label: "Fleet Summary" },
   { value: "fuel-costs", label: "Fuel Costs" },

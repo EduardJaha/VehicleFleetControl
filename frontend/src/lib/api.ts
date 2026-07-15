@@ -1,3 +1,8 @@
+import type {
+  Inspection, MaintenanceSummary, MaintenanceTimelineEvent, PageResult, ServiceReminder,
+  VehicleMaintenanceSummary, VehicleServiceDetail, VehicleServiceOverview, WorkOrder
+} from "@/lib/types";
+
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 export const AUTH_TOKEN_KEY = "vehicle_fleet_control_token";
@@ -44,7 +49,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-export function buildQuery(params: Record<string, string | number | null | undefined>): string {
+export function buildQuery(params: Record<string, string | number | boolean | null | undefined>): string {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && String(value).trim() !== "") {
@@ -125,3 +130,22 @@ export async function apiDownload(path: string, fallbackFilename: string): Promi
   link.remove();
   URL.revokeObjectURL(href);
 }
+
+export const maintenanceApi = {
+  getSummary: () => apiGet<MaintenanceSummary>("/maintenance/summary"),
+  getWorkOrders: (params: Record<string, string | number | boolean | null | undefined>) =>
+    apiGet<PageResult<WorkOrder>>(`/work-orders${buildQuery(params)}`),
+  getWorkOrder: (id: number | string) => apiGet<WorkOrder>(`/work-orders/${id}`),
+  getServices: (params: Record<string, string | number | boolean | null | undefined>) =>
+    apiGet<PageResult<VehicleServiceOverview>>(`/services/history${buildQuery(params)}`),
+  getService: (id: number | string) => apiGet<VehicleServiceDetail>(`/services/id/${id}`),
+  getReminders: (params: Record<string, string | number | boolean | null | undefined>) =>
+    apiGet<PageResult<ServiceReminder>>(`/services/reminders${buildQuery(params)}`),
+  getInspections: (params: Record<string, string | number | boolean | null | undefined>) =>
+    apiGet<PageResult<Inspection>>(`/inspections${buildQuery(params)}`),
+  getInspection: (id: number | string) => apiGet<Inspection>(`/inspections/${id}`),
+  getVehicleSummary: (vehicleId: number | string) =>
+    apiGet<VehicleMaintenanceSummary>(`/vehicles/${vehicleId}/maintenance-summary`),
+  getVehicleTimeline: (vehicleId: number | string, page = 1, pageSize = 20) =>
+    apiGet<PageResult<MaintenanceTimelineEvent>>(`/vehicles/${vehicleId}/maintenance-timeline${buildQuery({ page, page_size: pageSize })}`)
+};

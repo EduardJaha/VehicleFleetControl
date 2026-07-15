@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.db.session import Base, engine
+from app.db.migrations import run_additive_migrations
 import app.models  # noqa: F401 ensures SQLAlchemy model registration
 
 settings = get_settings()
@@ -27,6 +28,7 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    run_additive_migrations(engine)
 
 
 @app.get("/health")

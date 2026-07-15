@@ -1,11 +1,29 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import Numeric, case, cast, func, or_
 from sqlalchemy.orm import Session, joinedload
+
 from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
-from app.models import ServiceBill, User, Vehicle, VehicleService
-from app.schemas import AddService, ServiceReminderOut, UserRole, VehicleServiceListOut, VehicleServiceOverviewOut
+from app.models import ServiceBill, User, Vehicle, VehicleService, WorkOrder
+from app.schemas import (
+    AddService,
+    LinkedWorkOrder,
+    ReminderPage,
+    ReminderStatus,
+    ReminderStatusUpdate,
+    ServiceAttachment,
+    ServicePage,
+    ServiceReminderOut,
+    ServiceSource,
+    UserRole,
+    VehicleServiceListOut,
+    VehicleServiceOverviewOut,
+    WorkOrderPriority,
+    WorkOrderStatus,
+)
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.utils.files import delete_upload, save_upload
@@ -15,16 +33,32 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 MILEAGE_TYPES = {"General Service", "Oil Change"}
 DATE_TYPES = {"Tire Change/Control"}
 VALID_KM_INTERVALS = {5000, 10000, 15000}
+WRITE_ROLES = (UserRole.admin, UserRole.fleet_manager, UserRole.mechanic)
 
 
-def build_reminder_values(service_type: str, service_date: datetime, next_service_date_text: str | None, odometer_km: int | None, next_service_km_interval: int | None):
+def decimal_from_text(value: str | None) -> Decimal | None:
+    return Decimal(str(value)) if value not in (None, "") else None
+
+
+def total_cost(labor: Decimal | None, parts: Decimal | None, fallback: Decimal | None = None) -> Decimal | None:
+    if labor is None and parts is None:
+        return fallback
+    return (labor or Decimal("0")) + (parts or Decimal("0"))
+
+
+def build_reminder_values(
+    service_type: str,
+    service_date: datetime,
+    next_service_date_text: str | None,
+    odometer_km: int | None,
+    next_service_km_interval: int | None,
+):
     if service_type in MILEAGE_TYPES:
         if odometer_km is None:
             raise HTTPException(status_code=400, detail="OdometerKm is required for General Service and Oil Change.")
         if next_service_km_interval not in VALID_KM_INTERVALS:
             raise HTTPException(status_code=400, detail="NextServiceKmInterval must be 5000, 10000 or 15000.")
         return None, next_service_km_interval, odometer_km + next_service_km_interval
-
     if service_type in DATE_TYPES:
         if not next_service_date_text:
             raise HTTPException(status_code=400, detail="NextServiceDate is required for Tire Change/Control.")
@@ -32,58 +66,146 @@ def build_reminder_values(service_type: str, service_date: datetime, next_servic
         if next_date < service_date:
             raise HTTPException(status_code=400, detail="NextServiceDate must be after ServiceDate.")
         return next_date, None, None
-
     return None, None, None
 
 
 def latest_bill_path(service: VehicleService) -> str | None:
     if not service.bills:
         return None
-    bill = sorted(service.bills, key=lambda b: b.uploaded_at, reverse=True)[0]
-    return bill.file_path
+    return max(service.bills, key=lambda bill: bill.uploaded_at).file_path
 
 
-def service_list_out(service: VehicleService) -> VehicleServiceListOut:
-    return VehicleServiceListOut(
+def linked_work_order(work_order: WorkOrder | None) -> LinkedWorkOrder | None:
+    if not work_order:
+        return None
+    return LinkedWorkOrder(
+        id=work_order.id,
+        title=work_order.title,
+        status=WorkOrderStatus(work_order.status),
+        priority=WorkOrderPriority(work_order.priority),
+    )
+
+
+def service_query(db: Session):
+    return db.query(VehicleService).options(
+        joinedload(VehicleService.vehicle),
+        joinedload(VehicleService.bills),
+        joinedload(VehicleService.work_order),
+    )
+
+
+def service_overview_out(service: VehicleService) -> VehicleServiceOverviewOut:
+    labor = decimal_from_text(service.labor_cost)
+    parts = decimal_from_text(service.parts_cost)
+    actual = total_cost(labor, parts, decimal_from_text(service.cost))
+    return VehicleServiceOverviewOut(
         id=service.id,
+        vehicle_id=service.vehicle_id,
+        license_plate=service.vehicle.license_plate,
+        vehicle_name=f"{service.vehicle.brand} {service.vehicle.model}",
         service_type=service.service_type,
         service_date=format_date(service.service_date) or "",
         odometer_km=service.odometer_km,
-        cost=service.cost,
         workshop=service.workshop,
+        cost=actual,
+        labor_cost=labor,
+        parts_cost=parts,
+        total_cost=actual,
         description=service.description,
         bill_file_path=latest_bill_path(service),
         next_service_date=format_date(service.next_service_date),
         next_service_km_interval=service.next_service_km_interval,
         next_service_odometer_km=service.next_service_odometer_km,
+        source=ServiceSource(service.source or ServiceSource.manual.value),
+        status=service.status or "Completed",
+        archived=service.archived,
+        linked_work_order=linked_work_order(service.work_order),
+        reminder_status=current_reminder_status(service) if service.next_service_date or service.next_service_odometer_km else None,
     )
 
 
-def sync_vehicle_odometer(vehicle: Vehicle, odometer_km: int | None) -> None:
-    if odometer_km is not None:
-        vehicle.odometer_km = odometer_km
+def service_list_out(service: VehicleService) -> VehicleServiceListOut:
+    overview = service_overview_out(service)
+    return VehicleServiceListOut(
+        **overview.model_dump(),
+        bills=[
+            ServiceAttachment(id=bill.id, file_path=bill.file_path, uploaded_at=bill.uploaded_at.isoformat())
+            for bill in sorted(service.bills, key=lambda row: row.uploaded_at, reverse=True)
+        ],
+    )
 
 
-@router.post("")
-def add_service(payload: AddService, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.mechanic))):
+def resolve_work_order(db: Session, work_order_id: int | None, vehicle_id: int) -> WorkOrder | None:
+    if work_order_id is None:
+        return None
+    work_order = db.get(WorkOrder, work_order_id)
+    if not work_order:
+        raise HTTPException(status_code=404, detail="Work Order not found.")
+    if work_order.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=400, detail="Work Order and Service must belong to the same vehicle.")
+    already_linked = db.query(VehicleService).filter(
+        VehicleService.work_order_id == work_order_id,
+        VehicleService.archived.is_(False),
+    ).first()
+    if already_linked:
+        raise HTTPException(status_code=409, detail=f"Work Order #{work_order_id} is already linked to Service #{already_linked.id}.")
+    return work_order
+
+
+def apply_service_payload(service: VehicleService, payload: AddService, db: Session, allow_current_id: int | None = None) -> Vehicle:
     vehicle = find_vehicle_by_plate(db, payload.license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail=f"No vehicle found with license plate '{payload.license_plate}'.")
+    work_order = None
+    if payload.work_order_id is not None:
+        work_order = db.get(WorkOrder, payload.work_order_id)
+        if not work_order:
+            raise HTTPException(status_code=404, detail="Work Order not found.")
+        if work_order.vehicle_id != vehicle.id:
+            raise HTTPException(status_code=400, detail="Work Order and Service must belong to the same vehicle.")
+        duplicate = db.query(VehicleService).filter(
+            VehicleService.work_order_id == payload.work_order_id,
+            VehicleService.archived.is_(False),
+        )
+        if allow_current_id is not None:
+            duplicate = duplicate.filter(VehicleService.id != allow_current_id)
+        existing = duplicate.first()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Work Order #{payload.work_order_id} is already linked to Service #{existing.id}.")
+
     service_date = parse_date(payload.service_date, "ServiceDate")
-    next_date, next_interval, next_odo = build_reminder_values(payload.service_type, service_date, payload.next_service_date, payload.odometer_km, payload.next_service_km_interval)
-    service = VehicleService(
-        vehicle_id=vehicle.id,
-        service_type=payload.service_type,
-        description=payload.description,
-        service_date=service_date,
-        odometer_km=payload.odometer_km,
-        cost=str(payload.cost) if payload.cost is not None else None,
-        workshop=payload.workshop,
-        next_service_date=next_date,
-        next_service_km_interval=next_interval,
-        next_service_odometer_km=next_odo,
+    next_date, next_interval, next_odo = build_reminder_values(
+        payload.service_type, service_date, payload.next_service_date,
+        payload.odometer_km, payload.next_service_km_interval,
     )
-    sync_vehicle_odometer(vehicle, payload.odometer_km)
+    actual = total_cost(payload.labor_cost, payload.parts_cost, payload.cost)
+    service.vehicle_id = vehicle.id
+    service.work_order_id = payload.work_order_id
+    service.service_type = payload.service_type
+    service.description = payload.description
+    service.service_date = service_date
+    service.odometer_km = payload.odometer_km
+    service.cost = str(actual) if actual is not None else None
+    service.labor_cost = str(payload.labor_cost) if payload.labor_cost is not None else None
+    service.parts_cost = str(payload.parts_cost) if payload.parts_cost is not None else None
+    service.workshop = payload.workshop
+    service.next_service_date = next_date
+    service.next_service_km_interval = next_interval
+    service.next_service_odometer_km = next_odo
+    service.source = ServiceSource.work_order.value if payload.work_order_id else payload.source.value
+    service.status = "Completed"
+    service.updated_at = datetime.utcnow()
+    if payload.odometer_km is not None:
+        vehicle.odometer_km = payload.odometer_km
+    if work_order and work_order.reminder_service:
+        work_order.reminder_service.reminder_status = ReminderStatus.resolved.value
+    return vehicle
+
+
+@router.post("")
+def add_service(payload: AddService, db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES))):
+    service = VehicleService(created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    apply_service_payload(service, payload, db)
     db.add(service)
     db.commit()
     db.refresh(service)
@@ -92,38 +214,23 @@ def add_service(payload: AddService, db: Session = Depends(get_db), _: User = De
 
 @router.post("/register-with-bill")
 async def register_with_bill(
-    license_plate: str = Form(...),
-    service_type: str = Form(...),
-    description: str | None = Form(None),
-    workshop: str | None = Form(None),
-    odometer_km: int | None = Form(None),
-    cost: Decimal | None = Form(None),
-    service_date: str = Form(...),
-    next_service_date: str | None = Form(None),
-    next_service_km_interval: int | None = Form(None),
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.mechanic)),
+    license_plate: str = Form(...), service_type: str = Form(...), description: str | None = Form(None),
+    workshop: str | None = Form(None), odometer_km: int | None = Form(None), cost: Decimal | None = Form(None),
+    labor_cost: Decimal | None = Form(None), parts_cost: Decimal | None = Form(None),
+    service_date: str = Form(...), next_service_date: str | None = Form(None),
+    next_service_km_interval: int | None = Form(None), work_order_id: int | None = Form(None),
+    source: ServiceSource = Form(ServiceSource.manual), file: UploadFile = File(...),
+    db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES)),
 ):
-    vehicle = find_vehicle_by_plate(db, license_plate)
-    if not vehicle:
-        raise HTTPException(status_code=404, detail=f"No vehicle found with license plate '{license_plate}'.")
-    parsed_service_date = parse_date(service_date, "ServiceDate")
-    next_date, next_interval, next_odo = build_reminder_values(service_type, parsed_service_date, next_service_date, odometer_km, next_service_km_interval)
-    file_path = await save_upload(file, "bills")
-    service = VehicleService(
-        vehicle_id=vehicle.id,
-        service_type=service_type,
-        description=description,
-        service_date=parsed_service_date,
-        odometer_km=odometer_km,
-        cost=str(cost) if cost is not None else None,
-        workshop=workshop,
-        next_service_date=next_date,
-        next_service_km_interval=next_interval,
-        next_service_odometer_km=next_odo,
+    payload = AddService(
+        license_plate=license_plate, service_type=service_type, description=description, workshop=workshop,
+        odometer_km=odometer_km, cost=cost, labor_cost=labor_cost, parts_cost=parts_cost,
+        service_date=service_date, next_service_date=next_service_date,
+        next_service_km_interval=next_service_km_interval, work_order_id=work_order_id, source=source,
     )
-    sync_vehicle_odometer(vehicle, odometer_km)
+    service = VehicleService(created_at=datetime.utcnow(), updated_at=datetime.utcnow())
+    vehicle = apply_service_payload(service, payload, db)
+    file_path = await save_upload(file, "bills")
     service.bills.append(ServiceBill(file_path=file_path, uploaded_at=datetime.utcnow()))
     db.add(service)
     db.commit()
@@ -133,22 +240,17 @@ async def register_with_bill(
 
 @router.post("/upload-bill-later")
 async def upload_bill_later(
-    license_plate: str = Form(...),
-    service_type: str = Form(...),
-    bill_file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.mechanic)),
+    license_plate: str = Form(...), service_type: str = Form(...), bill_file: UploadFile = File(...),
+    db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES)),
 ):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail=f"No vehicle found with license plate '{license_plate}'.")
-    service = (
-        db.query(VehicleService)
-        .filter(VehicleService.vehicle_id == vehicle.id)
-        .filter(VehicleService.service_type.ilike(service_type))
-        .order_by(VehicleService.service_date.desc(), VehicleService.id.desc())
-        .first()
-    )
+    service = db.query(VehicleService).filter(
+        VehicleService.vehicle_id == vehicle.id,
+        VehicleService.service_type.ilike(service_type),
+        VehicleService.archived.is_(False),
+    ).order_by(VehicleService.service_date.desc(), VehicleService.id.desc()).first()
     if not service:
         raise HTTPException(status_code=404, detail=f"No service found for type '{service_type}' on '{license_plate}'.")
     file_path = await save_upload(bill_file, "bills")
@@ -159,58 +261,200 @@ async def upload_bill_later(
     return {"message": f"Bill uploaded for '{service_type}' on '{license_plate}'.", "id": bill.id, "bill_url": f"/{file_path}"}
 
 
-@router.get("/reminders", response_model=list[ServiceReminderOut])
-def reminders(db: Session = Depends(get_db)):
-    today = datetime.today().date()
-    services = (
-        db.query(VehicleService)
-        .options(joinedload(VehicleService.vehicle))
-        .filter(
-            ((VehicleService.service_type.in_(MILEAGE_TYPES)) & (VehicleService.next_service_odometer_km.isnot(None)))
-            | ((VehicleService.service_type.in_(DATE_TYPES)) & (VehicleService.next_service_date.isnot(None)))
-        )
-        .all()
+def reminder_status_expression(today: datetime):
+    due_soon = today + timedelta(days=30)
+    return case(
+        (VehicleService.reminder_status == ReminderStatus.resolved.value, ReminderStatus.resolved.value),
+        (VehicleService.reminder_status == ReminderStatus.dismissed.value, ReminderStatus.dismissed.value),
+        (or_(VehicleService.next_service_date < today, VehicleService.next_service_odometer_km < Vehicle.odometer_km), ReminderStatus.overdue.value),
+        (or_(func.date(VehicleService.next_service_date) == today.date(), VehicleService.next_service_odometer_km == Vehicle.odometer_km), ReminderStatus.due.value),
+        (or_(VehicleService.next_service_date <= due_soon, VehicleService.next_service_odometer_km - Vehicle.odometer_km <= 1000), ReminderStatus.due_soon.value),
+        else_=ReminderStatus.upcoming.value,
     )
-    latest: dict[tuple[int, str], VehicleService] = {}
-    for service in services:
-        key = (service.vehicle_id, service.service_type)
-        current = latest.get(key)
-        if current is None or (service.service_date, service.id) > (current.service_date, current.id):
-            latest[key] = service
 
-    result: list[ServiceReminderOut] = []
-    for service in latest.values():
-        if service.service_type in MILEAGE_TYPES:
-            current_odo = service.vehicle.odometer_km if service.vehicle else None
-            km_left = service.next_service_odometer_km - current_odo if current_odo is not None and service.next_service_odometer_km is not None else None
-            result.append(ServiceReminderOut(
-                license_plate=service.vehicle.license_plate if service.vehicle else "",
-                service_type=service.service_type,
-                service_date=format_date(service.service_date) or "",
-                reminder_mode="Kilometers",
-                current_odometer_km=current_odo,
-                next_service_odometer_km=service.next_service_odometer_km,
-                next_service_km_interval=service.next_service_km_interval,
-                km_left=km_left,
-            ))
-        else:
-            result.append(ServiceReminderOut(
-                license_plate=service.vehicle.license_plate if service.vehicle else "",
-                service_type=service.service_type,
-                service_date=format_date(service.service_date) or "",
-                reminder_mode="Date",
-                next_service_date=format_date(service.next_service_date),
-                days_left=(service.next_service_date.date() - today).days if service.next_service_date else None,
-            ))
-    return sorted(result, key=lambda r: r.km_left if r.reminder_mode == "Kilometers" and r.km_left is not None else r.days_left if r.days_left is not None else 999999)
+
+def reminder_priority(status: ReminderStatus) -> WorkOrderPriority:
+    return {
+        ReminderStatus.overdue: WorkOrderPriority.critical,
+        ReminderStatus.due: WorkOrderPriority.high,
+        ReminderStatus.due_soon: WorkOrderPriority.medium,
+    }.get(status, WorkOrderPriority.low)
+
+
+def current_reminder_status(service: VehicleService) -> ReminderStatus:
+    if service.reminder_status in {ReminderStatus.resolved.value, ReminderStatus.dismissed.value}:
+        return ReminderStatus(service.reminder_status)
+    today = datetime.today().date()
+    current_odometer = service.vehicle.odometer_km if service.vehicle else None
+    if service.next_service_date:
+        days_left = (service.next_service_date.date() - today).days
+        if days_left < 0:
+            return ReminderStatus.overdue
+        if days_left == 0:
+            return ReminderStatus.due
+        if days_left <= 30:
+            return ReminderStatus.due_soon
+    if service.next_service_odometer_km is not None and current_odometer is not None:
+        km_left = service.next_service_odometer_km - current_odometer
+        if km_left < 0:
+            return ReminderStatus.overdue
+        if km_left == 0:
+            return ReminderStatus.due
+        if km_left <= 1000:
+            return ReminderStatus.due_soon
+    return ReminderStatus.upcoming
+
+
+def reminder_out(service: VehicleService, status: ReminderStatus) -> ServiceReminderOut:
+    today = datetime.today().date()
+    current_odo = service.vehicle.odometer_km if service.vehicle else None
+    km_left = service.next_service_odometer_km - current_odo if service.next_service_odometer_km is not None and current_odo is not None else None
+    work_orders = sorted(
+        (order for order in service.reminder_work_orders if not order.archived),
+        key=lambda order: order.id,
+        reverse=True,
+    )
+    return ServiceReminderOut(
+        id=service.id,
+        vehicle_id=service.vehicle_id,
+        license_plate=service.vehicle.license_plate,
+        vehicle_name=f"{service.vehicle.brand} {service.vehicle.model}",
+        service_type=service.service_type,
+        service_date=format_date(service.service_date) or "",
+        reminder_mode="Kilometers" if service.next_service_odometer_km is not None else "Date",
+        next_service_date=format_date(service.next_service_date),
+        days_left=(service.next_service_date.date() - today).days if service.next_service_date else None,
+        current_odometer_km=current_odo,
+        next_service_odometer_km=service.next_service_odometer_km,
+        next_service_km_interval=service.next_service_km_interval,
+        km_left=km_left,
+        status=status,
+        priority=reminder_priority(status),
+        linked_work_order=linked_work_order(work_orders[0] if work_orders else None),
+    )
+
+
+@router.get("/reminders", response_model=ReminderPage)
+def reminders(
+    page: int = 1, page_size: int = 20, search: str | None = None, vehicle_id: int | None = None,
+    license_plate: str | None = None, reminder_type: str | None = None, status: ReminderStatus | None = None,
+    priority: WorkOrderPriority | None = None, from_date: str | None = None, to_date: str | None = None,
+    overdue_only: bool = False, has_linked_work_order: bool | None = None, db: Session = Depends(get_db),
+):
+    if page < 1 or page_size < 1 or page_size > 100:
+        raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
+    ranked = db.query(
+        VehicleService.id.label("service_id"),
+        func.row_number().over(
+            partition_by=(VehicleService.vehicle_id, VehicleService.service_type),
+            order_by=(VehicleService.service_date.desc(), VehicleService.id.desc()),
+        ).label("row_number"),
+    ).filter(
+        VehicleService.archived.is_(False),
+        or_(VehicleService.next_service_date.isnot(None), VehicleService.next_service_odometer_km.isnot(None)),
+    ).subquery()
+    query = db.query(VehicleService).join(ranked, VehicleService.id == ranked.c.service_id).filter(ranked.c.row_number == 1).join(VehicleService.vehicle).options(
+        joinedload(VehicleService.vehicle), joinedload(VehicleService.reminder_work_orders),
+    )
+    status_expr = reminder_status_expression(datetime.combine(datetime.today().date(), datetime.min.time()))
+    if search:
+        text = f"%{search.strip()}%"
+        query = query.filter(or_(Vehicle.license_plate.ilike(text), VehicleService.service_type.ilike(text)))
+    if vehicle_id is not None:
+        query = query.filter(VehicleService.vehicle_id == vehicle_id)
+    if license_plate:
+        query = query.filter(Vehicle.license_plate.ilike(f"%{normalize_plate(license_plate)}%"))
+    if reminder_type:
+        query = query.filter(VehicleService.service_type == reminder_type)
+    requested_status = ReminderStatus.overdue if overdue_only else status
+    if requested_status:
+        query = query.filter(status_expr == requested_status.value)
+    if priority:
+        statuses_for_priority = {
+            WorkOrderPriority.critical: [ReminderStatus.overdue.value],
+            WorkOrderPriority.high: [ReminderStatus.due.value],
+            WorkOrderPriority.medium: [ReminderStatus.due_soon.value],
+            WorkOrderPriority.low: [ReminderStatus.upcoming.value, ReminderStatus.resolved.value, ReminderStatus.dismissed.value],
+        }[priority]
+        query = query.filter(status_expr.in_(statuses_for_priority))
+    if from_date:
+        query = query.filter(VehicleService.next_service_date >= parse_date(from_date, "from_date"))
+    if to_date:
+        query = query.filter(VehicleService.next_service_date <= parse_date(to_date, "to_date"))
+    if has_linked_work_order is True:
+        query = query.filter(VehicleService.reminder_work_orders.any(WorkOrder.archived.is_(False)))
+    elif has_linked_work_order is False:
+        query = query.filter(~VehicleService.reminder_work_orders.any(WorkOrder.archived.is_(False)))
+    total = query.order_by(None).count()
+    rows = query.order_by(status_expr, VehicleService.next_service_date, VehicleService.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    items = [reminder_out(row, current_reminder_status(row)) for row in rows]
+    return ReminderPage(items=items, page=page, page_size=page_size, total=total, pages=(total + page_size - 1) // page_size)
+
+
+@router.put("/reminders/{service_id}/status", response_model=ServiceReminderOut)
+def update_reminder_status(service_id: int, payload: ReminderStatusUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES))):
+    if payload.status not in {ReminderStatus.resolved, ReminderStatus.dismissed}:
+        raise HTTPException(status_code=400, detail="Reminders can only be manually Resolved or Dismissed.")
+    service = db.query(VehicleService).options(joinedload(VehicleService.vehicle), joinedload(VehicleService.reminder_work_orders)).filter(VehicleService.id == service_id).first()
+    if not service or (service.next_service_date is None and service.next_service_odometer_km is None):
+        raise HTTPException(status_code=404, detail="Service Reminder not found.")
+    service.reminder_status = payload.status.value
+    service.updated_at = datetime.utcnow()
+    db.commit()
+    return reminder_out(service, payload.status)
+
+
+@router.get("/history", response_model=ServicePage)
+def service_history(
+    page: int = 1, page_size: int = 20, search: str | None = None, vehicle_id: int | None = None,
+    license_plate: str | None = None, service_type: str | None = None, workshop: str | None = None,
+    from_date: str | None = None, to_date: str | None = None, source: ServiceSource | None = None,
+    has_linked_work_order: bool | None = None, minimum_cost: Decimal | None = None,
+    maximum_cost: Decimal | None = None, include_archived: bool = False, db: Session = Depends(get_db),
+):
+    if page < 1 or page_size < 1 or page_size > 100:
+        raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
+    query = service_query(db)
+    if not include_archived:
+        query = query.filter(VehicleService.archived.is_(False))
+    if search or license_plate:
+        query = query.join(VehicleService.vehicle)
+    if search:
+        text = f"%{search.strip()}%"
+        query = query.filter(or_(Vehicle.license_plate.ilike(text), VehicleService.service_type.ilike(text), VehicleService.description.ilike(text), VehicleService.workshop.ilike(text)))
+    if vehicle_id is not None:
+        query = query.filter(VehicleService.vehicle_id == vehicle_id)
+    if license_plate:
+        query = query.filter(Vehicle.license_plate.ilike(f"%{normalize_plate(license_plate)}%"))
+    if service_type:
+        query = query.filter(VehicleService.service_type == service_type)
+    if workshop:
+        query = query.filter(VehicleService.workshop.ilike(f"%{workshop.strip()}%"))
+    if from_date:
+        query = query.filter(VehicleService.service_date >= parse_date(from_date, "from_date"))
+    if to_date:
+        query = query.filter(VehicleService.service_date <= parse_date(to_date, "to_date"))
+    if source:
+        query = query.filter(VehicleService.source == source.value)
+    if has_linked_work_order is True:
+        query = query.filter(VehicleService.work_order_id.isnot(None))
+    elif has_linked_work_order is False:
+        query = query.filter(VehicleService.work_order_id.is_(None))
+    cost_value = cast(VehicleService.cost, Numeric(14, 2))
+    if minimum_cost is not None:
+        query = query.filter(cost_value >= minimum_cost)
+    if maximum_cost is not None:
+        query = query.filter(cost_value <= maximum_cost)
+    total = query.order_by(None).count()
+    rows = query.order_by(VehicleService.service_date.desc(), VehicleService.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return ServicePage(items=[service_overview_out(row) for row in rows], page=page, page_size=page_size, total=total, pages=(total + page_size - 1) // page_size)
 
 
 @router.get("/overview-filter", response_model=list[VehicleServiceOverviewOut])
 def overview_filter(plate: str | None = None, type: str | None = None, workshop: str | None = None, from_date: str | None = None, to_date: str | None = None, db: Session = Depends(get_db)):
-    query = db.query(VehicleService).options(joinedload(VehicleService.vehicle), joinedload(VehicleService.bills))
+    query = service_query(db).filter(VehicleService.archived.is_(False))
     if plate:
-        norm = normalize_plate(plate)
-        query = query.join(VehicleService.vehicle).filter(Vehicle.license_plate.ilike(f"%{norm}%"))
+        query = query.join(VehicleService.vehicle).filter(Vehicle.license_plate.ilike(f"%{normalize_plate(plate)}%"))
     if type:
         query = query.filter(VehicleService.service_type == type)
     if workshop:
@@ -219,24 +463,37 @@ def overview_filter(plate: str | None = None, type: str | None = None, workshop:
         query = query.filter(VehicleService.service_date >= parse_date(from_date, "from"))
     if to_date:
         query = query.filter(VehicleService.service_date <= parse_date(to_date, "to"))
-    rows = query.order_by(VehicleService.service_date.desc()).all()
-    return [
-        VehicleServiceOverviewOut(
-            id=s.id,
-            license_plate=s.vehicle.license_plate,
-            service_type=s.service_type,
-            service_date=format_date(s.service_date) or "",
-            odometer_km=s.odometer_km,
-            workshop=s.workshop,
-            cost=s.cost,
-            description=s.description,
-            bill_file_path=latest_bill_path(s),
-            next_service_date=format_date(s.next_service_date),
-            next_service_km_interval=s.next_service_km_interval,
-            next_service_odometer_km=s.next_service_odometer_km,
-        )
-        for s in rows
-    ]
+    return [service_overview_out(row) for row in query.order_by(VehicleService.service_date.desc()).all()]
+
+
+@router.get("/id/{service_id}", response_model=VehicleServiceListOut)
+def get_service(service_id: int, db: Session = Depends(get_db)):
+    service = service_query(db).filter(VehicleService.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
+    return service_list_out(service)
+
+
+@router.put("/id/{service_id}", response_model=VehicleServiceOverviewOut)
+def update_service(service_id: int, payload: AddService, db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES))):
+    service = service_query(db).filter(VehicleService.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
+    apply_service_payload(service, payload, db, allow_current_id=service.id)
+    db.commit()
+    return service_overview_out(service)
+
+
+@router.put("/id/{service_id}/archive", response_model=VehicleServiceOverviewOut)
+def archive_service(service_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+    service = service_query(db).filter(VehicleService.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
+    service.archived = True
+    service.status = "Archived"
+    service.updated_at = datetime.utcnow()
+    db.commit()
+    return service_overview_out(service)
 
 
 @router.get("/{license_plate}", response_model=list[VehicleServiceListOut])
@@ -244,18 +501,15 @@ def get_by_license_plate(license_plate: str, db: Session = Depends(get_db)):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail=f"No vehicle found with license plate '{license_plate}'.")
-    services = (
-        db.query(VehicleService)
-        .options(joinedload(VehicleService.bills))
-        .filter(VehicleService.vehicle_id == vehicle.id)
-        .order_by(VehicleService.service_date.desc())
-        .all()
-    )
-    return [service_list_out(s) for s in services]
+    services = service_query(db).filter(
+        VehicleService.vehicle_id == vehicle.id,
+        VehicleService.archived.is_(False),
+    ).order_by(VehicleService.service_date.desc()).all()
+    return [service_list_out(service) for service in services]
 
 
 @router.delete("/{service_id}")
-def delete_service(service_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.mechanic))):
+def delete_service(service_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES))):
     service = db.query(VehicleService).options(joinedload(VehicleService.bills)).filter(VehicleService.id == service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail=f"Service with id '{service_id}' was not found.")

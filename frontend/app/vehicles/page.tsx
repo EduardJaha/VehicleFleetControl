@@ -91,7 +91,7 @@ export default function VehiclesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Plate</th><th>Brand</th><th>Model</th><th>Fuel</th><th>Location</th><th>Odometer</th><th>Status</th>{canWrite && <th>Actions</th>}
+              <th>Plate</th><th>Brand</th><th>Model</th><th>Fuel</th><th>Location</th><th>Odometer</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -104,17 +104,17 @@ export default function VehiclesPage() {
                 <td>{vehicle.vehicle_location}</td>
                 <td>{vehicle.odometer_km ?? "-"}</td>
                 <td><span className="badge">{VEHICLE_STATUS_LABELS[vehicle.status] ?? vehicle.status_name}</span></td>
-                {canWrite && (
-                  <td>
-                    <div className="actions">
+                <td>
+                    <div className="actions"><Link className="secondaryButton smallButton" href={`/vehicles/${vehicle.id}`}>View</Link>
+                      {canWrite && <>
                       <Link className="secondaryButton smallButton" href={`/vehicles/edit/${vehicle.id}`}>Edit</Link>
                       <button className="dangerButton smallButton" type="button" onClick={() => void deleteVehicle(vehicle)}>Delete</button>
+                      </>}
                     </div>
                   </td>
-                )}
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={canWrite ? 8 : 7} className="muted">No vehicles match your filters.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={8} className="muted">No vehicles match your filters.</td></tr>}
           </tbody>
         </table>
       )}

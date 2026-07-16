@@ -2,34 +2,35 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { VehicleForm, vehicleToPayload } from "@/components/vehicles/VehicleForm";
 import { apiGet, apiPut } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { Vehicle, VehiclePayload } from "@/lib/types";
-import { FUEL_TYPES } from "@/lib/constants";
 
 export default function EditVehiclePage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { can } = useAuth();
-  const [form, setForm] = useState<VehiclePayload | null>(null);
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    apiGet<Vehicle>(`/vehicles/${params.id}`).then((vehicle) => {
-      const { id, status_name, ...payload } = vehicle;
-      setForm(payload);
-    }).catch((err) => setError(err instanceof Error ? err.message : "Could not load vehicle"));
+    apiGet<Vehicle>(`/vehicles/${params.id}`)
+      .then(setVehicle)
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load vehicle"));
   }, [params.id]);
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!form) return;
+  async function updateVehicle(payload: VehiclePayload) {
     setError(null);
+    setSubmitting(true);
     try {
-      await apiPut<Vehicle>(`/vehicles/${params.id}`, form);
+      await apiPut<Vehicle>(`/vehicles/${params.id}`, payload);
       router.push("/vehicles");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update vehicle");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -37,22 +38,21 @@ export default function EditVehiclePage({ params }: { params: { id: string } }) 
     return <div className="error">You do not have permission to edit vehicles.</div>;
   }
 
-  if (!form) return <div className="card">Loading vehicle...</div>;
+  if (!vehicle) return error ? <div className="error">{error}</div> : <div className="card">Loading vehicle...</div>;
 
   return (
     <section>
-      <h1>Edit vehicle</h1>
-      <form onSubmit={submit} className="form card">
-        {error && <div className="error">{error}</div>}
-        <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} /></div>
-        <div className="formRow"><label>Brand</label><input className="input" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></div>
-        <div className="formRow"><label>Model</label><input className="input" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} /></div>
-        <div className="formRow"><label>Fuel type</label><select className="select" value={form.fuel_type} onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}>{FUEL_TYPES.map((fuel) => <option key={fuel}>{fuel}</option>)}</select></div>
-        <div className="formRow"><label>Location</label><input className="input" value={form.vehicle_location} onChange={(e) => setForm({ ...form, vehicle_location: e.target.value })} /></div>
-        <div className="formRow"><label>Status</label><select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: Number(e.target.value) })}><option value={0}>Active</option><option value={1}>In Service</option><option value={2}>Sold</option><option value={3}>Out of Use</option></select></div>
-        <div className="formRow"><label>Odometer KM</label><input className="input" type="number" value={form.odometer_km ?? ""} onChange={(e) => setForm({ ...form, odometer_km: e.target.value ? Number(e.target.value) : null })} /></div>
-        <button className="button" type="submit">Update vehicle</button>
-      </form>
+      <h1>Edit Vehicle</h1>
+      <p className="muted">Update the vehicle identification, technical, and fleet information.</p>
+      <VehicleForm
+        mode="edit"
+        initialValues={vehicleToPayload(vehicle)}
+        error={error}
+        submitting={submitting}
+        onSubmit={updateVehicle}
+        onCancel={() => router.push("/vehicles")}
+        className="card spaced"
+      />
     </section>
   );
 }

@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { apiDelete, apiGet, buildQuery } from "@/lib/api";
+import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
+import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
+import { VehicleForm, vehicleToPayload } from "@/components/vehicles/VehicleForm";
+import { apiDelete, apiGet, apiPost, apiPut, buildQuery } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { ApiMessage, Vehicle } from "@/lib/types";
+import type { ApiMessage, Vehicle, VehiclePayload } from "@/lib/types";
 import { FUEL_TYPES, VEHICLE_STATUS_LABELS, VEHICLE_STATUSES } from "@/lib/constants";
 
 export default function VehiclesPage() {
@@ -14,6 +17,12 @@ export default function VehiclesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreateVehicleOpen, setIsCreateVehicleOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
   const [filters, setFilters] = useState({ search: "", fuel: "", location: "", status: "" });
 
   async function loadVehicles(status = filters.status) {
@@ -46,6 +55,63 @@ export default function VehiclesPage() {
     });
   }, [vehicles, filters]);
 
+  function openCreateVehicle() {
+    setCreateError(null);
+    setMessage(null);
+    setIsCreateVehicleOpen(true);
+  }
+
+  function closeCreateVehicle() {
+    if (submitting) return;
+    setCreateError(null);
+    setIsCreateVehicleOpen(false);
+  }
+
+  async function createVehicle(payload: VehiclePayload) {
+    setCreateError(null);
+    setMessage(null);
+    setSubmitting(true);
+    try {
+      const created = await apiPost<Vehicle>("/vehicles", payload);
+      setMessage(`Vehicle ${created.license_plate} created.`);
+      setIsCreateVehicleOpen(false);
+      await loadVehicles();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Failed to create vehicle");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function openEditVehicle(vehicle: Vehicle) {
+    setEditingVehicle(vehicle);
+    setEditError(null);
+    setMessage(null);
+  }
+
+  function closeEditVehicle() {
+    if (updating) return;
+    setEditError(null);
+    setEditingVehicle(null);
+  }
+
+  async function updateVehicle(payload: VehiclePayload) {
+    if (!editingVehicle) return;
+    setEditError(null);
+    setMessage(null);
+    setUpdating(true);
+    try {
+      const updated = await apiPut<Vehicle>(`/vehicles/${editingVehicle.id}`, payload);
+      setMessage(`Vehicle ${updated.license_plate} updated.`);
+      setEditingVehicle(null);
+      await loadVehicles();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to update vehicle");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
   async function deleteVehicle(vehicle: Vehicle) {
     if (!confirm(`Delete vehicle ${vehicle.license_plate}? This cannot be undone.`)) return;
     setError(null);
@@ -61,13 +127,47 @@ export default function VehiclesPage() {
 
   return (
     <section>
-      <div className="header">
-        <div>
-          <h1>Vehicles</h1>
-          <p className="muted">Vehicle registry, search, filtering, edit, and delete actions.</p>
-        </div>
-        {canWrite && <Link href="/vehicles/new" className="button">Add vehicle</Link>}
-      </div>
+      <EntityPageHeader
+        title="Vehicles"
+        description="Manage fleet vehicles, technical information, status, and assignments."
+        actionLabel={canWrite ? "Add Vehicle" : undefined}
+        onAction={canWrite ? openCreateVehicle : undefined}
+      />
+
+      {canWrite && <CreateEntityDialog
+        open={isCreateVehicleOpen}
+        title="Add Vehicle"
+        description="Enter the vehicle identification, technical, and fleet information."
+        busy={submitting}
+        onClose={closeCreateVehicle}
+      >
+        <VehicleForm
+          error={createError}
+          submitting={submitting}
+          onSubmit={createVehicle}
+          onCancel={closeCreateVehicle}
+          className="dialogForm"
+        />
+      </CreateEntityDialog>}
+
+      {canWrite && editingVehicle && <CreateEntityDialog
+        open
+        title="Edit Vehicle"
+        description="Update the vehicle identification, technical, and fleet information."
+        busy={updating}
+        onClose={closeEditVehicle}
+      >
+        <VehicleForm
+          key={editingVehicle.id}
+          mode="edit"
+          initialValues={vehicleToPayload(editingVehicle)}
+          error={editError}
+          submitting={updating}
+          onSubmit={updateVehicle}
+          onCancel={closeEditVehicle}
+          className="dialogForm"
+        />
+      </CreateEntityDialog>}
 
       <div className="card filtersGrid">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, brand, model, VIN, location" />
@@ -86,7 +186,7 @@ export default function VehiclesPage() {
       </div>
 
       {error && <div className="error spaced">{error}</div>}
-      {message && <div className="success spaced">{message}</div>}
+      {message && <div className="success spaced" role="status">{message}</div>}
       {loading ? <div className="card">Loading vehicles...</div> : (
         <table className="table">
           <thead>
@@ -107,7 +207,7 @@ export default function VehiclesPage() {
                 <td>
                     <div className="actions"><Link className="secondaryButton smallButton" href={`/vehicles/${vehicle.id}`}>View</Link>
                       {canWrite && <>
-                      <Link className="secondaryButton smallButton" href={`/vehicles/edit/${vehicle.id}`}>Edit</Link>
+                      <button className="secondaryButton smallButton" type="button" onClick={() => openEditVehicle(vehicle)}>Edit</button>
                       <button className="dangerButton smallButton" type="button" onClick={() => void deleteVehicle(vehicle)}>Delete</button>
                       </>}
                     </div>

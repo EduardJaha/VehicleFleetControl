@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
+import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
 import { apiDelete, apiGet, apiPostForm, fileHref } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DOCUMENT_TYPES } from "@/lib/constants";
@@ -23,6 +25,8 @@ export default function PapersPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState(initialForm);
   const [file, setFile] = useState<File | null>(null);
+  const [isDocumentDialogOpen, setIsDocumentDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [filters, setFilters] = useState({ search: "", document_type: "", location: "", expiring_before: "" });
 
   async function loadPapers() {
@@ -65,6 +69,7 @@ export default function PapersPage() {
     }
     setError(null);
     setMessage(null);
+    setSubmitting(true);
     try {
       const data = new FormData();
       data.append("license_plate", form.license_plate);
@@ -73,13 +78,32 @@ export default function PapersPage() {
       data.append("expiry_date", toApiDate(form.expiry_date));
       data.append("file", file);
       const result = await apiPostForm<ApiMessage>("/papers/upload", data);
-      setMessage(result.message ?? "Paper uploaded.");
-      setForm(initialForm);
+      setMessage(result.message ?? "Document uploaded.");
+      setForm({ ...initialForm });
       setFile(null);
+      setIsDocumentDialogOpen(false);
       await loadPapers();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload paper");
+    } finally {
+      setSubmitting(false);
     }
+  }
+
+  function openDocumentDialog() {
+    setForm({ ...initialForm });
+    setFile(null);
+    setError(null);
+    setMessage(null);
+    setIsDocumentDialogOpen(true);
+  }
+
+  function closeDocumentDialog() {
+    if (submitting) return;
+    setForm({ ...initialForm });
+    setFile(null);
+    setError(null);
+    setIsDocumentDialogOpen(false);
   }
 
   async function deletePaper(paper: VehiclePaper) {
@@ -88,7 +112,7 @@ export default function PapersPage() {
     setMessage(null);
     try {
       const result = await apiDelete<ApiMessage>(`/papers/${paper.id}`);
-      setMessage(result.message ?? "Paper deleted.");
+      setMessage(result.message ?? "Document deleted.");
       await loadPapers();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete paper");
@@ -97,23 +121,37 @@ export default function PapersPage() {
 
   return (
     <section>
-      <div className="header"><div><h1>Papers</h1><p className="muted">Upload vehicle documents, filter papers, open files, and delete old documents.</p></div></div>
-      {error && <div className="error spaced">{error}</div>}
-      {message && <div className="success spaced">{message}</div>}
+      <EntityPageHeader
+        title="Documents"
+        description="Manage vehicle papers, expiry dates, and uploaded document files."
+        actionLabel={canWrite ? "Add Document" : undefined}
+        onAction={canWrite ? openDocumentDialog : undefined}
+      />
+      {error && !isDocumentDialogOpen && <div className="error spaced" role="alert">{error}</div>}
+      {message && <div className="success spaced" role="status">{message}</div>}
 
-      {canWrite && (
-        <form onSubmit={uploadPaper} className="form card fullWidthForm spaced">
-          <h2>Upload paper</h2>
+      {canWrite && <CreateEntityDialog
+        open={isDocumentDialogOpen}
+        title="Add Document"
+        description="Upload a vehicle document and record its issue and expiry dates."
+        busy={submitting}
+        onClose={closeDocumentDialog}
+      >
+        <form onSubmit={uploadPaper} className="form dialogForm">
+          {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
-            <div className="formRow"><label>Document type</label><select className="select" value={form.document_type} onChange={(e) => setForm({ ...form, document_type: e.target.value })}>{DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
-            <div className="formRow"><label>Issue date</label><input className="input" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} required /></div>
-            <div className="formRow"><label>Expiry date</label><input className="input" type="date" value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} required /></div>
-            <div className="formRow span2"><label>Document file</label><input className="input" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required /></div>
+            <div className="formRow"><label htmlFor="document-license-plate">License plate</label><input id="document-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label htmlFor="document-type">Document type</label><select id="document-type" className="select" value={form.document_type} onChange={(e) => setForm({ ...form, document_type: e.target.value })}>{DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
+            <div className="formRow"><label htmlFor="document-issue-date">Issue date</label><input id="document-issue-date" className="input" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="document-expiry-date">Expiry date</label><input id="document-expiry-date" className="input" type="date" min={form.issue_date} value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} required /></div>
+            <div className="formRow span2"><label htmlFor="document-file">Document file</label><input id="document-file" className="input" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required /></div>
           </div>
-          <button className="button" type="submit">Upload paper</button>
+          <div className="actions dialogActions">
+            <button className="secondaryButton" type="button" onClick={closeDocumentDialog} disabled={submitting}>Cancel</button>
+            <button className="button" type="submit" disabled={submitting}>{submitting ? "Uploading..." : "Upload Document"}</button>
+          </div>
         </form>
-      )}
+      </CreateEntityDialog>}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, vehicle, document" />
@@ -122,12 +160,12 @@ export default function PapersPage() {
         <input className="input" type="date" value={filters.expiring_before} onChange={(e) => setFilters({ ...filters, expiring_before: e.target.value })} title="Expiring before" />
       </div>
 
-      {loading ? <div className="card">Loading papers...</div> : (
+      {loading ? <div className="card">Loading documents...</div> : (
         <table className="table">
           <thead><tr><th>Plate</th><th>Vehicle</th><th>Location</th><th>Document</th><th>Issue</th><th>Expiry</th><th>File</th>{canWrite && <th>Actions</th>}</tr></thead>
           <tbody>
             {filtered.map((p) => <tr key={p.id}><td><strong>{p.license_plate}</strong></td><td>{p.brand} {p.model}</td><td>{p.vehicle_location}</td><td>{p.document_type}</td><td>{p.issue_date}</td><td>{p.expiry_date}</td><td>{p.file_path ? <a className="link" href={fileHref(p.file_path)} target="_blank">Open</a> : "-"}</td>{canWrite && <td><button className="dangerButton smallButton" type="button" onClick={() => void deletePaper(p)}>Delete</button></td>}</tr>)}
-            {filtered.length === 0 && <tr><td colSpan={canWrite ? 8 : 7} className="muted">No papers match your filters.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canWrite ? 8 : 7} className="muted">No documents match your filters.</td></tr>}
           </tbody>
         </table>
       )}

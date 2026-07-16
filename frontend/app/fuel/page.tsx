@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
+import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
 import { apiDelete, apiGet, apiPostForm, apiPut, fileHref } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { FUEL_TYPES } from "@/lib/constants";
@@ -38,6 +40,8 @@ export default function FuelPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState<FuelForm>(initialFuelForm);
   const [billFile, setBillFile] = useState<File | null>(null);
+  const [isFuelDialogOpen, setIsFuelDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Omit<FuelForm, "license_plate"> | null>(null);
   const [filters, setFilters] = useState({ search: "", fuel_type: "", location: "", station: "", from_date: "", to_date: "" });
@@ -59,6 +63,11 @@ export default function FuelPage() {
   }, []);
 
   const locations = useMemo(() => Array.from(new Set(records.map((r) => r.location).filter(Boolean))).sort(), [records]);
+  const calculatedTotal = useMemo(() => {
+    const liters = Number(form.liters);
+    const costPerLiter = Number(form.cost_per_liter);
+    return liters > 0 && costPerLiter > 0 ? (liters * costPerLiter).toFixed(2) : "";
+  }, [form.cost_per_liter, form.liters]);
 
   const filtered = useMemo(() => {
     const text = filters.search.trim().toLowerCase();
@@ -80,6 +89,7 @@ export default function FuelPage() {
     event.preventDefault();
     setError(null);
     setMessage(null);
+    setSubmitting(true);
     try {
       const data = new FormData();
       data.append("license_plate", form.license_plate);
@@ -93,12 +103,31 @@ export default function FuelPage() {
       if (billFile) data.append("bill_file", billFile);
       const result = await apiPostForm<{ message?: string }>("/fuel", data);
       setMessage(result.message ?? "Fuel record added.");
-      setForm(initialFuelForm);
+      setForm({ ...initialFuelForm });
       setBillFile(null);
+      setIsFuelDialogOpen(false);
       await loadFuelRecords();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add fuel record");
+    } finally {
+      setSubmitting(false);
     }
+  }
+
+  function openFuelDialog() {
+    setForm({ ...initialFuelForm });
+    setBillFile(null);
+    setError(null);
+    setMessage(null);
+    setIsFuelDialogOpen(true);
+  }
+
+  function closeFuelDialog() {
+    if (submitting) return;
+    setForm({ ...initialFuelForm });
+    setBillFile(null);
+    setError(null);
+    setIsFuelDialogOpen(false);
   }
 
   function startEdit(record: FuelRecord) {
@@ -152,27 +181,42 @@ export default function FuelPage() {
 
   return (
     <section>
-      <div className="header"><div><h1>Fuel</h1><p className="muted">Register fuel, upload bills, edit/delete records, and filter fuel history.</p></div></div>
-      {error && <div className="error spaced">{error}</div>}
-      {message && <div className="success spaced">{message}</div>}
+      <EntityPageHeader
+        title="Fuel Records"
+        description="Track refueling, fuel cost, liters, and vehicle mileage."
+        actionLabel={canWrite ? "Add Fuel Record" : undefined}
+        onAction={canWrite ? openFuelDialog : undefined}
+      />
+      {error && !isFuelDialogOpen && <div className="error spaced" role="alert">{error}</div>}
+      {message && <div className="success spaced" role="status">{message}</div>}
 
-      {canWrite && (
-        <form onSubmit={registerFuel} className="form card fullWidthForm spaced">
-          <h2>Register fuel</h2>
+      {canWrite && <CreateEntityDialog
+        open={isFuelDialogOpen}
+        title="Add Fuel Record"
+        description="Record refueling details, mileage, cost, and an optional bill."
+        busy={submitting}
+        onClose={closeFuelDialog}
+      >
+        <form onSubmit={registerFuel} className="form dialogForm">
+          {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
-            <div className="formRow"><label>Refuel date</label><input className="input" type="date" value={form.refuel_date} onChange={(e) => setForm({ ...form, refuel_date: e.target.value })} required /></div>
-            <div className="formRow"><label>Fuel type</label><select className="select" value={form.fuel_type} onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}>{FUEL_TYPES.map((fuel) => <option key={fuel}>{fuel}</option>)}</select></div>
-            <div className="formRow"><label>Liters</label><input className="input" type="number" step="0.01" value={form.liters} onChange={(e) => setForm({ ...form, liters: e.target.value })} required /></div>
-            <div className="formRow"><label>Cost per liter</label><input className="input" type="number" step="0.01" value={form.cost_per_liter} onChange={(e) => setForm({ ...form, cost_per_liter: e.target.value })} /></div>
-            <div className="formRow"><label>Odometer KM</label><input className="input" type="number" value={form.odometer_km} onChange={(e) => setForm({ ...form, odometer_km: e.target.value })} /></div>
-            <div className="formRow"><label>Location</label><input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></div>
-            <div className="formRow"><label>Station</label><input className="input" value={form.station_name} onChange={(e) => setForm({ ...form, station_name: e.target.value })} /></div>
-            <div className="formRow span2"><label>Bill file optional</label><input className="input" type="file" onChange={(e) => setBillFile(e.target.files?.[0] ?? null)} /></div>
+            <div className="formRow"><label htmlFor="fuel-license-plate">License plate</label><input id="fuel-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label htmlFor="fuel-refuel-date">Refuel date</label><input id="fuel-refuel-date" className="input" type="date" value={form.refuel_date} onChange={(e) => setForm({ ...form, refuel_date: e.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="fuel-type">Fuel type</label><select id="fuel-type" className="select" value={form.fuel_type} onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}>{FUEL_TYPES.map((fuel) => <option key={fuel}>{fuel}</option>)}</select></div>
+            <div className="formRow"><label htmlFor="fuel-liters">Liters</label><input id="fuel-liters" className="input" type="number" min="0.01" step="0.01" value={form.liters} onChange={(e) => setForm({ ...form, liters: e.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="fuel-cost-per-liter">Cost per liter</label><input id="fuel-cost-per-liter" className="input" type="number" min="0.01" step="0.01" value={form.cost_per_liter} onChange={(e) => setForm({ ...form, cost_per_liter: e.target.value })} /></div>
+            <div className="formRow"><label htmlFor="fuel-total-cost">Calculated total cost</label><input id="fuel-total-cost" className="input" value={calculatedTotal} placeholder="Calculated from liters and cost" readOnly /></div>
+            <div className="formRow"><label htmlFor="fuel-odometer">Odometer KM</label><input id="fuel-odometer" className="input" type="number" min="0" value={form.odometer_km} onChange={(e) => setForm({ ...form, odometer_km: e.target.value })} /></div>
+            <div className="formRow"><label htmlFor="fuel-location">Location</label><input id="fuel-location" className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></div>
+            <div className="formRow"><label htmlFor="fuel-station">Station</label><input id="fuel-station" className="input" value={form.station_name} onChange={(e) => setForm({ ...form, station_name: e.target.value })} /></div>
+            <div className="formRow span2"><label htmlFor="fuel-bill-file">Bill file optional</label><input id="fuel-bill-file" className="input" type="file" onChange={(e) => setBillFile(e.target.files?.[0] ?? null)} /></div>
           </div>
-          <button className="button" type="submit">Save fuel record</button>
+          <div className="actions dialogActions">
+            <button className="secondaryButton" type="button" onClick={closeFuelDialog} disabled={submitting}>Cancel</button>
+            <button className="button" type="submit" disabled={submitting}>{submitting ? "Saving..." : "Save Fuel Record"}</button>
+          </div>
         </form>
-      )}
+      </CreateEntityDialog>}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, vehicle, location" />

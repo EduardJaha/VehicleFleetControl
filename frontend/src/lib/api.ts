@@ -28,6 +28,27 @@ function authHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function validationIssueMessage(issue: unknown): string | null {
+  if (!issue || typeof issue !== "object") return null;
+  const record = issue as { loc?: unknown; msg?: unknown };
+  if (typeof record.msg !== "string") return null;
+  const message = record.msg.replace(/^Value error,\s*/i, "");
+  if (!Array.isArray(record.loc)) return message;
+  const field = [...record.loc].reverse().find((part) => typeof part === "string" && part !== "body");
+  return typeof field === "string" ? `${field.replaceAll("_", " ")}: ${message}` : message;
+}
+
+function apiErrorMessage(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const record = body as { detail?: unknown; message?: unknown };
+  if (typeof record.detail === "string") return record.detail;
+  if (Array.isArray(record.detail)) {
+    const messages = record.detail.map(validationIssueMessage).filter((message): message is string => Boolean(message));
+    if (messages.length > 0) return messages.join(" ");
+  }
+  return typeof record.message === "string" ? record.message : null;
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
@@ -35,8 +56,8 @@ async function handleResponse<T>(response: Response): Promise<T> {
     }
     let message = `API error ${response.status}`;
     try {
-      const body = await response.json();
-      message = body.detail ?? body.message ?? message;
+      const body: unknown = await response.json();
+      message = apiErrorMessage(body) ?? message;
     } catch {
       const text = await response.text();
       message = text || message;

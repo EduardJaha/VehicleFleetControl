@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
+import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
 import { apiDelete, apiGet, apiPost, apiPut, buildQuery } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DRIVER_STATUSES } from "@/lib/constants";
@@ -91,6 +93,8 @@ export default function DriversPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState<DriverForm>(initialForm);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [isDriverDialogOpen, setIsDriverDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [filters, setFilters] = useState({ search: "", status: "", department: "", license_expiring_before: "" });
 
   async function loadDrivers(currentFilters = filters) {
@@ -122,6 +126,7 @@ export default function DriversPage() {
     event.preventDefault();
     setError(null);
     setMessage(null);
+    setSubmitting(true);
     try {
       if (editingId) {
         const updated = await apiPut<Driver>(`/drivers/${editingId}`, formToPayload(form));
@@ -130,12 +135,23 @@ export default function DriversPage() {
         const created = await apiPost<Driver>("/drivers", formToPayload(form));
         setMessage(`Driver ${created.full_name} created.`);
       }
-      setForm(initialForm);
+      setForm({ ...initialForm });
       setEditingId(null);
+      setIsDriverDialogOpen(false);
       await loadDrivers();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save driver");
+    } finally {
+      setSubmitting(false);
     }
+  }
+
+  function openCreateDialog() {
+    setForm({ ...initialForm });
+    setEditingId(null);
+    setError(null);
+    setMessage(null);
+    setIsDriverDialogOpen(true);
   }
 
   function startEdit(driver: Driver) {
@@ -143,11 +159,15 @@ export default function DriversPage() {
     setForm(driverToForm(driver));
     setMessage(null);
     setError(null);
+    setIsDriverDialogOpen(true);
   }
 
-  function cancelEdit() {
+  function closeDriverDialog() {
+    if (submitting) return;
     setEditingId(null);
-    setForm(initialForm);
+    setForm({ ...initialForm });
+    setError(null);
+    setIsDriverDialogOpen(false);
   }
 
   async function deleteDriver(driver: Driver) {
@@ -165,39 +185,45 @@ export default function DriversPage() {
 
   return (
     <section>
-      <div className="header">
-        <div>
-          <h1>Drivers</h1>
-          <p className="muted">Manage driver records, assignments, status, and license expiry dates.</p>
-        </div>
-      </div>
+      <EntityPageHeader
+        title="Drivers"
+        description="Manage driver records, assignments, status, and license expiry dates."
+        actionLabel={canWrite ? "Add Driver" : undefined}
+        onAction={canWrite ? openCreateDialog : undefined}
+      />
 
-      {error && <div className="error spaced">{error}</div>}
-      {message && <div className="success spaced">{message}</div>}
+      {error && !isDriverDialogOpen && <div className="error spaced" role="alert">{error}</div>}
+      {message && <div className="success spaced" role="status">{message}</div>}
 
-      {canWrite && (
-        <form onSubmit={saveDriver} className="form card fullWidthForm spaced">
-          <h2>{editingId ? "Edit driver" : "Create driver"}</h2>
+      {canWrite && <CreateEntityDialog
+        open={isDriverDialogOpen}
+        title={editingId ? "Edit Driver" : "Add Driver"}
+        description={editingId ? "Update the driver's personal and license information." : "Enter the driver's personal and license information."}
+        busy={submitting}
+        onClose={closeDriverDialog}
+      >
+        <form onSubmit={saveDriver} className="form dialogForm">
+          {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label>Full name</label><input className="input" value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} required /></div>
-            <div className="formRow"><label>Phone</label><input className="input" value={form.phone_number} onChange={(event) => setForm({ ...form, phone_number: event.target.value })} /></div>
-            <div className="formRow"><label>Email</label><input className="input" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>
-            <div className="formRow"><label>Employee number</label><input className="input" value={form.employee_number} onChange={(event) => setForm({ ...form, employee_number: event.target.value })} required /></div>
-            <div className="formRow"><label>Department</label><input className="input" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} /></div>
-            <div className="formRow"><label>Status</label><select className="select" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as DriverStatus })}>{DRIVER_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></div>
-            <div className="formRow"><label>License number</label><input className="input" value={form.license_number} onChange={(event) => setForm({ ...form, license_number: event.target.value })} required /></div>
-            <div className="formRow"><label>License category</label><input className="input" value={form.license_category} onChange={(event) => setForm({ ...form, license_category: event.target.value })} required /></div>
-            <div className="formRow"><label>License expiry</label><input className="input" type="date" value={form.license_expiry_date} onChange={(event) => setForm({ ...form, license_expiry_date: event.target.value })} required /></div>
-            <div className="formRow"><label>Assigned plate</label><input className="input" value={form.assigned_license_plate} onChange={(event) => setForm({ ...form, assigned_license_plate: event.target.value })} placeholder="01-123-AB" /></div>
-            <div className="formRow"><label>User ID optional</label><input className="input" type="number" value={form.user_id} onChange={(event) => setForm({ ...form, user_id: event.target.value })} /></div>
-            <div className="formRow span2"><label>Notes</label><textarea className="input textarea" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></div>
+            <div className="formRow"><label htmlFor="driver-full-name">Full name</label><input id="driver-full-name" className="input" value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="driver-phone">Phone</label><input id="driver-phone" className="input" value={form.phone_number} onChange={(event) => setForm({ ...form, phone_number: event.target.value })} /></div>
+            <div className="formRow"><label htmlFor="driver-email">Email</label><input id="driver-email" className="input" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>
+            <div className="formRow"><label htmlFor="driver-employee-number">Employee number</label><input id="driver-employee-number" className="input" value={form.employee_number} onChange={(event) => setForm({ ...form, employee_number: event.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="driver-department">Department</label><input id="driver-department" className="input" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} /></div>
+            <div className="formRow"><label htmlFor="driver-status">Status</label><select id="driver-status" className="select" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as DriverStatus })}>{DRIVER_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></div>
+            <div className="formRow"><label htmlFor="driver-license-number">License number</label><input id="driver-license-number" className="input" value={form.license_number} onChange={(event) => setForm({ ...form, license_number: event.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="driver-license-category">License category</label><input id="driver-license-category" className="input" value={form.license_category} onChange={(event) => setForm({ ...form, license_category: event.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="driver-license-expiry">License expiry</label><input id="driver-license-expiry" className="input" type="date" value={form.license_expiry_date} onChange={(event) => setForm({ ...form, license_expiry_date: event.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="driver-assigned-plate">Assigned plate</label><input id="driver-assigned-plate" className="input" value={form.assigned_license_plate} onChange={(event) => setForm({ ...form, assigned_license_plate: event.target.value })} placeholder="01-123-AB" /></div>
+            <div className="formRow"><label htmlFor="driver-user-id">User ID optional</label><input id="driver-user-id" className="input" type="number" value={form.user_id} onChange={(event) => setForm({ ...form, user_id: event.target.value })} /></div>
+            <div className="formRow span2"><label htmlFor="driver-notes">Notes</label><textarea id="driver-notes" className="input textarea" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></div>
           </div>
-          <div className="actions">
-            <button className="button" type="submit">{editingId ? "Update driver" : "Create driver"}</button>
-            {editingId && <button className="secondaryButton" type="button" onClick={cancelEdit}>Cancel</button>}
+          <div className="actions dialogActions">
+            <button className="secondaryButton" type="button" onClick={closeDriverDialog} disabled={submitting}>Cancel</button>
+            <button className="button" type="submit" disabled={submitting}>{submitting ? (editingId ? "Updating..." : "Creating...") : (editingId ? "Update Driver" : "Create Driver")}</button>
           </div>
         </form>
-      )}
+      </CreateEntityDialog>}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} placeholder="Search name, phone, email, license" />

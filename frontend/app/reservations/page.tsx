@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
+import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { RESERVATION_STATUS_LABELS, RESERVATION_STATUSES, RESERVATION_TYPES } from "@/lib/constants";
@@ -25,6 +27,8 @@ export default function ReservationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState(initialForm);
+  const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [filters, setFilters] = useState({ search: "", status: "", type: "", from_date: "", to_date: "" });
 
   async function loadReservations() {
@@ -63,6 +67,7 @@ export default function ReservationsPage() {
     event.preventDefault();
     setError(null);
     setMessage(null);
+    setSubmitting(true);
     try {
       const result = await apiPost<ApiMessage>("/reservations", {
         license_plate: form.license_plate,
@@ -73,11 +78,28 @@ export default function ReservationsPage() {
         notes: form.notes || null
       });
       setMessage(result.message ?? "Reservation created.");
-      setForm(initialForm);
+      setForm({ ...initialForm });
+      setIsReservationDialogOpen(false);
       await loadReservations();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create reservation");
+    } finally {
+      setSubmitting(false);
     }
+  }
+
+  function openReservationDialog() {
+    setForm({ ...initialForm });
+    setError(null);
+    setMessage(null);
+    setIsReservationDialogOpen(true);
+  }
+
+  function closeReservationDialog() {
+    if (submitting) return;
+    setForm({ ...initialForm });
+    setError(null);
+    setIsReservationDialogOpen(false);
   }
 
   async function updateReservationStatus(id: number, action: "approve" | "reject") {
@@ -94,24 +116,38 @@ export default function ReservationsPage() {
 
   return (
     <section>
-      <div className="header"><div><h1>Reservations</h1><p className="muted">Create reservations, approve/reject requests, and filter reservation history.</p></div></div>
-      {error && <div className="error spaced">{error}</div>}
-      {message && <div className="success spaced">{message}</div>}
+      <EntityPageHeader
+        title="Reservations"
+        description="Schedule vehicle use and manage reservation requests."
+        actionLabel={canCreate ? "Add Reservation" : undefined}
+        onAction={canCreate ? openReservationDialog : undefined}
+      />
+      {error && !isReservationDialogOpen && <div className="error spaced" role="alert">{error}</div>}
+      {message && <div className="success spaced" role="status">{message}</div>}
 
-      {canCreate && (
-        <form onSubmit={createReservation} className="form card fullWidthForm spaced">
-          <h2>Create reservation</h2>
+      {canCreate && <CreateEntityDialog
+        open={isReservationDialogOpen}
+        title="Add Reservation"
+        description="Choose the vehicle, reservation dates, and purpose for this request."
+        busy={submitting}
+        onClose={closeReservationDialog}
+      >
+        <form onSubmit={createReservation} className="form dialogForm">
+          {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
-            <div className="formRow"><label>Reserved by</label><input className="input" value={form.reserved_by} onChange={(e) => setForm({ ...form, reserved_by: e.target.value })} required /></div>
-            <div className="formRow"><label>Type</label><select className="select" value={form.reservation_type} onChange={(e) => setForm({ ...form, reservation_type: e.target.value })}>{RESERVATION_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
-            <div className="formRow"><label>Start date</label><input className="input" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} required /></div>
-            <div className="formRow"><label>End date</label><input className="input" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} required /></div>
-            <div className="formRow span2"><label>Notes</label><textarea className="input textarea" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+            <div className="formRow"><label htmlFor="reservation-license-plate">License plate</label><input id="reservation-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label htmlFor="reservation-reserved-by">Reserved by</label><input id="reservation-reserved-by" className="input" value={form.reserved_by} onChange={(e) => setForm({ ...form, reserved_by: e.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="reservation-type">Type</label><select id="reservation-type" className="select" value={form.reservation_type} onChange={(e) => setForm({ ...form, reservation_type: e.target.value })}>{RESERVATION_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
+            <div className="formRow"><label htmlFor="reservation-start-date">Start date</label><input id="reservation-start-date" className="input" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="reservation-end-date">End date</label><input id="reservation-end-date" className="input" type="date" min={form.start_date} value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} required /></div>
+            <div className="formRow span2"><label htmlFor="reservation-notes">Notes</label><textarea id="reservation-notes" className="input textarea" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
           </div>
-          <button className="button" type="submit">Create reservation</button>
+          <div className="actions dialogActions">
+            <button className="secondaryButton" type="button" onClick={closeReservationDialog} disabled={submitting}>Cancel</button>
+            <button className="button" type="submit" disabled={submitting}>{submitting ? "Creating..." : "Create Reservation"}</button>
+          </div>
         </form>
-      )}
+      </CreateEntityDialog>}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, person, notes" />

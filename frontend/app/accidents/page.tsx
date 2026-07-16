@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
+import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
 import { apiGet, apiPostForm, fileHref } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toApiDate, todayInputDate } from "@/lib/format";
@@ -22,6 +24,8 @@ export default function AccidentsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState(initialForm);
   const [files, setFiles] = useState<FileList | null>(null);
+  const [isAccidentDialogOpen, setIsAccidentDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [filters, setFilters] = useState({ search: "", location: "", from_date: "", to_date: "" });
 
   async function loadAccidents() {
@@ -61,6 +65,7 @@ export default function AccidentsPage() {
     event.preventDefault();
     setError(null);
     setMessage(null);
+    setSubmitting(true);
     try {
       const data = new FormData();
       data.append("license_plate", form.license_plate);
@@ -70,33 +75,66 @@ export default function AccidentsPage() {
       Array.from(files ?? []).forEach((file) => data.append("files", file));
       const result = await apiPostForm<ApiMessage>("/accidents/report", data);
       setMessage(result.message ?? "Accident reported.");
-      setForm(initialForm);
+      setForm({ ...initialForm });
       setFiles(null);
+      setIsAccidentDialogOpen(false);
       await loadAccidents();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to report accident");
+    } finally {
+      setSubmitting(false);
     }
+  }
+
+  function openAccidentDialog() {
+    setForm({ ...initialForm });
+    setFiles(null);
+    setError(null);
+    setMessage(null);
+    setIsAccidentDialogOpen(true);
+  }
+
+  function closeAccidentDialog() {
+    if (submitting) return;
+    setForm({ ...initialForm });
+    setFiles(null);
+    setError(null);
+    setIsAccidentDialogOpen(false);
   }
 
   return (
     <section>
-      <div className="header"><div><h1>Accidents</h1><p className="muted">Report accidents, attach photos/files, and filter accident history.</p></div></div>
-      {error && <div className="error spaced">{error}</div>}
-      {message && <div className="success spaced">{message}</div>}
+      <EntityPageHeader
+        title="Accidents"
+        description="Review and manage reported vehicle accidents."
+        actionLabel={canWrite ? "Report Accident" : undefined}
+        onAction={canWrite ? openAccidentDialog : undefined}
+      />
+      {error && !isAccidentDialogOpen && <div className="error spaced" role="alert">{error}</div>}
+      {message && <div className="success spaced" role="status">{message}</div>}
 
-      {canWrite && (
-        <form onSubmit={reportAccident} className="form card fullWidthForm spaced">
-          <h2>Report accident</h2>
+      {canWrite && <CreateEntityDialog
+        open={isAccidentDialogOpen}
+        title="Report Accident"
+        description="Record the accident details and attach any supporting photos or files."
+        busy={submitting}
+        onClose={closeAccidentDialog}
+      >
+        <form onSubmit={reportAccident} className="form dialogForm">
+          {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label>License plate</label><input className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
-            <div className="formRow"><label>Accident date</label><input className="input" type="date" value={form.accident_date} onChange={(e) => setForm({ ...form, accident_date: e.target.value })} required /></div>
-            <div className="formRow"><label>Location</label><input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} required /></div>
-            <div className="formRow"><label>Files/photos</label><input className="input" type="file" multiple onChange={(e) => setFiles(e.target.files)} /></div>
-            <div className="formRow span2"><label>Description</label><textarea className="input textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+            <div className="formRow"><label htmlFor="accident-license-plate">License plate</label><input id="accident-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label htmlFor="accident-date">Accident date</label><input id="accident-date" className="input" type="date" value={form.accident_date} onChange={(e) => setForm({ ...form, accident_date: e.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="accident-location">Location</label><input id="accident-location" className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="accident-files">Files/photos</label><input id="accident-files" className="input" type="file" multiple onChange={(e) => setFiles(e.target.files)} /></div>
+            <div className="formRow span2"><label htmlFor="accident-description">Description</label><textarea id="accident-description" className="input textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           </div>
-          <button className="button" type="submit">Save accident report</button>
+          <div className="actions dialogActions">
+            <button className="secondaryButton" type="button" onClick={closeAccidentDialog} disabled={submitting}>Cancel</button>
+            <button className="button" type="submit" disabled={submitting}>{submitting ? "Reporting..." : "Report Accident"}</button>
+          </div>
         </form>
-      )}
+      </CreateEntityDialog>}
 
       <div className="card filtersGrid spaced">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, vehicle, description" />

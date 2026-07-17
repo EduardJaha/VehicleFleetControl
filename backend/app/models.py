@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
@@ -21,6 +21,40 @@ class User(Base):
     driver_profile = relationship("Driver", back_populates="user", uselist=False)
 
 
+class VehicleBrand(Base):
+    __tablename__ = "VehicleBrands"
+    __table_args__ = (UniqueConstraint("NormalizedName", name="uq_vehicle_brands_normalized_name"),)
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    name = Column("Name", String(255), nullable=False)
+    normalized_name = Column("NormalizedName", String(255), nullable=False)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    models = relationship("VehicleModel", back_populates="brand", cascade="all, delete-orphan")
+    vehicles = relationship("Vehicle", back_populates="catalog_brand", foreign_keys="Vehicle.brand_id")
+
+
+class VehicleModel(Base):
+    __tablename__ = "VehicleModels"
+    __table_args__ = (
+        UniqueConstraint("BrandId", "NormalizedName", name="uq_vehicle_models_brand_normalized_name"),
+        Index("ix_vehicle_models_brand_id", "BrandId"),
+    )
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    brand_id = Column("BrandId", Integer, ForeignKey("VehicleBrands.Id", ondelete="CASCADE"), nullable=False)
+    name = Column("Name", String(255), nullable=False)
+    normalized_name = Column("NormalizedName", String(255), nullable=False)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    brand = relationship("VehicleBrand", back_populates="models")
+    vehicles = relationship("Vehicle", back_populates="catalog_model", foreign_keys="Vehicle.model_id")
+
+
 class Vehicle(Base):
     __tablename__ = "Vehicles"
     __table_args__ = (UniqueConstraint("LicensePlate", name="uq_vehicles_license_plate"),)
@@ -28,6 +62,8 @@ class Vehicle(Base):
     id = Column("Id", Integer, primary_key=True, index=True)
     brand = Column("Brand", String, nullable=False)
     model = Column("Model", String, nullable=False)
+    brand_id = Column("BrandId", Integer, ForeignKey("VehicleBrands.Id", ondelete="RESTRICT"), nullable=True, index=True)
+    model_id = Column("ModelId", Integer, ForeignKey("VehicleModels.Id", ondelete="RESTRICT"), nullable=True, index=True)
     fuel_type = Column("FuelType", String, nullable=False)
     vehicle_location = Column("VehicleLocation", String, nullable=False)
     license_plate = Column("LicensePlate", String, nullable=False, index=True)
@@ -37,6 +73,8 @@ class Vehicle(Base):
     year = Column("Year", Integer, nullable=True)
     odometer_km = Column("OdometerKm", Integer, nullable=True)
 
+    catalog_brand = relationship("VehicleBrand", back_populates="vehicles", foreign_keys=[brand_id])
+    catalog_model = relationship("VehicleModel", back_populates="vehicles", foreign_keys=[model_id])
     papers = relationship("VehiclePaper", back_populates="vehicle", cascade="all, delete-orphan")
     services = relationship("VehicleService", back_populates="vehicle", cascade="all, delete-orphan")
     fuels = relationship("VehicleFuel", back_populates="vehicle", cascade="all, delete-orphan")

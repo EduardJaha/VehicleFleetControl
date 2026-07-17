@@ -1,6 +1,7 @@
 import type {
   Inspection, MaintenanceSummary, MaintenanceTimelineEvent, PageResult, ServiceReminder,
-  VehicleMaintenanceSummary, VehicleServiceDetail, VehicleServiceOverview, WorkOrder
+  VehicleBrand, VehicleMaintenanceSummary, VehicleModel, VehicleServiceDetail,
+  VehicleServiceOverview, WorkOrder
 } from "@/lib/types";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -131,6 +132,56 @@ export async function apiDelete<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { method: "DELETE", headers: authHeaders() });
   return handleResponse<T>(response);
 }
+
+let vehicleBrandCache: Promise<VehicleBrand[]> | null = null;
+const vehicleModelCache = new Map<number, Promise<VehicleModel[]>>();
+
+function alphabetically<T extends { name: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
+export const vehicleCatalogApi = {
+  getBrands(force = false): Promise<VehicleBrand[]> {
+    if (force) vehicleBrandCache = null;
+    if (!vehicleBrandCache) {
+      vehicleBrandCache = apiGet<VehicleBrand[]>("/vehicle-catalog/brands?limit=500")
+        .then(alphabetically)
+        .catch((error) => {
+          vehicleBrandCache = null;
+          throw error;
+        });
+    }
+    return vehicleBrandCache;
+  },
+  getModelsByBrand(brandId: number, force = false): Promise<VehicleModel[]> {
+    if (force) vehicleModelCache.delete(brandId);
+    let request = vehicleModelCache.get(brandId);
+    if (!request) {
+      request = apiGet<VehicleModel[]>(`/vehicle-catalog/brands/${brandId}/models?limit=500`)
+        .then(alphabetically)
+        .catch((error) => {
+          vehicleModelCache.delete(brandId);
+          throw error;
+        });
+      vehicleModelCache.set(brandId, request);
+    }
+    return request;
+  },
+  async createBrand(name: string): Promise<VehicleBrand> {
+    const brand = await apiPost<VehicleBrand>("/vehicle-catalog/brands", { name, is_active: true });
+    vehicleBrandCache = null;
+    return brand;
+  },
+  async createModel(brandId: number, name: string): Promise<VehicleModel> {
+    const model = await apiPost<VehicleModel>("/vehicle-catalog/models", {
+      brand_id: brandId,
+      name,
+      is_active: true
+    });
+    vehicleModelCache.delete(brandId);
+    return model;
+  }
+};
 
 export async function apiDownload(path: string, fallbackFilename: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store", headers: authHeaders() });

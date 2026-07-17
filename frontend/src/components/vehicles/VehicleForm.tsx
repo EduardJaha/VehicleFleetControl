@@ -1,12 +1,17 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
+import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import { FUEL_TYPES, VEHICLE_STATUSES } from "@/lib/constants";
-import type { Vehicle, VehiclePayload } from "@/lib/types";
+import { vehicleCatalogApi } from "@/lib/api";
+import type {
+  Vehicle, VehicleBrand, VehicleFormInitialValues, VehicleFormValues,
+  VehicleModel, VehiclePayload
+} from "@/lib/types";
 
 type VehicleFormProps = {
   mode?: "create" | "edit";
-  initialValues?: VehiclePayload;
+  initialValues?: VehicleFormInitialValues;
   error?: string | null;
   submitting: boolean;
   onSubmit: (payload: VehiclePayload) => Promise<void> | void;
@@ -14,9 +19,9 @@ type VehicleFormProps = {
   className?: string;
 };
 
-const initialVehicleForm: VehiclePayload = {
-  brand: "",
-  model: "",
+const initialVehicleForm: VehicleFormValues = {
+  brand_id: null,
+  model_id: null,
   fuel_type: "Diesel",
   vehicle_location: "",
   license_plate: "",
@@ -27,10 +32,12 @@ const initialVehicleForm: VehiclePayload = {
   status: 0
 };
 
-export function vehicleToPayload(vehicle: Vehicle): VehiclePayload {
+export function vehicleToPayload(vehicle: Vehicle): VehicleFormInitialValues {
   return {
-    brand: vehicle.brand,
-    model: vehicle.model,
+    brand_id: vehicle.brand_id,
+    model_id: vehicle.model_id,
+    brand_name: vehicle.brand,
+    model_name: vehicle.model,
     fuel_type: vehicle.fuel_type,
     vehicle_location: vehicle.vehicle_location,
     license_plate: vehicle.license_plate,
@@ -44,16 +51,86 @@ export function vehicleToPayload(vehicle: Vehicle): VehiclePayload {
 
 export function VehicleForm({ mode = "create", initialValues, error, submitting, onSubmit, onCancel, className = "" }: VehicleFormProps) {
   const fieldPrefix = useId();
-  const [form, setForm] = useState<VehiclePayload>(() => ({ ...(initialValues ?? initialVehicleForm) }));
+  const [form, setForm] = useState<VehicleFormValues>(() => {
+    if (!initialValues) return { ...initialVehicleForm };
+    return {
+      brand_id: initialValues.brand_id,
+      model_id: initialValues.model_id,
+      fuel_type: initialValues.fuel_type,
+      vehicle_location: initialValues.vehicle_location,
+      license_plate: initialValues.license_plate,
+      year: initialValues.year,
+      vin_number: initialValues.vin_number,
+      engine_cc: initialValues.engine_cc,
+      odometer_km: initialValues.odometer_km,
+      status: initialValues.status
+    };
+  });
+  const [fallbackLabels, setFallbackLabels] = useState({
+    brand: initialValues?.brand_name,
+    model: initialValues?.model_name
+  });
+  const [brands, setBrands] = useState<VehicleBrand[]>([]);
+  const [models, setModels] = useState<VehicleModel[]>([]);
+  const [loadingBrands, setLoadingBrands] = useState(true);
+  const [loadingModels, setLoadingModels] = useState(Boolean(initialValues?.brand_id));
+  const [brandError, setBrandError] = useState<string | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+
+  const loadBrands = useCallback((force = false) => {
+    setLoadingBrands(true);
+    setBrandError(null);
+    vehicleCatalogApi.getBrands(force)
+      .then(setBrands)
+      .catch(() => setBrandError("Vehicle brands could not be loaded."))
+      .finally(() => setLoadingBrands(false));
+  }, []);
+
+  useEffect(() => {
+    loadBrands();
+  }, [loadBrands]);
+
+  useEffect(() => {
+    let active = true;
+    if (form.brand_id === null) {
+      setModels([]);
+      setLoadingModels(false);
+      setModelError(null);
+      return () => { active = false; };
+    }
+    setLoadingModels(true);
+    setModelError(null);
+    vehicleCatalogApi.getModelsByBrand(form.brand_id)
+      .then((items) => {
+        if (active) setModels(items);
+      })
+      .catch(() => {
+        if (active) setModelError("Vehicle models could not be loaded for the selected brand.");
+      })
+      .finally(() => {
+        if (active) setLoadingModels(false);
+      });
+    return () => { active = false; };
+  }, [form.brand_id]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    await onSubmit(form);
+    if (form.brand_id === null) {
+      setSelectionError("Select a vehicle brand.");
+      return;
+    }
+    if (form.model_id === null) {
+      setSelectionError("Select a vehicle model.");
+      return;
+    }
+    setSelectionError(null);
+    await onSubmit({ ...form, brand_id: form.brand_id, model_id: form.model_id });
   }
 
   return (
     <form onSubmit={submit} className={`form fullWidthForm ${className}`.trim()}>
-      {error && <div className="error" role="alert">{error}</div>}
+      {(error || selectionError) && <div className="error" role="alert">{error || selectionError}</div>}
       <div className="formGrid">
         <div className="formRow">
           <label htmlFor={`${fieldPrefix}-license-plate`}>License plate</label>
@@ -61,11 +138,64 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
         </div>
         <div className="formRow">
           <label htmlFor={`${fieldPrefix}-brand`}>Brand</label>
-          <input id={`${fieldPrefix}-brand`} className="input" value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} required />
+          <SearchableCombobox
+            id={`${fieldPrefix}-brand`}
+            options={brands}
+            value={form.brand_id}
+            selectedLabel={fallbackLabels.brand}
+            onChange={(brandId) => {
+              setFallbackLabels({ brand: undefined, model: undefined });
+              setSelectionError(null);
+              setForm((current) => ({ ...current, brand_id: brandId, model_id: null }));
+            }}
+            placeholder={loadingBrands ? "Loading brands..." : "Select vehicle brand"}
+            searchPlaceholder="Search brands..."
+            emptyText="No vehicle brands found."
+            loadingText="Loading brands..."
+            loading={loadingBrands}
+            error={brandError}
+            required
+          />
+          {brandError && <button className="linkButton retryButton" type="button" onClick={() => loadBrands(true)}>Retry loading brands</button>}
         </div>
         <div className="formRow">
           <label htmlFor={`${fieldPrefix}-model`}>Model</label>
-          <input id={`${fieldPrefix}-model`} className="input" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} required />
+          <SearchableCombobox
+            id={`${fieldPrefix}-model`}
+            options={models}
+            value={form.model_id}
+            selectedLabel={fallbackLabels.model}
+            onChange={(modelId) => {
+              setFallbackLabels((current) => ({ ...current, model: undefined }));
+              setSelectionError(null);
+              setForm((current) => ({ ...current, model_id: modelId }));
+            }}
+            placeholder={form.brand_id === null ? "Select a brand first" : "Select vehicle model"}
+            searchPlaceholder="Search models..."
+            emptyText="No models are available for this brand."
+            loadingText="Loading models..."
+            loading={loadingModels}
+            disabled={form.brand_id === null}
+            error={modelError}
+            required
+          />
+          {modelError && form.brand_id !== null && (
+            <button
+              className="linkButton retryButton"
+              type="button"
+              onClick={() => {
+                if (form.brand_id === null) return;
+                setLoadingModels(true);
+                setModelError(null);
+                vehicleCatalogApi.getModelsByBrand(form.brand_id, true)
+                  .then(setModels)
+                  .catch(() => setModelError("Vehicle models could not be loaded for the selected brand."))
+                  .finally(() => setLoadingModels(false));
+              }}
+            >
+              Retry loading models
+            </button>
+          )}
         </div>
         <div className="formRow">
           <label htmlFor={`${fieldPrefix}-fuel-type`}>Fuel type</label>
@@ -102,7 +232,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
       </div>
       <div className="actions dialogActions">
         {onCancel && <button className="secondaryButton" type="button" onClick={onCancel} disabled={submitting}>Cancel</button>}
-        <button className="button" type="submit" disabled={submitting}>
+        <button className="button" type="submit" disabled={submitting || loadingBrands || loadingModels}>
           {submitting ? (mode === "edit" ? "Updating..." : "Creating...") : (mode === "edit" ? "Update Vehicle" : "Create Vehicle")}
         </button>
       </div>

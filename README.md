@@ -287,6 +287,41 @@ Health check endpoint:
 http://localhost:8000/health
 ```
 
+### Vehicle Brand and Model Catalog
+
+Vehicle creation and editing use the local database catalog rather than a
+third-party API. On startup, the additive migration creates the catalog tables,
+adds nullable catalog references to existing Vehicles, and backfills references
+from the legacy Brand and Model display values without deleting those values.
+
+Seed the practical starter catalog from the `backend` directory:
+
+```bash
+python -m app.scripts.seed_vehicle_catalog
+```
+
+The command is idempotent: it adds missing brands and models without deleting
+custom entries. The starter JSON is in `app/data/vehicle_catalog.json`. It
+covers common passenger cars, SUVs, vans, and light commercial vehicles, but is
+not intended to be a complete global catalog.
+
+Authenticated catalog readers use:
+
+```text
+GET /api/v1/vehicle-catalog/brands
+GET /api/v1/vehicle-catalog/brands/{brand_id}/models
+```
+
+Admin users can create, update, or deactivate brands and models through the
+corresponding `/api/v1/vehicle-catalog` management endpoints. Deletion is a
+soft deactivation so historical Vehicles remain valid.
+
+Run the dependency-free backend catalog tests from the `backend` directory:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
 ### First Admin User
 
 Authentication is required for `/api/v1` application endpoints. For a new local database, start the backend and frontend, open `http://localhost:3000/login`, and choose **Create first Admin user**. The public first-admin registration is only available while the `Users` table is empty; after that, an Admin must create additional users through the authenticated API.

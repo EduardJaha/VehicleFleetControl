@@ -2,6 +2,7 @@ from decimal import Decimal
 from enum import Enum, IntEnum
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 import re
+from app.utils.vehicle_catalog import clean_catalog_name
 
 LICENSE_PLATE_REGEX = re.compile(r"^(0[1-7])-[0-9]{3}-[A-Z]{2}$")
 
@@ -368,9 +369,7 @@ class WorkOrderOut(WorkOrderBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class VehicleBase(BaseModel):
-    brand: str
-    model: str
+class VehicleFields(BaseModel):
     fuel_type: str
     vehicle_location: str
     license_plate: str
@@ -389,17 +388,79 @@ class VehicleBase(BaseModel):
         return plate
 
 
-class VehicleCreate(VehicleBase):
+class VehicleWriteBase(VehicleFields):
+    brand_id: int = Field(gt=0)
+    model_id: int = Field(gt=0)
+
+
+class VehicleCreate(VehicleWriteBase):
     pass
 
 
-class VehicleUpdate(VehicleBase):
+class VehicleUpdate(VehicleWriteBase):
     pass
 
 
-class VehicleOut(VehicleBase):
+class VehicleOut(VehicleFields):
     id: int
+    brand_id: int | None = None
+    model_id: int | None = None
+    brand: str
+    model: str
     status_name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VehicleBrandBase(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    is_active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        name = clean_catalog_name(value)
+        if not name:
+            raise ValueError("Brand name is required.")
+        return name
+
+
+class VehicleBrandCreate(VehicleBrandBase):
+    pass
+
+
+class VehicleBrandUpdate(VehicleBrandBase):
+    pass
+
+
+class VehicleBrandOut(VehicleBrandBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VehicleModelBase(BaseModel):
+    brand_id: int = Field(gt=0)
+    name: str = Field(min_length=1, max_length=255)
+    is_active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        name = clean_catalog_name(value)
+        if not name:
+            raise ValueError("Model name is required.")
+        return name
+
+
+class VehicleModelCreate(VehicleModelBase):
+    pass
+
+
+class VehicleModelUpdate(VehicleModelBase):
+    pass
+
+
+class VehicleModelOut(VehicleModelBase):
+    id: int
     model_config = ConfigDict(from_attributes=True)
 
 

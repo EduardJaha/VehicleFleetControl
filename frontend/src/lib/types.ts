@@ -1,5 +1,7 @@
 export type Vehicle = {
   id: number;
+  brand_id: number | null;
+  model_id: number | null;
   brand: string;
   model: string;
   fuel_type: string;
@@ -12,6 +14,19 @@ export type Vehicle = {
   status: number;
   status_name: string;
 };
+
+export interface VehicleBrand {
+  id: number;
+  name: string;
+  is_active: boolean;
+}
+
+export interface VehicleModel {
+  id: number;
+  brand_id: number;
+  name: string;
+  is_active: boolean;
+}
 
 export type UserRole = "admin" | "fleet_manager" | "mechanic" | "driver" | "finance" | "viewer";
 
@@ -29,7 +44,20 @@ export type AuthResponse = {
   user: CurrentUser;
 };
 
-export type VehiclePayload = Omit<Vehicle, "id" | "status_name">;
+export type VehiclePayload = Omit<Vehicle, "id" | "status_name" | "brand" | "model" | "brand_id" | "model_id"> & {
+  brand_id: number;
+  model_id: number;
+};
+
+export type VehicleFormValues = Omit<VehiclePayload, "brand_id" | "model_id"> & {
+  brand_id: number | null;
+  model_id: number | null;
+};
+
+export type VehicleFormInitialValues = VehicleFormValues & {
+  brand_name?: string;
+  model_name?: string;
+};
 
 export type DriverStatus = "Active" | "Suspended" | "Left Company";
 

@@ -13,6 +13,9 @@ export type Vehicle = {
   odometer_km?: number | null;
   status: number;
   status_name: string;
+  archived?: boolean;
+  archived_at?: string | null;
+  archived_by?: number | null;
 };
 
 export interface VehicleBrand {
@@ -78,6 +81,9 @@ export type Driver = {
   notes?: string | null;
   created_at: string;
   updated_at: string;
+  archived?: boolean;
+  archived_at?: string | null;
+  archived_by?: number | null;
 };
 
 export type DriverPayload = Omit<Driver, "id" | "assigned_vehicle_id" | "created_at" | "updated_at"> & {
@@ -204,6 +210,28 @@ export type WorkOrderPayload = Omit<WorkOrder, "id" | "vehicle_id" | "vehicle_na
   license_plate?: string | null;
   labor_cost?: number | null;
   parts_cost?: number | null;
+};
+
+export type WorkOrderCompletionPayload = {
+  actual_completion_date: string;
+  completed_odometer_km: number;
+  workshop?: string | null;
+  labor_cost: number;
+  parts_cost: number;
+  completion_notes?: string | null;
+  create_service_record: boolean;
+  service_type?: string | null;
+  service_description?: string | null;
+  next_service_km_interval?: number | null;
+  next_service_date?: string | null;
+  resolve_source_reminder: boolean;
+};
+
+export type WorkOrderCompletionResult = {
+  work_order: WorkOrder;
+  service?: LinkedService | null;
+  reminder_resolved: boolean;
+  next_reminder_created: boolean;
 };
 
 export type ReportValue = string | number | boolean | null;
@@ -370,6 +398,7 @@ export type FuelRecord = {
   station_name: string;
   bill_file_path?: string | null;
   odometer_km: number;
+  archived?: boolean;
 };
 
 export type VehiclePaper = {
@@ -382,6 +411,7 @@ export type VehiclePaper = {
   issue_date: string;
   expiry_date: string;
   file_path: string;
+  archived?: boolean;
 };
 
 export type Accident = {
@@ -393,6 +423,7 @@ export type Accident = {
   brand?: string | null;
   model?: string | null;
   files: string[];
+  archived?: boolean;
 };
 
 export type Reservation = {
@@ -405,10 +436,53 @@ export type Reservation = {
   notes?: string | null;
   status: number;
   status_name: string;
+  archived?: boolean;
 };
 
 
 export type ApiMessage = {
   message?: string;
   id?: number;
+};
+
+export type NotificationStatus = "Unread" | "Read" | "Resolved" | "Dismissed";
+export type NotificationPriority = "Low" | "Medium" | "High" | "Critical";
+
+export type Notification = {
+  id: number;
+  notification_type: string;
+  title: string;
+  message: string;
+  priority: NotificationPriority;
+  status: NotificationStatus;
+  entity_type?: string | null;
+  entity_id?: number | null;
+  created_at: string;
+  read_at?: string | null;
+  resolved_at?: string | null;
+  dismissed_at?: string | null;
+};
+
+export type AuditLog = {
+  id: number;
+  user_id?: number | null;
+  username?: string | null;
+  action: string;
+  entity_type: string;
+  entity_id?: number | null;
+  old_values?: Record<string, unknown> | null;
+  new_values?: Record<string, unknown> | null;
+  description?: string | null;
+  ip_address?: string | null;
+  created_at: string;
+};
+
+export type Attachment = {
+  id: number;
+  original_filename: string;
+  mime_type: string;
+  file_size: number;
+  entity_type: string;
+  entity_id: number;
+  uploaded_at: string;
 };

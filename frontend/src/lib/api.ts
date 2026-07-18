@@ -1,7 +1,7 @@
 import type {
   Inspection, MaintenanceSummary, MaintenanceTimelineEvent, PageResult, ServiceReminder,
   VehicleBrand, VehicleMaintenanceSummary, VehicleModel, VehicleServiceDetail,
-  VehicleServiceOverview, WorkOrder
+  VehicleServiceOverview, WorkOrder, WorkOrderCompletionPayload, WorkOrderCompletionResult
 } from "@/lib/types";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -85,6 +85,7 @@ export function buildQuery(params: Record<string, string | number | boolean | nu
 export function fileHref(path?: string | null): string {
   if (!path) return "#";
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  if (path.startsWith("/api/v1/")) return `${API_ORIGIN}${path}`;
 
   let normalized = path.replaceAll("\\\\", "/").replace(/^\/+/, "");
   if (normalized.includes("/uploads/")) {
@@ -184,7 +185,8 @@ export const vehicleCatalogApi = {
 };
 
 export async function apiDownload(path: string, fallbackFilename: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store", headers: authHeaders() });
+  const url = path.startsWith("/api/v1/") ? `${API_ORIGIN}${path}` : `${API_BASE_URL}${path}`;
+  const response = await fetch(url, { cache: "no-store", headers: authHeaders() });
   if (!response.ok) {
     await handleResponse<never>(response);
     return;
@@ -203,11 +205,18 @@ export async function apiDownload(path: string, fallbackFilename: string): Promi
   URL.revokeObjectURL(href);
 }
 
+export function apiDownloadFile(path: string, fallbackFilename: string): Promise<void> {
+  if (path.startsWith("/api/v1/")) return apiDownload(path, fallbackFilename);
+  return apiDownload(`/files/legacy/download${buildQuery({ path })}`, fallbackFilename);
+}
+
 export const maintenanceApi = {
   getSummary: () => apiGet<MaintenanceSummary>("/maintenance/summary"),
   getWorkOrders: (params: Record<string, string | number | boolean | null | undefined>) =>
     apiGet<PageResult<WorkOrder>>(`/work-orders${buildQuery(params)}`),
   getWorkOrder: (id: number | string) => apiGet<WorkOrder>(`/work-orders/${id}`),
+  completeWorkOrder: (id: number | string, payload: WorkOrderCompletionPayload) =>
+    apiPost<WorkOrderCompletionResult>(`/work-orders/${id}/complete`, payload),
   getServices: (params: Record<string, string | number | boolean | null | undefined>) =>
     apiGet<PageResult<VehicleServiceOverview>>(`/services/history${buildQuery(params)}`),
   getService: (id: number | string) => apiGet<VehicleServiceDetail>(`/services/id/${id}`),

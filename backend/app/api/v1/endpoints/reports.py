@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from typing import Callable
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from sqlalchemy.orm import Session, joinedload
@@ -14,6 +14,7 @@ from app.models import Driver, User, Vehicle, VehicleFuel, VehiclePaper, Vehicle
 from app.schemas import UserRole
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import parse_vehicle_status, reservation_status_name, status_name
+from app.services.audit import record_audit
 
 router = APIRouter(dependencies=[Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.finance))])
 
@@ -42,7 +43,7 @@ def in_date_range(value: datetime | None, from_date: datetime | None, to_date: d
 
 
 def filtered_vehicles(db: Session, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None) -> list[Vehicle]:
-    query = db.query(Vehicle).options(joinedload(Vehicle.assigned_drivers))
+    query = db.query(Vehicle).options(joinedload(Vehicle.assigned_drivers)).filter(Vehicle.archived.is_(False))
     if license_plate:
         query = query.filter(Vehicle.license_plate.ilike(f"%{license_plate.strip().upper()}%"))
     if vehicle_status:
@@ -89,7 +90,7 @@ def fuel_costs_report(db: Session, **filters) -> dict:
     from_date = date_or_none(filters.get("from_date"), "from_date")
     to_date = date_or_none(filters.get("to_date"), "to_date")
     vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
-    records = db.query(VehicleFuel).options(joinedload(VehicleFuel.vehicle)).order_by(VehicleFuel.refuel_date.desc()).all()
+    records = db.query(VehicleFuel).options(joinedload(VehicleFuel.vehicle)).filter(VehicleFuel.archived.is_(False)).order_by(VehicleFuel.refuel_date.desc()).all()
     rows = []
     total = Decimal("0")
     liters = Decimal("0")
@@ -117,7 +118,7 @@ def service_costs_report(db: Session, **filters) -> dict:
     from_date = date_or_none(filters.get("from_date"), "from_date")
     to_date = date_or_none(filters.get("to_date"), "to_date")
     vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
-    records = db.query(VehicleService).options(joinedload(VehicleService.vehicle)).order_by(VehicleService.service_date.desc()).all()
+    records = db.query(VehicleService).options(joinedload(VehicleService.vehicle)).filter(VehicleService.archived.is_(False)).order_by(VehicleService.service_date.desc()).all()
     rows = []
     total = Decimal("0")
     for record in records:
@@ -141,7 +142,9 @@ def work_orders_report(db: Session, **filters) -> dict:
     from_date = date_or_none(filters.get("from_date"), "from_date")
     to_date = date_or_none(filters.get("to_date"), "to_date")
     vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
-    records = db.query(WorkOrder).options(joinedload(WorkOrder.vehicle), joinedload(WorkOrder.driver)).order_by(WorkOrder.created_at.desc()).all()
+    records = db.query(WorkOrder).options(
+        joinedload(WorkOrder.vehicle), joinedload(WorkOrder.driver), joinedload(WorkOrder.linked_service)
+    ).filter(WorkOrder.archived.is_(False)).order_by(WorkOrder.created_at.desc()).all()
     rows = []
     total = Decimal("0")
     status_counts: dict[str, int] = {}
@@ -151,7 +154,8 @@ def work_orders_report(db: Session, **filters) -> dict:
         if record.vehicle_id not in vehicle_ids or not in_date_range(report_date, from_date, to_date):
             continue
         row_total = money(record.total_cost)
-        total += row_total
+        counted_cost = Decimal("0") if record.linked_service else row_total
+        total += counted_cost
         status_counts[record.status] = status_counts.get(record.status, 0) + 1
         priority_counts[record.priority] = priority_counts.get(record.priority, 0) + 1
         rows.append({
@@ -165,6 +169,11 @@ def work_orders_report(db: Session, **filters) -> dict:
             "expected_completion_date": format_date(record.expected_completion_date),
             "actual_completion_date": format_date(record.actual_completion_date),
             "total_cost": float(row_total),
+            "cost_basis": "Actual cost recorded on linked Service" if record.linked_service else (
+                "Actual completed cost" if record.status == "Completed" else "Planned or estimated cost"
+            ),
+            "linked_service_id": record.linked_service.id if record.linked_service else None,
+            "counted_work_order_cost": float(counted_cost),
         })
     kpis = {"total_work_order_cost": float(total), "work_order_count": len(rows)}
     kpis.update({f"status_{key.lower().replace(' ', '_')}": value for key, value in status_counts.items()})
@@ -195,7 +204,7 @@ def vehicle_costs_report(db: Session, **filters) -> dict:
     for row in services:
         by_plate[row["license_plate"]]["service_cost"] += float(row["cost"] or 0)
     for row in work_orders:
-        by_plate[row["license_plate"]]["work_order_cost"] += float(row["total_cost"] or 0)
+        by_plate[row["license_plate"]]["work_order_cost"] += float(row["counted_work_order_cost"] or 0)
     for row in by_plate.values():
         row["total_cost"] = row["fuel_cost"] + row["service_cost"] + row["work_order_cost"]
         if row["odometer_km"]:
@@ -208,7 +217,7 @@ def reservations_report(db: Session, **filters) -> dict:
     from_date = date_or_none(filters.get("from_date"), "from_date")
     to_date = date_or_none(filters.get("to_date"), "to_date")
     vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
-    records = db.query(VehicleReservation).options(joinedload(VehicleReservation.vehicle)).order_by(VehicleReservation.start_date.desc()).all()
+    records = db.query(VehicleReservation).options(joinedload(VehicleReservation.vehicle)).filter(VehicleReservation.archived.is_(False)).order_by(VehicleReservation.start_date.desc()).all()
     rows = []
     counts: dict[str, int] = {}
     for record in records:
@@ -234,7 +243,7 @@ def document_expiry_report(db: Session, **filters) -> dict:
     today = datetime.utcnow()
     upcoming_cutoff = today + timedelta(days=30)
     vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
-    records = db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle)).order_by(VehiclePaper.expiry_date.asc()).all()
+    records = db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle)).filter(VehiclePaper.archived.is_(False)).order_by(VehiclePaper.expiry_date.asc()).all()
     rows = []
     overdue = 0
     upcoming = 0
@@ -350,7 +359,20 @@ def work_orders(from_date: str | None = None, to_date: str | None = None, licens
 
 
 @router.get("/{report_name}/export")
-def export_report(report_name: str, from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, db: Session = Depends(get_db)):
-    report = REPORTS[report_name]
+def export_report(
+    report_name: str, from_date: str | None = None, to_date: str | None = None,
+    license_plate: str | None = None, vehicle_status: str | None = None,
+    department: str | None = None, driver_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.finance)),
+):
+    report = REPORTS.get(report_name)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found.")
     data = report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id))
+    record_audit(
+        db, action="Report exported", entity_type="Report", entity_id=None, user=current_user,
+        new_values={"report_name": report_name}, description=f"Report '{report_name}' exported.",
+    )
+    db.commit()
     return excel_response(report_name, data)

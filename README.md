@@ -287,6 +287,79 @@ Health check endpoint:
 http://localhost:8000/health
 ```
 
+### Database migrations
+
+Alembic is the authoritative schema migration system. The application no longer
+changes existing schemas during FastAPI startup. From `backend`, run:
+
+```bash
+python -m app.scripts.validate_numeric_migration
+alembic current
+alembic history
+alembic upgrade head
+alembic revision --autogenerate -m "description"
+alembic downgrade -1
+```
+
+The numeric preflight reports invalid legacy text values without modifying the
+database. The reliability migrations preserve existing rows, convert financial
+columns to `NUMERIC`, add archive metadata, and create Audit Log, Notification,
+and Attachment tables. Back up production databases before every migration.
+
+For a new environment, install dependencies and migrate before starting:
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+On Windows, activate with `.venv\Scripts\activate` (Command Prompt) or
+`.venv\Scripts\Activate.ps1` (PowerShell), then run the same `pip`, `alembic`,
+and `uvicorn` commands.
+
+### Reliability and production configuration
+
+Copy `backend/.env.example` to `backend/.env` and replace the JWT secret. In
+production:
+
+- set `ENVIRONMENT=production`;
+- use a unique `JWT_SECRET_KEY` of at least 32 characters;
+- set explicit `CORS_ORIGINS` (wildcards are rejected);
+- keep `DEBUG=false`;
+- point `DATABASE_URL` to the production database;
+- store `UPLOAD_DIRECTORY` on durable private storage.
+
+Uploads are not mounted as public static files. New files use UUID storage
+names, streamed size/type/content validation, metadata records, and
+authenticated download endpoints.
+
+Generate deduplicated time-based in-app notifications from `backend`:
+
+```bash
+python -m app.scripts.generate_notifications
+```
+
+Run it periodically with cron, Task Scheduler, or the production scheduler.
+
+### Verification
+
+```bash
+cd backend
+pytest -q
+
+cd ../frontend
+npm run lint
+npm run build
+```
+
+The completed-maintenance reporting rule is: a linked Service supplies the
+actual cost, while its source Work Order is excluded from cost aggregation.
+Incomplete Work Orders continue to represent planned or estimated cost.
+
 ### Vehicle Brand and Model Catalog
 
 Vehicle creation and editing use the local database catalog rather than a

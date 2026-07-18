@@ -176,7 +176,7 @@ def maintenance_summary(
     reminder_counts = dict(reminder_query.with_entities(status_expr, func.count(VehicleService.id)).group_by(status_expr).all())
     overdue_reminder_rows = reminder_query.filter(status_expr == ReminderStatus.overdue.value).order_by(VehicleService.next_service_date, VehicleService.id).limit(8).all()
 
-    in_service_vehicles = db.query(Vehicle).filter(Vehicle.status == 1).order_by(Vehicle.license_plate).limit(8).all()
+    in_service_vehicles = db.query(Vehicle).filter(Vehicle.archived.is_(False), Vehicle.status == 1).order_by(Vehicle.license_plate).limit(8).all()
     in_service_items = [MaintenanceRecordSummary(
         id=vehicle.id, record_type="Vehicle", vehicle_id=vehicle.id,
         vehicle=f"{vehicle.brand} {vehicle.model}", license_plate=vehicle.license_plate,
@@ -203,7 +203,7 @@ def maintenance_summary(
         overdue_reminders_count=int(reminder_counts.get(ReminderStatus.overdue.value, 0)),
         failed_inspections_count=inspection_base.filter(Inspection.overall_status == "Failed").count(),
         inspections_needing_review_count=inspection_base.filter(Inspection.overall_status == "Needs Review").count(),
-        vehicles_in_service_count=db.query(func.count(Vehicle.id)).filter(Vehicle.status == 1).scalar() or 0,
+        vehicles_in_service_count=db.query(func.count(Vehicle.id)).filter(Vehicle.archived.is_(False), Vehicle.status == 1).scalar() or 0,
         monthly_maintenance_cost=actual_maintenance_cost(db, month_start, month_end),
         critical_work_orders=[work_order_summary(row) for row in critical_orders],
         overdue_work_orders=[work_order_summary(row) for row in overdue_orders],

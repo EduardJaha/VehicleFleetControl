@@ -1,6 +1,18 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
@@ -18,7 +30,7 @@ class User(Base):
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    driver_profile = relationship("Driver", back_populates="user", uselist=False)
+    driver_profile = relationship("Driver", back_populates="user", uselist=False, foreign_keys="Driver.user_id")
 
 
 class VehicleBrand(Base):
@@ -57,13 +69,17 @@ class VehicleModel(Base):
 
 class Vehicle(Base):
     __tablename__ = "Vehicles"
-    __table_args__ = (UniqueConstraint("LicensePlate", name="uq_vehicles_license_plate"),)
+    __table_args__ = (
+        UniqueConstraint("LicensePlate", name="uq_vehicles_license_plate"),
+        Index("ix_vehicles_brand_id", "BrandId"),
+        Index("ix_vehicles_model_id", "ModelId"),
+    )
 
     id = Column("Id", Integer, primary_key=True, index=True)
     brand = Column("Brand", String, nullable=False)
     model = Column("Model", String, nullable=False)
-    brand_id = Column("BrandId", Integer, ForeignKey("VehicleBrands.Id", ondelete="RESTRICT"), nullable=True, index=True)
-    model_id = Column("ModelId", Integer, ForeignKey("VehicleModels.Id", ondelete="RESTRICT"), nullable=True, index=True)
+    brand_id = Column("BrandId", Integer, ForeignKey("VehicleBrands.Id"), nullable=True)
+    model_id = Column("ModelId", Integer, ForeignKey("VehicleModels.Id"), nullable=True)
     fuel_type = Column("FuelType", String, nullable=False)
     vehicle_location = Column("VehicleLocation", String, nullable=False)
     license_plate = Column("LicensePlate", String, nullable=False, index=True)
@@ -72,6 +88,9 @@ class Vehicle(Base):
     vin_number = Column("VinNumber", String(50), nullable=True)
     year = Column("Year", Integer, nullable=True)
     odometer_km = Column("OdometerKm", Integer, nullable=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
     catalog_brand = relationship("VehicleBrand", back_populates="vehicles", foreign_keys=[brand_id])
     catalog_model = relationship("VehicleModel", back_populates="vehicles", foreign_keys=[model_id])
@@ -108,9 +127,12 @@ class Driver(Base):
     notes = Column("Notes", Text, nullable=True)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
     assigned_vehicle = relationship("Vehicle", back_populates="assigned_drivers")
-    user = relationship("User", back_populates="driver_profile")
+    user = relationship("User", back_populates="driver_profile", foreign_keys=[user_id])
     inspections = relationship("Inspection", back_populates="driver")
     work_orders = relationship("WorkOrder", back_populates="driver")
 
@@ -126,7 +148,9 @@ class Inspection(Base):
     overall_status = Column("OverallStatus", String(50), nullable=False, default="Needs Review")
     notes = Column("Notes", Text, nullable=True)
     inspector = Column("Inspector", String(150), nullable=True)
-    archived = Column("Archived", Boolean, nullable=False, default=False)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -150,12 +174,13 @@ class InspectionItem(Base):
 
 class WorkOrder(Base):
     __tablename__ = "WorkOrders"
+    __table_args__ = (Index("ix_work_orders_reminder_service", "ReminderServiceId"),)
 
     id = Column("Id", Integer, primary_key=True, index=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
     driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="SET NULL"), nullable=True)
     inspection_id = Column("InspectionId", Integer, ForeignKey("Inspections.Id", ondelete="SET NULL"), nullable=True)
-    reminder_service_id = Column("ReminderServiceId", Integer, ForeignKey("VehicleServices.Id", ondelete="SET NULL"), nullable=True)
+    reminder_service_id = Column("ReminderServiceId", Integer, ForeignKey("VehicleServices.Id"), nullable=True)
     source = Column("Source", String(50), nullable=False, default="Manual")
     title = Column("Title", String(150), nullable=False)
     description = Column("Description", Text, nullable=True)
@@ -167,15 +192,17 @@ class WorkOrder(Base):
     workshop = Column("Workshop", String(150), nullable=True)
     expected_completion_date = Column("ExpectedCompletionDate", DateTime, nullable=True)
     actual_completion_date = Column("ActualCompletionDate", DateTime, nullable=True)
-    labor_cost = Column("LaborCost", String, nullable=True)
-    parts_cost = Column("PartsCost", String, nullable=True)
-    total_cost = Column("TotalCost", String, nullable=True)
+    labor_cost = Column("LaborCost", Numeric(12, 2), nullable=True)
+    parts_cost = Column("PartsCost", Numeric(12, 2), nullable=True)
+    total_cost = Column("TotalCost", Numeric(12, 2), nullable=True)
     notes = Column("Notes", Text, nullable=True)
     completed_odometer_km = Column("CompletedOdometerKm", Integer, nullable=True)
     completion_notes = Column("CompletionNotes", Text, nullable=True)
     completed_by = Column("CompletedBy", String(150), nullable=True)
     created_by = Column("CreatedBy", String(150), nullable=True)
-    archived = Column("Archived", Boolean, nullable=False, default=False)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -195,23 +222,29 @@ class VehiclePaper(Base):
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
     issue_date = Column("IssueDate", DateTime, nullable=False)
     expiry_date = Column("ExpiryDate", DateTime, nullable=False)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
     vehicle = relationship("Vehicle", back_populates="papers")
 
 
 class VehicleService(Base):
     __tablename__ = "VehicleServices"
+    __table_args__ = (
+        Index("uq_vehicle_services_work_order", "WorkOrderId", unique=True),
+    )
 
     id = Column("Id", Integer, primary_key=True, index=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
-    work_order_id = Column("WorkOrderId", Integer, ForeignKey("WorkOrders.Id", ondelete="SET NULL"), nullable=True, unique=True)
+    work_order_id = Column("WorkOrderId", Integer, ForeignKey("WorkOrders.Id"), nullable=True)
     service_type = Column("ServiceType", String(100), nullable=False)
     description = Column("Description", Text, nullable=True)
     service_date = Column("ServiceDate", DateTime, nullable=False)
     odometer_km = Column("OdometerKm", Integer, nullable=True)
-    cost = Column("Cost", String, nullable=True)
-    labor_cost = Column("LaborCost", String, nullable=True)
-    parts_cost = Column("PartsCost", String, nullable=True)
+    cost = Column("Cost", Numeric(12, 2), nullable=True)
+    labor_cost = Column("LaborCost", Numeric(12, 2), nullable=True)
+    parts_cost = Column("PartsCost", Numeric(12, 2), nullable=True)
     workshop = Column("Workshop", String(100), nullable=True)
     next_service_date = Column("NextServiceDate", DateTime, nullable=True)
     next_service_km_interval = Column("NextServiceKmInterval", Integer, nullable=True)
@@ -219,7 +252,9 @@ class VehicleService(Base):
     source = Column("Source", String(50), nullable=False, default="Manual")
     status = Column("Status", String(50), nullable=False, default="Completed")
     reminder_status = Column("ReminderStatus", String(50), nullable=True)
-    archived = Column("Archived", Boolean, nullable=False, default=False)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -246,14 +281,17 @@ class VehicleFuel(Base):
     id = Column("Id", Integer, primary_key=True, index=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
     refuel_date = Column("RefuelDate", DateTime, nullable=False)
-    liters = Column("Liters", String, nullable=False)
-    cost_per_liter = Column("CostPerLiter", String, nullable=False, default="0")
-    total_cost = Column("TotalCost", String, nullable=False, default="0")
+    liters = Column("Liters", Numeric(12, 3), nullable=False)
+    cost_per_liter = Column("CostPerLiter", Numeric(12, 3), nullable=False, default=0)
+    total_cost = Column("TotalCost", Numeric(12, 2), nullable=False, default=0)
     fuel_type = Column("FuelType", String, nullable=False)
     location = Column("Location", String, nullable=False)
     station_name = Column("StationName", String, nullable=False, default="")
     bill_file_path = Column("BillFilePath", String, nullable=True)
     odometer_km = Column("OdometerKm", Integer, nullable=False, default=0)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
     vehicle = relationship("Vehicle", back_populates="fuels")
 
@@ -266,6 +304,9 @@ class VehicleAccident(Base):
     accident_date = Column("AccidentDate", DateTime, nullable=False)
     location = Column("Location", String, nullable=False)
     description = Column("Description", Text, nullable=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
     vehicle = relationship("Vehicle", back_populates="accidents")
     files = relationship("AccidentFile", back_populates="accident", cascade="all, delete-orphan")
@@ -292,5 +333,81 @@ class VehicleReservation(Base):
     end_date = Column("EndDate", DateTime, nullable=False)
     notes = Column("Notes", Text, nullable=True)
     status = Column("Status", Integer, nullable=False, default=0)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
     vehicle = relationship("Vehicle", back_populates="reservations")
+
+
+class AuditLog(Base):
+    __tablename__ = "AuditLogs"
+    __table_args__ = (
+        Index("ix_audit_logs_created_at", "CreatedAt"),
+        Index("ix_audit_logs_entity", "EntityType", "EntityId"),
+        Index("ix_audit_logs_user_id", "UserId"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    username = Column("Username", String(255), nullable=True)
+    action = Column("Action", String(100), nullable=False)
+    entity_type = Column("EntityType", String(100), nullable=False)
+    entity_id = Column("EntityId", Integer, nullable=True)
+    old_values = Column("OldValues", JSON, nullable=True)
+    new_values = Column("NewValues", JSON, nullable=True)
+    description = Column("Description", Text, nullable=True)
+    ip_address = Column("IpAddress", String(64), nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User")
+
+
+class Notification(Base):
+    __tablename__ = "Notifications"
+    __table_args__ = (
+        UniqueConstraint("DeduplicationKey", name="uq_notifications_deduplication_key"),
+        Index("ix_notifications_user_status", "UserId", "Status"),
+        Index("ix_notifications_created_at", "CreatedAt"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="CASCADE"), nullable=False)
+    notification_type = Column("NotificationType", String(100), nullable=False)
+    title = Column("Title", String(255), nullable=False)
+    message = Column("Message", Text, nullable=False)
+    priority = Column("Priority", String(20), nullable=False, default="Medium")
+    status = Column("Status", String(20), nullable=False, default="Unread")
+    entity_type = Column("EntityType", String(100), nullable=True)
+    entity_id = Column("EntityId", Integer, nullable=True)
+    deduplication_key = Column("DeduplicationKey", String(255), nullable=False)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    read_at = Column("ReadAt", DateTime, nullable=True)
+    resolved_at = Column("ResolvedAt", DateTime, nullable=True)
+    dismissed_at = Column("DismissedAt", DateTime, nullable=True)
+
+    user = relationship("User")
+
+
+class Attachment(Base):
+    __tablename__ = "Attachments"
+    __table_args__ = (
+        Index("ix_attachments_entity", "EntityType", "EntityId"),
+        Index("ix_attachments_uploaded_by", "UploadedBy"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    original_filename = Column("OriginalFilename", String(255), nullable=False)
+    stored_filename = Column("StoredFilename", String(255), nullable=False, unique=True)
+    storage_path = Column("StoragePath", String(500), nullable=False, unique=True)
+    mime_type = Column("MimeType", String(100), nullable=False)
+    file_size = Column("FileSize", Integer, nullable=False)
+    uploaded_by = Column("UploadedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    uploaded_at = Column("UploadedAt", DateTime, nullable=False, default=datetime.utcnow)
+    entity_type = Column("EntityType", String(100), nullable=False)
+    entity_id = Column("EntityId", Integer, nullable=False)
+    archived = Column("Archived", Boolean, nullable=False, default=False)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+
+    uploader = relationship("User", foreign_keys=[uploaded_by])

@@ -4,9 +4,15 @@ services:
     working_dir: /app
     volumes:
       - ./backend:/app
+    environment:
+      DATABASE_URL: sqlite:///./data/vehiclemanagement.db
+      ENVIRONMENT: development
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-local-development-secret}
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      UPLOAD_DIRECTORY: uploads
     ports:
       - "8000:8000"
-    command: sh -c "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "pip install -r requirements.txt && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     image: node:20-alpine

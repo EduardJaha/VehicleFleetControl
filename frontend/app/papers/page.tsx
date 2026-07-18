@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
-import { apiDelete, apiGet, apiPostForm, fileHref } from "@/lib/api";
+import { apiDelete, apiDownloadFile, apiGet, apiPostForm } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DOCUMENT_TYPES } from "@/lib/constants";
 import { toApiDate, todayInputDate } from "@/lib/format";
@@ -107,15 +107,15 @@ export default function PapersPage() {
   }
 
   async function deletePaper(paper: VehiclePaper) {
-    if (!confirm(`Delete ${paper.document_type} for ${paper.license_plate}?`)) return;
+    if (!confirm(`Archive ${paper.document_type} for ${paper.license_plate}?\n\nIt will be hidden from normal views but retained for history and audit purposes.`)) return;
     setError(null);
     setMessage(null);
     try {
       const result = await apiDelete<ApiMessage>(`/papers/${paper.id}`);
-      setMessage(result.message ?? "Document deleted.");
+      setMessage(result.message ?? "Document archived.");
       await loadPapers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete paper");
+      setError(err instanceof Error ? err.message : "Failed to archive document");
     }
   }
 
@@ -144,7 +144,7 @@ export default function PapersPage() {
             <div className="formRow"><label htmlFor="document-type">Document type</label><select id="document-type" className="select" value={form.document_type} onChange={(e) => setForm({ ...form, document_type: e.target.value })}>{DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
             <div className="formRow"><label htmlFor="document-issue-date">Issue date</label><input id="document-issue-date" className="input" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} required /></div>
             <div className="formRow"><label htmlFor="document-expiry-date">Expiry date</label><input id="document-expiry-date" className="input" type="date" min={form.issue_date} value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} required /></div>
-            <div className="formRow span2"><label htmlFor="document-file">Document file</label><input id="document-file" className="input" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required /></div>
+            <div className="formRow span2"><label htmlFor="document-file">Document file</label><input id="document-file" className="input" type="file" accept=".pdf,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required /><span className="muted">PDF only, maximum 10 MB. Selected: {file?.name ?? "none"}</span></div>
           </div>
           <div className="actions dialogActions">
             <button className="secondaryButton" type="button" onClick={closeDocumentDialog} disabled={submitting}>Cancel</button>
@@ -164,7 +164,7 @@ export default function PapersPage() {
         <table className="table">
           <thead><tr><th>Plate</th><th>Vehicle</th><th>Location</th><th>Document</th><th>Issue</th><th>Expiry</th><th>File</th>{canWrite && <th>Actions</th>}</tr></thead>
           <tbody>
-            {filtered.map((p) => <tr key={p.id}><td><strong>{p.license_plate}</strong></td><td>{p.brand} {p.model}</td><td>{p.vehicle_location}</td><td>{p.document_type}</td><td>{p.issue_date}</td><td>{p.expiry_date}</td><td>{p.file_path ? <a className="link" href={fileHref(p.file_path)} target="_blank">Open</a> : "-"}</td>{canWrite && <td><button className="dangerButton smallButton" type="button" onClick={() => void deletePaper(p)}>Delete</button></td>}</tr>)}
+            {filtered.map((p) => <tr key={p.id}><td><strong>{p.license_plate}</strong></td><td>{p.brand} {p.model}</td><td>{p.vehicle_location}</td><td>{p.document_type}</td><td>{p.issue_date}</td><td>{p.expiry_date}</td><td>{p.file_path ? <button className="linkButton" type="button" onClick={() => void apiDownloadFile(p.file_path, `${p.document_type}.pdf`)}>Download</button> : "-"}</td>{canWrite && <td><button className="dangerButton smallButton" type="button" onClick={() => void deletePaper(p)}>Archive</button></td>}</tr>)}
             {filtered.length === 0 && <tr><td colSpan={canWrite ? 8 : 7} className="muted">No documents match your filters.</td></tr>}
           </tbody>
         </table>

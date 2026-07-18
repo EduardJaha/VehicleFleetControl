@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
-from app.models import ServiceBill, User, Vehicle, VehicleService, WorkOrder
+from app.models import Attachment, ServiceBill, User, Vehicle, VehicleService, WorkOrder
 from app.schemas import (
     AddService,
     LinkedWorkOrder,
@@ -26,7 +26,8 @@ from app.schemas import (
 )
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
-from app.utils.files import delete_upload, save_upload
+from app.utils.files import store_upload
+from app.services.audit import record_audit, snapshot
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -36,7 +37,7 @@ VALID_KM_INTERVALS = {5000, 10000, 15000}
 WRITE_ROLES = (UserRole.admin, UserRole.fleet_manager, UserRole.mechanic)
 
 
-def decimal_from_text(value: str | None) -> Decimal | None:
+def decimal_from_text(value) -> Decimal | None:
     return Decimal(str(value)) if value not in (None, "") else None
 
 
@@ -185,9 +186,9 @@ def apply_service_payload(service: VehicleService, payload: AddService, db: Sess
     service.description = payload.description
     service.service_date = service_date
     service.odometer_km = payload.odometer_km
-    service.cost = str(actual) if actual is not None else None
-    service.labor_cost = str(payload.labor_cost) if payload.labor_cost is not None else None
-    service.parts_cost = str(payload.parts_cost) if payload.parts_cost is not None else None
+    service.cost = actual
+    service.labor_cost = payload.labor_cost
+    service.parts_cost = payload.parts_cost
     service.workshop = payload.workshop
     service.next_service_date = next_date
     service.next_service_km_interval = next_interval
@@ -196,6 +197,12 @@ def apply_service_payload(service: VehicleService, payload: AddService, db: Sess
     service.status = "Completed"
     service.updated_at = datetime.utcnow()
     if payload.odometer_km is not None:
+        current_odometer = vehicle.odometer_km or 0
+        if payload.odometer_km < current_odometer:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Service odometer cannot be lower than the vehicle's current odometer ({current_odometer} km).",
+            )
         vehicle.odometer_km = payload.odometer_km
     if work_order and work_order.reminder_service:
         work_order.reminder_service.reminder_status = ReminderStatus.resolved.value
@@ -203,10 +210,15 @@ def apply_service_payload(service: VehicleService, payload: AddService, db: Sess
 
 
 @router.post("")
-def add_service(payload: AddService, db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES))):
+def add_service(payload: AddService, db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES))):
     service = VehicleService(created_at=datetime.utcnow(), updated_at=datetime.utcnow())
     apply_service_payload(service, payload, db)
     db.add(service)
+    db.flush()
+    record_audit(
+        db, action="Service created", entity_type="VehicleService", entity_id=service.id,
+        user=current_user, new_values=snapshot(service), description=f"Service #{service.id} created.",
+    )
     db.commit()
     db.refresh(service)
     return {"message": "Service record created successfully.", "id": service.id}
@@ -220,7 +232,7 @@ async def register_with_bill(
     service_date: str = Form(...), next_service_date: str | None = Form(None),
     next_service_km_interval: int | None = Form(None), work_order_id: int | None = Form(None),
     source: ServiceSource = Form(ServiceSource.manual), file: UploadFile = File(...),
-    db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES)),
+    db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES)),
 ):
     payload = AddService(
         license_plate=license_plate, service_type=service_type, description=description, workshop=workshop,
@@ -230,18 +242,36 @@ async def register_with_bill(
     )
     service = VehicleService(created_at=datetime.utcnow(), updated_at=datetime.utcnow())
     vehicle = apply_service_payload(service, payload, db)
-    file_path = await save_upload(file, "bills")
-    service.bills.append(ServiceBill(file_path=file_path, uploaded_at=datetime.utcnow()))
     db.add(service)
+    db.flush()
+    stored = await store_upload(file, "bills", "auto")
+    attachment = Attachment(
+        original_filename=stored.original_filename, stored_filename=stored.stored_filename,
+        storage_path=stored.storage_path, mime_type=stored.mime_type, file_size=stored.file_size,
+        uploaded_by=current_user.id, entity_type="VehicleService", entity_id=service.id,
+    )
+    db.add(attachment)
+    db.flush()
+    service.bills.append(ServiceBill(file_path=f"/api/v1/files/{attachment.id}/download", uploaded_at=datetime.utcnow()))
+    record_audit(
+        db, action="Service created", entity_type="VehicleService", entity_id=service.id,
+        user=current_user, new_values=snapshot(service),
+        description=f"Service #{service.id} created with bill attachment #{attachment.id}.",
+    )
     db.commit()
     db.refresh(service)
-    return {"message": "Service and bill registered successfully.", "id": service.id, "license_plate": vehicle.license_plate, "bill_url": f"/{file_path}"}
+    return {
+        "message": "Service and bill registered successfully.",
+        "id": service.id,
+        "license_plate": vehicle.license_plate,
+        "bill_url": f"/api/v1/files/{attachment.id}/download",
+    }
 
 
 @router.post("/upload-bill-later")
 async def upload_bill_later(
     license_plate: str = Form(...), service_type: str = Form(...), bill_file: UploadFile = File(...),
-    db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES)),
+    db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES)),
 ):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
@@ -253,12 +283,28 @@ async def upload_bill_later(
     ).order_by(VehicleService.service_date.desc(), VehicleService.id.desc()).first()
     if not service:
         raise HTTPException(status_code=404, detail=f"No service found for type '{service_type}' on '{license_plate}'.")
-    file_path = await save_upload(bill_file, "bills")
-    bill = ServiceBill(vehicle_service_id=service.id, file_path=file_path, uploaded_at=datetime.utcnow())
+    stored = await store_upload(bill_file, "bills", "auto")
+    attachment = Attachment(
+        original_filename=stored.original_filename, stored_filename=stored.stored_filename,
+        storage_path=stored.storage_path, mime_type=stored.mime_type, file_size=stored.file_size,
+        uploaded_by=current_user.id, entity_type="VehicleService", entity_id=service.id,
+    )
+    db.add(attachment)
+    db.flush()
+    bill = ServiceBill(vehicle_service_id=service.id, file_path=f"/api/v1/files/{attachment.id}/download", uploaded_at=datetime.utcnow())
     db.add(bill)
+    record_audit(
+        db, action="Document uploaded", entity_type="VehicleService", entity_id=service.id,
+        user=current_user, new_values={"attachment_id": attachment.id},
+        description=f"Bill attached to Service #{service.id}.",
+    )
     db.commit()
     db.refresh(bill)
-    return {"message": f"Bill uploaded for '{service_type}' on '{license_plate}'.", "id": bill.id, "bill_url": f"/{file_path}"}
+    return {
+        "message": f"Bill uploaded for '{service_type}' on '{license_plate}'.",
+        "id": bill.id,
+        "bill_url": f"/api/v1/files/{attachment.id}/download",
+    }
 
 
 def reminder_status_expression(today: datetime):
@@ -392,7 +438,7 @@ def reminders(
 
 
 @router.put("/reminders/{service_id}/status", response_model=ServiceReminderOut)
-def update_reminder_status(service_id: int, payload: ReminderStatusUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES))):
+def update_reminder_status(service_id: int, payload: ReminderStatusUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES))):
     if payload.status not in {ReminderStatus.resolved, ReminderStatus.dismissed}:
         raise HTTPException(status_code=400, detail="Reminders can only be manually Resolved or Dismissed.")
     service = db.query(VehicleService).options(joinedload(VehicleService.vehicle), joinedload(VehicleService.reminder_work_orders)).filter(VehicleService.id == service_id).first()
@@ -400,6 +446,13 @@ def update_reminder_status(service_id: int, payload: ReminderStatusUpdate, db: S
         raise HTTPException(status_code=404, detail="Service Reminder not found.")
     service.reminder_status = payload.status.value
     service.updated_at = datetime.utcnow()
+    record_audit(
+        db,
+        action="Reminder resolved" if payload.status == ReminderStatus.resolved else "Reminder dismissed",
+        entity_type="VehicleService", entity_id=service.id, user=current_user,
+        new_values={"reminder_status": payload.status.value},
+        description=f"Service reminder #{service.id} marked {payload.status.value}.",
+    )
     db.commit()
     return reminder_out(service, payload.status)
 
@@ -411,9 +464,12 @@ def service_history(
     from_date: str | None = None, to_date: str | None = None, source: ServiceSource | None = None,
     has_linked_work_order: bool | None = None, minimum_cost: Decimal | None = None,
     maximum_cost: Decimal | None = None, include_archived: bool = False, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     if page < 1 or page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
+    if include_archived and current_user.role != UserRole.admin.value:
+        raise HTTPException(status_code=403, detail="Only Admin users can include archived Services.")
     query = service_query(db)
     if not include_archived:
         query = query.filter(VehicleService.archived.is_(False))
@@ -475,23 +531,35 @@ def get_service(service_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/id/{service_id}", response_model=VehicleServiceOverviewOut)
-def update_service(service_id: int, payload: AddService, db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES))):
+def update_service(service_id: int, payload: AddService, db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES))):
     service = service_query(db).filter(VehicleService.id == service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found.")
+    old_values = snapshot(service)
     apply_service_payload(service, payload, db, allow_current_id=service.id)
+    record_audit(
+        db, action="Service updated", entity_type="VehicleService", entity_id=service.id,
+        user=current_user, old_values=old_values, new_values=snapshot(service),
+        description=f"Service #{service.id} updated.",
+    )
     db.commit()
     return service_overview_out(service)
 
 
 @router.put("/id/{service_id}/archive", response_model=VehicleServiceOverviewOut)
-def archive_service(service_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def archive_service(service_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     service = service_query(db).filter(VehicleService.id == service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found.")
     service.archived = True
+    service.archived_at = datetime.utcnow()
+    service.archived_by = current_user.id
     service.status = "Archived"
     service.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Service archived", entity_type="VehicleService", entity_id=service.id,
+        user=current_user, new_values={"archived": True}, description=f"Service #{service.id} archived.",
+    )
     db.commit()
     return service_overview_out(service)
 
@@ -509,12 +577,39 @@ def get_by_license_plate(license_plate: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{service_id}")
-def delete_service(service_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(*WRITE_ROLES))):
+def delete_service(service_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES))):
     service = db.query(VehicleService).options(joinedload(VehicleService.bills)).filter(VehicleService.id == service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail=f"Service with id '{service_id}' was not found.")
-    for bill in service.bills:
-        delete_upload(bill.file_path)
-    db.delete(service)
+    service.archived = True
+    service.archived_at = datetime.utcnow()
+    service.archived_by = current_user.id
+    service.status = "Archived"
+    record_audit(
+        db, action="Service archived", entity_type="VehicleService", entity_id=service.id,
+        user=current_user, new_values={"archived": True}, description=f"Service #{service.id} archived.",
+    )
     db.commit()
-    return {"message": "Service deleted successfully."}
+    return {"message": "Service archived successfully."}
+
+
+@router.post("/id/{service_id}/restore", response_model=VehicleServiceOverviewOut)
+def restore_service(
+    service_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin)),
+):
+    service = service_query(db).filter(VehicleService.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
+    service.archived = False
+    service.archived_at = None
+    service.archived_by = None
+    service.status = "Completed"
+    service.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Service restored", entity_type="VehicleService", entity_id=service.id,
+        user=current_user, new_values={"archived": False}, description=f"Service #{service.id} restored.",
+    )
+    db.commit()
+    return service_overview_out(service)

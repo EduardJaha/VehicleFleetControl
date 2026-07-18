@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { maintenanceApi } from "@/lib/api";
 import type { WorkOrder } from "@/lib/types";
 import { formatMoney, LinkedRecordCard, MaintenancePageHeader, MaintenancePriorityBadge, MaintenanceStatusBadge } from "@/components/maintenance/Maintenance";
+import { CompleteWorkOrderDialog } from "@/components/maintenance/CompleteWorkOrderDialog";
+import { useAuth } from "@/lib/auth";
 
 function Details({ values }: { values: Array<[string, React.ReactNode]> }) {
   return <dl className="detailList">{values.map(([label, value]) => <div key={label} style={{ display: "contents" }}><dt>{label}</dt><dd>{value ?? "-"}</dd></div>)}</dl>;
@@ -13,13 +15,19 @@ function Details({ values }: { values: Array<[string, React.ReactNode]> }) {
 export default function WorkOrderDetailsPage({ params }: { params: { id: string } }) {
   const [order, setOrder] = useState<WorkOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { maintenanceApi.getWorkOrder(params.id).then(setOrder).catch((err) => setError(err instanceof Error ? err.message : "Could not load Work Order")); }, [params.id]);
+  const [completionOpen, setCompletionOpen] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const { can } = useAuth();
+  const load = () => maintenanceApi.getWorkOrder(params.id).then(setOrder).catch((err) => setError(err instanceof Error ? err.message : "Could not load Work Order"));
+  useEffect(() => { void load(); }, [params.id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (error) return <div className="error">{error}</div>;
   if (!order) return <div className="card">Loading Work Order...</div>;
   return (
     <section>
       <MaintenancePageHeader title={`Work Order #${order.id}`} description="Work Order information, assignment, completion, costs, and connected maintenance records." actions={<Link className="secondaryButton" href="/work-orders">Back to Work Orders</Link>} />
+      {message && <div className="success spaced">{message}</div>}
       <div className="actions spaced"><MaintenanceStatusBadge status={order.status} /><MaintenancePriorityBadge priority={order.priority} /><span className="badge">Source: {order.source}</span></div>
+      {can("workOrdersWrite") && !["Completed", "Cancelled"].includes(order.status) && <div className="actions spaced"><button className="button" type="button" onClick={() => setCompletionOpen(true)}>Complete Work Order</button></div>}
       <div className="detailGrid spaced">
         <section className="card detailCard"><h2>Work Order information</h2><Details values={[
           ["ID", `#${order.id}`], ["Title", order.title], ["Description", order.description ?? "-"], ["Reported issue", order.reported_issue ?? "-"],
@@ -45,6 +53,15 @@ export default function WorkOrderDetailsPage({ params }: { params: { id: string 
         </div>
         {!order.linked_service && order.status === "Completed" && <div className="actions" style={{ marginTop: 14 }}><Link className="button" href={`/services/overview?work_order_id=${order.id}&license_plate=${encodeURIComponent(order.license_plate)}`}>Create linked Service</Link></div>}
       </section>
+      <CompleteWorkOrderDialog
+        order={order}
+        open={completionOpen}
+        onClose={() => setCompletionOpen(false)}
+        onCompleted={async (completed, uploadWarning) => {
+          setMessage(uploadWarning ?? `Work Order #${completed.work_order.id} completed${completed.service ? ` and linked to Service #${completed.service.id}` : ""}.`);
+          await load();
+        }}
+      />
     </section>
   );
 }

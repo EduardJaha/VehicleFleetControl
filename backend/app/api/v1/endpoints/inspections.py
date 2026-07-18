@@ -23,6 +23,8 @@ from app.schemas import (
 )
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
+from app.services.audit import record_audit, snapshot
+from app.services.notifications import notify_roles
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -169,10 +171,13 @@ def list_inspections(
     has_linked_work_order: bool | None = None,
     include_archived: bool = False,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     query = inspection_query(db)
     if page < 1 or page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
+    if include_archived and current_user.role != UserRole.admin.value:
+        raise HTTPException(status_code=403, detail="Only Admin users can include archived Inspections.")
     if not include_archived:
         query = query.filter(Inspection.archived.is_(False))
     if search:
@@ -212,6 +217,24 @@ def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), 
     apply_payload(inspection, payload, db)
     inspection.inspector = inspection.inspector or current_user.full_name
     db.add(inspection)
+    db.flush()
+    record_audit(
+        db, action="Inspection created", entity_type="Inspection", entity_id=inspection.id,
+        user=current_user, new_values=snapshot(inspection),
+        description=f"Inspection #{inspection.id} created.",
+    )
+    if inspection.overall_status == InspectionOverallStatus.failed.value:
+        record_audit(
+            db, action="Inspection failed", entity_type="Inspection", entity_id=inspection.id,
+            user=current_user, new_values={"overall_status": inspection.overall_status},
+            description=f"Inspection #{inspection.id} failed.",
+        )
+        notify_roles(
+            db, roles={"admin", "fleet_manager", "mechanic"}, notification_type="Inspection failed",
+            title=f"Inspection #{inspection.id} failed", message=f"Vehicle #{inspection.vehicle_id} requires attention.",
+            priority="High", entity_type="Inspection", entity_id=inspection.id,
+            deduplication_key=f"inspection:{inspection.id}:failed",
+        )
     db.commit()
     db.refresh(inspection)
     return inspection_out(inspection_query(db).filter(Inspection.id == inspection.id).one())
@@ -235,11 +258,17 @@ def get_inspection(inspection_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{inspection_id}", response_model=InspectionOut)
-def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
     inspection = inspection_query(db).filter(Inspection.id == inspection_id).first()
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found.")
+    old_values = snapshot(inspection)
     apply_payload(inspection, payload, db)
+    record_audit(
+        db, action="Inspection updated", entity_type="Inspection", entity_id=inspection.id,
+        user=current_user, old_values=old_values, new_values=snapshot(inspection),
+        description=f"Inspection #{inspection.id} updated.",
+    )
     inspection.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(inspection)
@@ -247,21 +276,57 @@ def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session
 
 
 @router.delete("/{inspection_id}")
-def delete_inspection(inspection_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def delete_inspection(inspection_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
     inspection = db.get(Inspection, inspection_id)
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found.")
-    db.delete(inspection)
+    inspection.archived = True
+    inspection.archived_at = datetime.utcnow()
+    inspection.archived_by = current_user.id
+    record_audit(
+        db, action="Inspection archived", entity_type="Inspection", entity_id=inspection.id,
+        user=current_user, new_values={"archived": True},
+        description=f"Inspection #{inspection.id} archived.",
+    )
     db.commit()
-    return {"message": "Inspection deleted."}
+    return {"message": "Inspection archived."}
 
 
 @router.put("/{inspection_id}/archive", response_model=InspectionOut)
-def archive_inspection(inspection_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def archive_inspection(inspection_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     inspection = inspection_query(db).filter(Inspection.id == inspection_id).first()
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found.")
     inspection.archived = True
+    inspection.archived_at = datetime.utcnow()
+    inspection.archived_by = current_user.id
     inspection.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Inspection archived", entity_type="Inspection", entity_id=inspection.id,
+        user=current_user, new_values={"archived": True},
+        description=f"Inspection #{inspection.id} archived.",
+    )
+    db.commit()
+    return inspection_out(inspection)
+
+
+@router.post("/{inspection_id}/restore", response_model=InspectionOut)
+def restore_inspection(
+    inspection_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin)),
+):
+    inspection = inspection_query(db).filter(Inspection.id == inspection_id).first()
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found.")
+    inspection.archived = False
+    inspection.archived_at = None
+    inspection.archived_by = None
+    inspection.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Inspection restored", entity_type="Inspection", entity_id=inspection.id,
+        user=current_user, new_values={"archived": False},
+        description=f"Inspection #{inspection.id} restored.",
+    )
     db.commit()
     return inspection_out(inspection)

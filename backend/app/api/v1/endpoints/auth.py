@@ -6,6 +6,7 @@ from app.core.security import create_access_token, get_current_user, hash_passwo
 from app.db.session import get_db
 from app.models import User
 from app.schemas import FirstAdminCreate, LoginRequest, TokenOut, UserCreate, UserOut, UserRole
+from app.services.audit import record_audit
 
 router = APIRouter()
 
@@ -47,6 +48,12 @@ def register_first_admin(payload: FirstAdminCreate, db: Session = Depends(get_db
     if db.query(User).first():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Initial admin already exists. Ask an Admin to create additional users.")
     user = create_user_record(db, payload, UserRole.admin)
+    record_audit(
+        db, action="User created", entity_type="User", entity_id=user.id, user=user,
+        new_values={"email": user.email, "full_name": user.full_name, "role": user.role, "is_active": user.is_active},
+        description="Initial Admin user created.",
+    )
+    db.commit()
     return TokenOut(access_token=create_access_token(user.id), user=user_out(user))
 
 
@@ -54,9 +61,24 @@ def register_first_admin(payload: FirstAdminCreate, db: Session = Depends(get_db
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = find_user_by_email(db, payload.email)
     if not user or not verify_password(payload.password, user.hashed_password):
+        record_audit(
+            db, action="Login failure", entity_type="User", entity_id=user.id if user else None,
+            user=user, new_values={"email": payload.email}, description="Login failed: invalid credentials.",
+        )
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")
     if not user.is_active:
+        record_audit(
+            db, action="Login failure", entity_type="User", entity_id=user.id, user=user,
+            description="Login failed: inactive account.",
+        )
+        db.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive.")
+    record_audit(
+        db, action="Login success", entity_type="User", entity_id=user.id, user=user,
+        description="User logged in successfully.",
+    )
+    db.commit()
     return TokenOut(access_token=create_access_token(user.id), user=user_out(user))
 
 
@@ -66,5 +88,12 @@ def me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin))):
-    return user_out(create_user_record(db, payload))
+def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin))):
+    user = create_user_record(db, payload)
+    record_audit(
+        db, action="User created", entity_type="User", entity_id=user.id, user=current_user,
+        new_values={"email": user.email, "full_name": user.full_name, "role": user.role, "is_active": user.is_active},
+        description=f"User {user.email} created.",
+    )
+    db.commit()
+    return user_out(user)

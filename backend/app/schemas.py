@@ -214,6 +214,9 @@ class DriverOut(DriverBase):
     id: int
     created_at: str
     updated_at: str
+    archived: bool = False
+    archived_at: str | None = None
+    archived_by: int | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -353,6 +356,36 @@ class WorkOrderStatusUpdate(BaseModel):
     actual_completion_date: str | None = None
 
 
+class WorkOrderCompletionRequest(BaseModel):
+    actual_completion_date: str
+    completed_odometer_km: int = Field(ge=0)
+    workshop: str | None = Field(default=None, max_length=150)
+    labor_cost: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
+    parts_cost: Decimal = Field(default=Decimal("0"), ge=0, decimal_places=2)
+    completion_notes: str | None = None
+    create_service_record: bool = True
+    service_type: str | None = Field(default=None, max_length=100)
+    service_description: str | None = None
+    next_service_km_interval: int | None = Field(default=None, ge=1)
+    next_service_date: str | None = None
+    resolve_source_reminder: bool = True
+
+    @field_validator("workshop", "completion_notes", "service_type", "service_description")
+    @classmethod
+    def normalize_completion_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class WorkOrderCompletionOut(BaseModel):
+    work_order: "WorkOrderOut"
+    service: "LinkedService | None" = None
+    reminder_resolved: bool = False
+    next_reminder_created: bool = False
+
+
 class WorkOrderOut(WorkOrderBase):
     id: int
     vehicle_id: int
@@ -408,6 +441,9 @@ class VehicleOut(VehicleFields):
     brand: str
     model: str
     status_name: str
+    archived: bool = False
+    archived_at: str | None = None
+    archived_by: int | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -731,6 +767,7 @@ class FuelRecordOut(BaseModel):
     station_name: str
     bill_file_path: str | None = None
     odometer_km: int
+    archived: bool = False
 
 
 class FuelOverviewOut(BaseModel):
@@ -752,6 +789,7 @@ class VehiclePaperListOut(BaseModel):
     issue_date: str
     expiry_date: str
     file_path: str
+    archived: bool = False
 
 
 class AccidentOut(BaseModel):
@@ -763,6 +801,7 @@ class AccidentOut(BaseModel):
     brand: str | None = None
     model: str | None = None
     files: list[str] = []
+    archived: bool = False
 
 
 class AddReservation(BaseModel):
@@ -788,6 +827,80 @@ class VehicleReservationListOut(BaseModel):
     notes: str | None = ""
     status: int
     status_name: str
+    archived: bool = False
+
+
+class AuditLogOut(BaseModel):
+    id: int
+    user_id: int | None = None
+    username: str | None = None
+    action: str
+    entity_type: str
+    entity_id: int | None = None
+    old_values: dict | None = None
+    new_values: dict | None = None
+    description: str | None = None
+    ip_address: str | None = None
+    created_at: str
+
+
+class AuditLogPage(BaseModel):
+    items: list[AuditLogOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class NotificationStatus(str, Enum):
+    unread = "Unread"
+    read = "Read"
+    resolved = "Resolved"
+    dismissed = "Dismissed"
+
+
+class NotificationPriority(str, Enum):
+    low = "Low"
+    medium = "Medium"
+    high = "High"
+    critical = "Critical"
+
+
+class NotificationOut(BaseModel):
+    id: int
+    notification_type: str
+    title: str
+    message: str
+    priority: NotificationPriority
+    status: NotificationStatus
+    entity_type: str | None = None
+    entity_id: int | None = None
+    created_at: str
+    read_at: str | None = None
+    resolved_at: str | None = None
+    dismissed_at: str | None = None
+
+
+class NotificationPage(BaseModel):
+    items: list[NotificationOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class NotificationUnreadCount(BaseModel):
+    unread_count: int
+
+
+class AttachmentOut(BaseModel):
+    id: int
+    original_filename: str
+    mime_type: str
+    file_size: int
+    entity_type: str
+    entity_id: int
+    uploaded_at: str
 
 
 class DashboardStatusItem(BaseModel):

@@ -9,6 +9,8 @@ import { WORK_ORDER_PRIORITIES, WORK_ORDER_SOURCES, WORK_ORDER_STATUSES } from "
 import { toApiDate, toInputDate, todayInputDate } from "@/lib/format";
 import type { PageResult, WorkOrder, WorkOrderPayload, WorkOrderPriority, WorkOrderSource, WorkOrderStatus } from "@/lib/types";
 import { formatMoney, MaintenanceEmptyState, MaintenancePageHeader, MaintenancePriorityBadge, MaintenanceStatusBadge, MaintenanceTable, Pagination } from "@/components/maintenance/Maintenance";
+import { CompleteWorkOrderDialog } from "@/components/maintenance/CompleteWorkOrderDialog";
+import type { WorkOrderCompletionResult } from "@/lib/types";
 
 type FormState = {
   license_plate: string; driver_id: string; inspection_id: string; reminder_service_id: string;
@@ -18,7 +20,7 @@ type FormState = {
   labor_cost: string; parts_cost: string; completed_odometer_km: string; completion_notes: string; completed_by: string; notes: string;
 };
 
-type Filters = { search: string; license_plate: string; status: string; priority: string; source: string; assigned_to: string; workshop: string; from_date: string; to_date: string; overdue_only: boolean; has_linked_service: string };
+type Filters = { search: string; license_plate: string; status: string; priority: string; source: string; assigned_to: string; workshop: string; from_date: string; to_date: string; overdue_only: boolean; has_linked_service: string; include_archived: boolean };
 
 function initialForm(params?: URLSearchParams): FormState {
   const inspectionId = params?.get("inspection_id") ?? "";
@@ -67,13 +69,14 @@ function overdue(order: WorkOrder) {
 
 export default function WorkOrdersPage() {
   const searchParams = useSearchParams();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const canWrite = can("workOrdersWrite");
   const initialFilters = useMemo<Filters>(() => ({
     search: searchParams.get("search") ?? "", license_plate: searchParams.get("license_plate") ?? "", status: searchParams.get("status") ?? "",
     priority: searchParams.get("priority") ?? "", source: searchParams.get("source") ?? "", assigned_to: searchParams.get("assigned_to") ?? "",
     workshop: searchParams.get("workshop") ?? "", from_date: searchParams.get("from_date") ?? "", to_date: searchParams.get("to_date") ?? "",
-    overdue_only: searchParams.get("overdue_only") === "true", has_linked_service: searchParams.get("has_linked_service") ?? ""
+    overdue_only: searchParams.get("overdue_only") === "true", has_linked_service: searchParams.get("has_linked_service") ?? "",
+    include_archived: searchParams.get("include_archived") === "true"
   }), [searchParams]);
   const [result, setResult] = useState<PageResult<WorkOrder>>({ items: [], page: 1, page_size: 20, total: 0, pages: 0 });
   const [filters, setFilters] = useState(initialFilters);
@@ -82,6 +85,8 @@ export default function WorkOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [completionOrder, setCompletionOrder] = useState<WorkOrder | null>(null);
+  const [completionResult, setCompletionResult] = useState<WorkOrderCompletionResult | null>(null);
 
   const load = useCallback(async (page = 1, values = filters) => {
     setLoading(true); setError(null);
@@ -126,6 +131,11 @@ export default function WorkOrdersPage() {
     catch (err) { setError(err instanceof Error ? err.message : "Could not archive Work Order"); }
   }
 
+  async function restore(order: WorkOrder) {
+    try { await apiPost(`/work-orders/${order.id}/restore`, {}); setMessage(`Work Order #${order.id} restored.`); await load(result.page); }
+    catch (err) { setError(err instanceof Error ? err.message : "Could not restore Work Order"); }
+  }
+
   return (
     <section>
       <MaintenancePageHeader title="Work Orders" description="Plan, assign, track, and complete maintenance work from Inspections, Service Reminders, breakdowns, or manual requests." />
@@ -138,7 +148,7 @@ export default function WorkOrdersPage() {
           <div className="formRow"><label>Title</label><input className="input" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
           <div className="formRow"><label>Source</label><select className="select" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value as WorkOrderSource })}>{WORK_ORDER_SOURCES.map((source) => <option key={source}>{source}</option>)}</select></div>
           <div className="formRow"><label>Priority</label><select className="select" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as WorkOrderPriority })}>{WORK_ORDER_PRIORITIES.map((value) => <option key={value}>{value}</option>)}</select></div>
-          <div className="formRow"><label>Status</label><select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as WorkOrderStatus })}>{WORK_ORDER_STATUSES.map((value) => <option key={value}>{value}</option>)}</select></div>
+          <div className="formRow"><label>Status</label><select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as WorkOrderStatus })}>{WORK_ORDER_STATUSES.filter((value) => value !== "Completed").map((value) => <option key={value}>{value}</option>)}</select></div>
           <div className="formRow"><label>Inspection ID</label><input className="input" type="number" value={form.inspection_id} onChange={(e) => setForm({ ...form, inspection_id: e.target.value, source: e.target.value ? "Inspection" : form.source })} /></div>
           <div className="formRow"><label>Service Reminder ID</label><input className="input" type="number" value={form.reminder_service_id} onChange={(e) => setForm({ ...form, reminder_service_id: e.target.value, source: e.target.value ? "Service Reminder" : form.source })} /></div>
           <div className="formRow"><label>Driver ID</label><input className="input" type="number" value={form.driver_id} onChange={(e) => setForm({ ...form, driver_id: e.target.value })} /></div>
@@ -171,6 +181,7 @@ export default function WorkOrdersPage() {
         <input className="input" type="date" value={filters.to_date} onChange={(e) => setFilters({ ...filters, to_date: e.target.value })} />
         <select className="select" value={filters.has_linked_service} onChange={(e) => setFilters({ ...filters, has_linked_service: e.target.value })}><option value="">Any Service link</option><option value="true">Has linked Service</option><option value="false">No linked Service</option></select>
         <label className="actions"><input type="checkbox" checked={filters.overdue_only} onChange={(e) => setFilters({ ...filters, overdue_only: e.target.checked })} /> Overdue only</label>
+        {user?.role === "admin" && <label className="actions"><input type="checkbox" checked={filters.include_archived} onChange={(e) => setFilters({ ...filters, include_archived: e.target.checked })} /> Include archived</label>}
         <button className="button" type="button" onClick={applyFilters}>Apply filters</button>
       </div>
 
@@ -179,21 +190,34 @@ export default function WorkOrdersPage() {
         <tbody>{result.items.map((order) => <tr key={order.id} className={order.priority === "Critical" ? "criticalRow" : overdue(order) ? "overdueRow" : undefined}>
           <td><Link className="link" href={`/work-orders/${order.id}`}>#{order.id}</Link><br /><strong>{order.vehicle_name}</strong><br /><span className="muted">{order.license_plate}</span></td>
           <td><strong>{order.title}</strong><br /><span className="muted">{order.reported_issue ?? order.description ?? "-"}</span></td>
-          <td>{order.source}</td><td><MaintenancePriorityBadge priority={order.priority} /></td><td><MaintenanceStatusBadge status={order.status} />{overdue(order) && <><br /><span className="dangerBadge">Overdue</span></>}</td>
+          <td>{order.source}</td><td><MaintenancePriorityBadge priority={order.priority} /></td><td>{order.archived ? <span className="badge">Archived</span> : <MaintenanceStatusBadge status={order.status} />}{overdue(order) && <><br /><span className="dangerBadge">Overdue</span></>}</td>
           <td>{order.assigned_to ?? order.driver_name ?? "-"}<br /><span className="muted">{order.workshop ?? "No workshop"}</span></td>
           <td>{order.expected_completion_date ?? "-"}<br /><span className="muted">Actual: {order.actual_completion_date ?? "-"}</span></td><td>{formatMoney(order.total_cost)}</td>
           <td>{order.linked_service ? <Link className="link" href={`/services/${order.linked_service.id}`}>Service #{order.linked_service.id}</Link> : "-"}</td>
-          <td><div className="actions"><Link className="secondaryButton smallButton" href={`/work-orders/${order.id}`}>View</Link>{canWrite && <>
+          <td><div className="actions"><Link className="secondaryButton smallButton" href={`/work-orders/${order.id}`}>View</Link>{canWrite && !order.archived && <>
             <button className="secondaryButton smallButton" type="button" onClick={() => { setEditingId(order.id); setForm(toForm(order)); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Edit</button>
             {order.status === "Assigned" && <button className="secondaryButton smallButton" onClick={() => void changeStatus(order, "In Progress")}>Start Work</button>}
             {order.status === "In Progress" && <button className="secondaryButton smallButton" onClick={() => void changeStatus(order, "Waiting for Parts")}>Waiting for Parts</button>}
-            {["In Progress", "Waiting for Parts"].includes(order.status) && <button className="button smallButton" onClick={() => void changeStatus(order, "Completed")}>Complete</button>}
-            {order.status === "Completed" && !order.linked_service && <Link className="secondaryButton smallButton" href={`/services/overview?work_order_id=${order.id}&license_plate=${encodeURIComponent(order.license_plate)}`}>Create Service</Link>}
+            {!["Completed", "Cancelled"].includes(order.status) && <button className="button smallButton" type="button" onClick={() => setCompletionOrder(order)}>Complete Work Order</button>}
             {["Completed", "Cancelled"].includes(order.status) && <button className="secondaryButton smallButton" onClick={() => void archive(order)}>Archive</button>}
-          </>}</div></td>
+          </>}{order.archived && user?.role === "admin" && <button className="secondaryButton smallButton" type="button" onClick={() => void restore(order)}>Restore</button>}</div></td>
         </tr>)}</tbody>
       </MaintenanceTable>}
       <Pagination page={result.page} pages={result.pages} total={result.total} onPageChange={(page) => void load(page)} />
+      {completionResult && <div className="success spaced" role="status">
+        <Link className="link" href={`/work-orders/${completionResult.work_order.id}`}>Work Order #{completionResult.work_order.id}</Link> completed.
+        {completionResult.service && <> Linked <Link className="link" href={`/services/${completionResult.service.id}`}>Service #{completionResult.service.id}</Link> was created.</>}
+      </div>}
+      <CompleteWorkOrderDialog
+        order={completionOrder}
+        open={Boolean(completionOrder)}
+        onClose={() => setCompletionOrder(null)}
+        onCompleted={async (completed, uploadWarning) => {
+          setCompletionResult(completed);
+          setMessage(uploadWarning ?? `Work Order #${completed.work_order.id} completed.`);
+          await load(result.page);
+        }}
+      />
     </section>
   );
 }

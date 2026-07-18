@@ -1,7 +1,8 @@
-"""Small additive schema migrations for installations created before Maintenance v2.
+"""Deprecated pre-Alembic additive migrations.
 
-The project does not use Alembic yet.  These migrations are intentionally limited
-to nullable/defaulted columns so existing local SQLite data remains valid.
+Kept only as historical transition code and for the legacy catalog migration
+test. FastAPI startup no longer invokes these functions; use ``alembic upgrade
+head`` for every managed database.
 """
 
 from sqlalchemy import Engine, inspect, text

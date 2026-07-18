@@ -171,15 +171,15 @@ export default function DriversPage() {
   }
 
   async function deleteDriver(driver: Driver) {
-    if (!confirm(`Delete driver ${driver.full_name}? This cannot be undone.`)) return;
+    if (!confirm(`Archive driver ${driver.full_name}?\n\nIt will be hidden from normal views but retained for history and audit purposes.`)) return;
     setError(null);
     setMessage(null);
     try {
       const result = await apiDelete<ApiMessage>(`/drivers/${driver.id}`);
-      setMessage(result.message ?? "Driver deleted.");
+      setMessage(result.message ?? "Driver archived.");
       await loadDrivers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete driver");
+      setError(err instanceof Error ? err.message : "Failed to archive driver");
     }
   }
 
@@ -253,7 +253,7 @@ export default function DriversPage() {
                 <td>{expiryBadge(driver.license_expiry_date)}</td>
                 <td>{driver.assigned_license_plate ?? "-"}</td>
                 <td><span className="badge">{driver.status}</span></td>
-                {canWrite && <td><div className="actions"><button className="secondaryButton smallButton" type="button" onClick={() => startEdit(driver)}>Edit</button><button className="dangerButton smallButton" type="button" onClick={() => void deleteDriver(driver)}>Delete</button></div></td>}
+                {canWrite && <td><div className="actions"><button className="secondaryButton smallButton" type="button" onClick={() => startEdit(driver)}>Edit</button><button className="dangerButton smallButton" type="button" onClick={() => void deleteDriver(driver)}>Archive</button></div></td>}
               </tr>
             ))}
             {drivers.length === 0 && <tr><td colSpan={canWrite ? 9 : 8} className="muted">No drivers match your filters.</td></tr>}

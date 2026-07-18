@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
-import { apiDelete, apiGet, apiPostForm, apiPut, fileHref } from "@/lib/api";
+import { apiDelete, apiDownloadFile, apiGet, apiPostForm, apiPut } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { FUEL_TYPES } from "@/lib/constants";
 import { toApiDate, toInputDate, todayInputDate } from "@/lib/format";
@@ -167,15 +167,15 @@ export default function FuelPage() {
   }
 
   async function deleteFuel(record: FuelRecord) {
-    if (!confirm(`Delete fuel record for ${record.license_plate} from ${record.refuel_date}?`)) return;
+    if (!confirm(`Archive fuel record for ${record.license_plate} from ${record.refuel_date}?\n\nIt will be hidden from normal views but retained for history and audit purposes.`)) return;
     setError(null);
     setMessage(null);
     try {
       const result = await apiDelete<ApiMessage>(`/fuel/${record.id}`);
-      setMessage(result.message ?? "Fuel record deleted.");
+      setMessage(result.message ?? "Fuel record archived.");
       await loadFuelRecords();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete fuel record");
+      setError(err instanceof Error ? err.message : "Failed to archive fuel record");
     }
   }
 
@@ -245,11 +245,11 @@ export default function FuelPage() {
                   <td>{canWrite && isEditing ? <input className="input compactInput" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /> : record.location}</td>
                   <td>{canWrite && isEditing ? <input className="input compactInput" value={editForm.station_name} onChange={(e) => setEditForm({ ...editForm, station_name: e.target.value })} /> : record.station_name}</td>
                   <td>{canWrite && isEditing ? <input className="input compactInput" type="number" value={editForm.odometer_km} onChange={(e) => setEditForm({ ...editForm, odometer_km: e.target.value })} /> : record.odometer_km}</td>
-                  <td>{record.bill_file_path ? <a className="link" href={fileHref(record.bill_file_path)} target="_blank">Open</a> : "-"}</td>
+                  <td>{record.bill_file_path ? <button className="linkButton" type="button" onClick={() => void apiDownloadFile(record.bill_file_path!, `fuel-${record.id}-bill`)}>Download</button> : "-"}</td>
                   {canWrite && <td>
                     <div className="actions">
                       {isEditing ? <><button className="button smallButton" type="button" onClick={() => void saveEdit(record.id)}>Save</button><button className="secondaryButton smallButton" type="button" onClick={() => { setEditingId(null); setEditForm(null); }}>Cancel</button></> : <button className="secondaryButton smallButton" type="button" onClick={() => startEdit(record)}>Edit</button>}
-                      <button className="dangerButton smallButton" type="button" onClick={() => void deleteFuel(record)}>Delete</button>
+                      <button className="dangerButton smallButton" type="button" onClick={() => void deleteFuel(record)}>Archive</button>
                     </div>
                   </td>}
                 </tr>

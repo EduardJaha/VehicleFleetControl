@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
@@ -9,6 +11,8 @@ from app.schemas import UserRole, VehicleCreate, VehicleOut, VehicleUpdate, Upda
 from app.schemas import MaintenanceTimelinePage, VehicleMaintenanceSummaryOut
 from app.api.v1.endpoints.maintenance import vehicle_summary, vehicle_timeline
 from app.utils.domain import find_vehicle_by_plate, parse_vehicle_status, status_name
+from app.services.audit import record_audit, snapshot
+from app.services.notifications import notify_roles
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -29,6 +33,9 @@ def vehicle_out(vehicle: Vehicle) -> VehicleOut:
         odometer_km=vehicle.odometer_km,
         status=vehicle.status,
         status_name=status_name(vehicle.status),
+        archived=vehicle.archived,
+        archived_at=vehicle.archived_at.isoformat() if vehicle.archived_at else None,
+        archived_by=vehicle.archived_by,
     )
 
 
@@ -63,9 +70,15 @@ def list_vehicles(
     search: str | None = None,
     brand_id: int | None = None,
     model_id: int | None = None,
+    include_archived: bool = False,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     query = db.query(Vehicle)
+    if include_archived and current_user.role != UserRole.admin.value:
+        raise HTTPException(status_code=403, detail="Only Admin users can include archived Vehicles.")
+    if not include_archived:
+        query = query.filter(Vehicle.archived.is_(False))
     if status is not None and status != "":
         query = query.filter(Vehicle.status == parse_vehicle_status(status))
     if brand_id is not None:
@@ -85,7 +98,7 @@ def list_vehicles(
 
 
 @router.post("", response_model=VehicleOut, status_code=201)
-def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     brand, model = validate_catalog_selection(db, payload.brand_id, payload.model_id)
     vehicle = Vehicle(
         brand_id=brand.id,
@@ -103,6 +116,12 @@ def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), _: Use
     )
     db.add(vehicle)
     try:
+        db.flush()
+        record_audit(
+            db, action="Vehicle created", entity_type="Vehicle", entity_id=vehicle.id,
+            user=current_user, new_values=snapshot(vehicle),
+            description=f"Vehicle {vehicle.license_plate} created.",
+        )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -138,11 +157,13 @@ def get_vehicle_maintenance_timeline(vehicle_id: int, page: int = 1, page_size: 
 
 
 @router.put("/{vehicle_id}", response_model=VehicleOut)
-def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
 
+    old_values = snapshot(vehicle)
+    old_odometer = vehicle.odometer_km
     existing = find_vehicle_by_plate(db, payload.license_plate)
     if existing and existing.id != vehicle_id:
         raise HTTPException(status_code=409, detail=f"License plate '{payload.license_plate}' already exists.")
@@ -167,17 +188,41 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
     vehicle.engine_cc = payload.engine_cc
     vehicle.odometer_km = payload.odometer_km
     vehicle.status = parse_vehicle_status(payload.status)
+    record_audit(
+        db, action="Vehicle updated", entity_type="Vehicle", entity_id=vehicle.id,
+        user=current_user, old_values=old_values, new_values=snapshot(vehicle),
+        description=f"Vehicle {vehicle.license_plate} updated.",
+    )
+    if old_odometer != vehicle.odometer_km:
+        record_audit(
+            db, action="Vehicle odometer changed", entity_type="Vehicle", entity_id=vehicle.id,
+            user=current_user, old_values={"odometer_km": old_odometer},
+            new_values={"odometer_km": vehicle.odometer_km},
+            description=f"Vehicle {vehicle.license_plate} odometer changed.",
+        )
     db.commit()
     db.refresh(vehicle)
     return vehicle_out(vehicle)
 
 
 @router.put("/status/{license_plate}", response_model=VehicleOut)
-def update_vehicle_status(license_plate: str, payload: UpdateStatus, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def update_vehicle_status(license_plate: str, payload: UpdateStatus, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
+    old_status = vehicle.status
     vehicle.status = parse_vehicle_status(payload.status)
+    record_audit(
+        db, action="Vehicle status changed", entity_type="Vehicle", entity_id=vehicle.id,
+        user=current_user, old_values={"status": old_status}, new_values={"status": vehicle.status},
+        description=f"Vehicle {vehicle.license_plate} status changed.",
+    )
+    notify_roles(
+        db, roles={"admin", "fleet_manager"}, notification_type="Vehicle status changed",
+        title=f"{vehicle.license_plate} status changed", message=status_name(vehicle.status),
+        priority="Medium", entity_type="Vehicle", entity_id=vehicle.id,
+        deduplication_key=f"vehicle:{vehicle.id}:status:{vehicle.status}",
+    )
     db.commit()
     db.refresh(vehicle)
     return vehicle_out(vehicle)
@@ -195,10 +240,38 @@ def update_vehicle_location(license_plate: str, payload: UpdateLocation, db: Ses
 
 
 @router.delete("/{vehicle_id}")
-def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
-    db.delete(vehicle)
+    vehicle.archived = True
+    vehicle.archived_at = datetime.utcnow()
+    vehicle.archived_by = current_user.id
+    record_audit(
+        db, action="Vehicle archived", entity_type="Vehicle", entity_id=vehicle.id,
+        user=current_user, new_values={"archived": True},
+        description=f"Vehicle {vehicle.license_plate} archived.",
+    )
     db.commit()
-    return {"message": "Vehicle deleted."}
+    return {"message": "Vehicle archived."}
+
+
+@router.post("/{vehicle_id}/restore", response_model=VehicleOut)
+def restore_vehicle(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin)),
+):
+    vehicle = db.get(Vehicle, vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found.")
+    vehicle.archived = False
+    vehicle.archived_at = None
+    vehicle.archived_by = None
+    record_audit(
+        db, action="Vehicle restored", entity_type="Vehicle", entity_id=vehicle.id,
+        user=current_user, new_values={"archived": False},
+        description=f"Vehicle {vehicle.license_plate} restored.",
+    )
+    db.commit()
+    return vehicle_out(vehicle)

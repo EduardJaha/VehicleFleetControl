@@ -12,8 +12,8 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 
 @router.get("/summary", response_model=DashboardSummaryOut)
 def summary(db: Session = Depends(get_db)):
-    vehicles = db.query(Vehicle).all()
-    reservations = db.query(VehicleReservation).all()
+    vehicles = db.query(Vehicle).filter(Vehicle.archived.is_(False)).all()
+    reservations = db.query(VehicleReservation).filter(VehicleReservation.archived.is_(False)).all()
     status_counts = Counter(v.status for v in vehicles)
     location_counts = Counter(v.vehicle_location for v in vehicles)
     reservation_counts = Counter(r.status for r in reservations)
@@ -27,7 +27,7 @@ def summary(db: Session = Depends(get_db)):
 
 @router.get("/filtered")
 def filtered(status: str | None = None, location: str | None = None, db: Session = Depends(get_db)):
-    query = db.query(Vehicle)
+    query = db.query(Vehicle).filter(Vehicle.archived.is_(False))
     if status:
         query = query.filter(Vehicle.status == parse_vehicle_status(status))
     if location:

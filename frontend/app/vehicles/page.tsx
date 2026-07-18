@@ -11,7 +11,7 @@ import type { ApiMessage, Vehicle, VehiclePayload } from "@/lib/types";
 import { FUEL_TYPES, VEHICLE_STATUS_LABELS, VEHICLE_STATUSES } from "@/lib/constants";
 
 export default function VehiclesPage() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const canWrite = can("vehiclesWrite");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,13 +23,13 @@ export default function VehiclesPage() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
-  const [filters, setFilters] = useState({ search: "", fuel: "", location: "", status: "" });
+  const [filters, setFilters] = useState({ search: "", fuel: "", location: "", status: "", include_archived: false });
 
-  async function loadVehicles(status = filters.status) {
+  async function loadVehicles(status = filters.status, includeArchived = filters.include_archived) {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiGet<Vehicle[]>(`/vehicles${buildQuery({ status })}`);
+      const data = await apiGet<Vehicle[]>(`/vehicles${buildQuery({ status, include_archived: includeArchived || undefined })}`);
       setVehicles(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load vehicles");
@@ -113,15 +113,25 @@ export default function VehiclesPage() {
   }
 
   async function deleteVehicle(vehicle: Vehicle) {
-    if (!confirm(`Delete vehicle ${vehicle.license_plate}? This cannot be undone.`)) return;
+    if (!confirm(`Archive vehicle ${vehicle.license_plate}?\n\nIt will be hidden from normal views but retained for history and audit purposes.`)) return;
     setError(null);
     setMessage(null);
     try {
       const result = await apiDelete<ApiMessage>(`/vehicles/${vehicle.id}`);
-      setMessage(result.message ?? "Vehicle deleted.");
+      setMessage(result.message ?? "Vehicle archived.");
       await loadVehicles();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete vehicle");
+      setError(err instanceof Error ? err.message : "Failed to archive vehicle");
+    }
+  }
+
+  async function restoreVehicle(vehicle: Vehicle) {
+    try {
+      await apiPost<Vehicle>(`/vehicles/${vehicle.id}/restore`, {});
+      setMessage(`Vehicle ${vehicle.license_plate} restored.`);
+      await loadVehicles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to restore vehicle");
     }
   }
 
@@ -183,6 +193,7 @@ export default function VehiclesPage() {
           <option value="">All locations</option>
           {locations.map((location) => <option key={location}>{location}</option>)}
         </select>
+        {user?.role === "admin" && <label className="actions"><input type="checkbox" checked={filters.include_archived} onChange={(e) => { const include_archived = e.target.checked; setFilters({ ...filters, include_archived }); void loadVehicles(filters.status, include_archived); }} /> Include archived</label>}
       </div>
 
       {error && <div className="error spaced">{error}</div>}
@@ -203,12 +214,13 @@ export default function VehiclesPage() {
                 <td>{vehicle.fuel_type}</td>
                 <td>{vehicle.vehicle_location}</td>
                 <td>{vehicle.odometer_km ?? "-"}</td>
-                <td><span className="badge">{VEHICLE_STATUS_LABELS[vehicle.status] ?? vehicle.status_name}</span></td>
+                <td><span className="badge">{vehicle.archived ? "Archived" : VEHICLE_STATUS_LABELS[vehicle.status] ?? vehicle.status_name}</span></td>
                 <td>
                     <div className="actions"><Link className="secondaryButton smallButton" href={`/vehicles/${vehicle.id}`}>View</Link>
                       {canWrite && <>
-                      <button className="secondaryButton smallButton" type="button" onClick={() => openEditVehicle(vehicle)}>Edit</button>
-                      <button className="dangerButton smallButton" type="button" onClick={() => void deleteVehicle(vehicle)}>Delete</button>
+                      {!vehicle.archived && <><button className="secondaryButton smallButton" type="button" onClick={() => openEditVehicle(vehicle)}>Edit</button>
+                      <button className="dangerButton smallButton" type="button" onClick={() => void deleteVehicle(vehicle)}>Archive</button></>}
+                      {vehicle.archived && user?.role === "admin" && <button className="secondaryButton smallButton" type="button" onClick={() => void restoreVehicle(vehicle)}>Restore</button>}
                       </>}
                     </div>
                   </td>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
-import { apiGet, apiPostForm, fileHref } from "@/lib/api";
+import { apiDownloadFile, apiGet, apiPostForm } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toApiDate, todayInputDate } from "@/lib/format";
 import type { Accident, ApiMessage } from "@/lib/types";
@@ -126,7 +126,7 @@ export default function AccidentsPage() {
             <div className="formRow"><label htmlFor="accident-license-plate">License plate</label><input id="accident-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
             <div className="formRow"><label htmlFor="accident-date">Accident date</label><input id="accident-date" className="input" type="date" value={form.accident_date} onChange={(e) => setForm({ ...form, accident_date: e.target.value })} required /></div>
             <div className="formRow"><label htmlFor="accident-location">Location</label><input id="accident-location" className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} required /></div>
-            <div className="formRow"><label htmlFor="accident-files">Files/photos</label><input id="accident-files" className="input" type="file" multiple onChange={(e) => setFiles(e.target.files)} /></div>
+            <div className="formRow"><label htmlFor="accident-files">Photos</label><input id="accident-files" className="input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple onChange={(e) => setFiles(e.target.files)} /><span className="muted">JPEG, PNG, or WebP; maximum 8 MB each.</span></div>
             <div className="formRow span2"><label htmlFor="accident-description">Description</label><textarea id="accident-description" className="input textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           </div>
           <div className="actions dialogActions">
@@ -147,7 +147,7 @@ export default function AccidentsPage() {
         <table className="table">
           <thead><tr><th>Plate</th><th>Vehicle</th><th>Date</th><th>Location</th><th>Description</th><th>Files</th></tr></thead>
           <tbody>
-            {filtered.map((a) => <tr key={a.id}><td><strong>{a.license_plate ?? "-"}</strong></td><td>{a.brand ?? ""} {a.model ?? ""}</td><td>{a.accident_date}</td><td>{a.location ?? "-"}</td><td>{a.description ?? "-"}</td><td>{a.files.length > 0 ? a.files.map((file, index) => <a key={file} className="link stackedLink" href={fileHref(file)} target="_blank">File {index + 1}</a>) : "-"}</td></tr>)}
+            {filtered.map((a) => <tr key={a.id}><td><strong>{a.license_plate ?? "-"}</strong></td><td>{a.brand ?? ""} {a.model ?? ""}</td><td>{a.accident_date}</td><td>{a.location ?? "-"}</td><td>{a.description ?? "-"}</td><td>{a.files.length > 0 ? a.files.map((file, index) => <button key={file} className="linkButton stackedLink" type="button" onClick={() => void apiDownloadFile(file, `accident-${a.id}-${index + 1}`)}>Download {index + 1}</button>) : "-"}</td></tr>)}
             {filtered.length === 0 && <tr><td colSpan={6} className="muted">No accident records match your filters.</td></tr>}
           </tbody>
         </table>

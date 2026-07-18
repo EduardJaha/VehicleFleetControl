@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -10,16 +11,20 @@ from app.db.session import get_db
 from app.models import Driver, Inspection, User, Vehicle, VehicleService, WorkOrder
 from app.schemas import (
     LinkedInspection, LinkedService, LinkedServiceReminder, ReminderStatus, UserRole,
-    WorkOrderCreate, WorkOrderOut, WorkOrderPage, WorkOrderPriority, WorkOrderSource,
+    WorkOrderCompletionOut, WorkOrderCompletionRequest, WorkOrderCreate, WorkOrderOut,
+    WorkOrderPage, WorkOrderPriority, WorkOrderSource,
     WorkOrderStatus, WorkOrderStatusUpdate, WorkOrderUpdate,
 )
+from app.services.audit import record_audit, snapshot
+from app.services.notifications import notify_roles
+from app.services.work_order_completion import complete_work_order_transaction
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
-def decimal_from_text(value: str | None) -> Decimal | None:
+def decimal_from_text(value) -> Decimal | None:
     return Decimal(str(value)) if value is not None and value != "" else None
 
 
@@ -89,9 +94,12 @@ def validate_optional_links(
             raise HTTPException(status_code=409, detail="An open Work Order already exists for this Service Reminder.")
 
 
-def validate_completed(status: WorkOrderStatus, actual_completion_date: str | None) -> None:
-    if status == WorkOrderStatus.completed and not actual_completion_date:
-        raise HTTPException(status_code=400, detail="Completed work orders require actual_completion_date.")
+def prevent_generic_completion(status: WorkOrderStatus) -> None:
+    if status == WorkOrderStatus.completed:
+        raise HTTPException(
+            status_code=409,
+            detail="Use POST /api/v1/work-orders/{work_order_id}/complete to complete a Work Order.",
+        )
 
 
 def work_order_query(db: Session):
@@ -182,7 +190,7 @@ def work_order_out(work_order: WorkOrder) -> WorkOrderOut:
 
 
 def apply_payload(work_order: WorkOrder, payload: WorkOrderCreate | WorkOrderUpdate, db: Session) -> None:
-    validate_completed(payload.status, payload.actual_completion_date)
+    prevent_generic_completion(payload.status)
     vehicle_id = resolve_vehicle_id(db, payload.vehicle_id, payload.license_plate)
     validate_optional_links(db, vehicle_id, payload.driver_id, payload.inspection_id, payload.reminder_service_id, work_order.id)
     labor = payload.labor_cost
@@ -203,9 +211,9 @@ def apply_payload(work_order: WorkOrder, payload: WorkOrderCreate | WorkOrderUpd
     work_order.workshop = payload.workshop
     work_order.expected_completion_date = optional_date(payload.expected_completion_date, "ExpectedCompletionDate")
     work_order.actual_completion_date = optional_date(payload.actual_completion_date, "ActualCompletionDate")
-    work_order.labor_cost = str(labor) if labor is not None else None
-    work_order.parts_cost = str(parts) if parts is not None else None
-    work_order.total_cost = str(total) if total is not None else None
+    work_order.labor_cost = labor
+    work_order.parts_cost = parts
+    work_order.total_cost = total
     work_order.notes = payload.notes
     work_order.completed_odometer_km = payload.completed_odometer_km
     work_order.completion_notes = payload.completion_notes
@@ -231,10 +239,13 @@ def list_work_orders(
     has_linked_service: bool | None = None,
     include_archived: bool = False,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     query = work_order_query(db)
     if page < 1 or page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
+    if include_archived and current_user.role != UserRole.admin.value:
+        raise HTTPException(status_code=403, detail="Only Admin users can include archived Work Orders.")
     if not include_archived:
         query = query.filter(WorkOrder.archived.is_(False))
     if search:
@@ -278,6 +289,20 @@ def create_work_order(payload: WorkOrderCreate, db: Session = Depends(get_db), c
     apply_payload(work_order, payload, db)
     work_order.created_by = current_user.full_name
     db.add(work_order)
+    db.flush()
+    record_audit(
+        db, action="Work Order created", entity_type="WorkOrder", entity_id=work_order.id,
+        user=current_user, new_values=snapshot(work_order),
+        description=f"Work Order #{work_order.id} created for vehicle #{work_order.vehicle_id}.",
+    )
+    if work_order.priority == WorkOrderPriority.critical.value:
+        notify_roles(
+            db, roles={"admin", "fleet_manager", "mechanic"},
+            notification_type="Critical Work Order created",
+            title=f"Critical Work Order #{work_order.id}",
+            message=work_order.title, priority="Critical", entity_type="WorkOrder",
+            entity_id=work_order.id, deduplication_key=f"work-order:{work_order.id}:critical",
+        )
     db.commit()
     db.refresh(work_order)
     return work_order_out(work_order_query(db).filter(WorkOrder.id == work_order.id).one())
@@ -292,12 +317,18 @@ def get_work_order(work_order_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{work_order_id}", response_model=WorkOrderOut)
-def update_work_order(work_order_id: int, payload: WorkOrderUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def update_work_order(work_order_id: int, payload: WorkOrderUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
     work_order = work_order_query(db).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="Work order not found.")
+    old_values = snapshot(work_order)
     apply_payload(work_order, payload, db)
     work_order.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Work Order updated", entity_type="WorkOrder", entity_id=work_order.id,
+        user=current_user, old_values=old_values, new_values=snapshot(work_order),
+        description=f"Work Order #{work_order.id} updated.",
+    )
     db.commit()
     db.refresh(work_order)
     return work_order_out(work_order_query(db).filter(WorkOrder.id == work_order.id).one())
@@ -308,34 +339,122 @@ def update_work_order_status(work_order_id: int, payload: WorkOrderStatusUpdate,
     work_order = work_order_query(db).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="Work order not found.")
-    validate_completed(payload.status, payload.actual_completion_date or format_date(work_order.actual_completion_date))
+    prevent_generic_completion(payload.status)
+    old_status = work_order.status
     work_order.status = payload.status.value
     if payload.actual_completion_date:
         work_order.actual_completion_date = parse_date(payload.actual_completion_date, "ActualCompletionDate")
-    if payload.status == WorkOrderStatus.completed:
-        work_order.completed_by = work_order.completed_by or current_user.full_name
     work_order.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Work Order status changed", entity_type="WorkOrder", entity_id=work_order.id,
+        user=current_user, old_values={"status": old_status}, new_values={"status": work_order.status},
+        description=f"Work Order #{work_order.id} changed from {old_status} to {work_order.status}.",
+    )
+    if payload.status in {WorkOrderStatus.assigned, WorkOrderStatus.waiting_for_parts}:
+        notification_type = "Work Order assigned" if payload.status == WorkOrderStatus.assigned else "Work Order waiting for parts"
+        notify_roles(
+            db, roles={"admin", "fleet_manager", "mechanic"}, notification_type=notification_type,
+            title=f"Work Order #{work_order.id}: {payload.status.value}",
+            message=work_order.title, priority=work_order.priority, entity_type="WorkOrder",
+            entity_id=work_order.id,
+            deduplication_key=f"work-order:{work_order.id}:{payload.status.value.lower().replace(' ', '-')}",
+        )
     db.commit()
     db.refresh(work_order)
     return work_order_out(work_order)
 
 
 @router.delete("/{work_order_id}")
-def delete_work_order(work_order_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def delete_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
     work_order = db.get(WorkOrder, work_order_id)
     if not work_order:
         raise HTTPException(status_code=404, detail="Work order not found.")
-    db.delete(work_order)
+    work_order.archived = True
+    work_order.archived_at = datetime.utcnow()
+    work_order.archived_by = current_user.id
+    record_audit(
+        db, action="Work Order archived", entity_type="WorkOrder", entity_id=work_order.id,
+        user=current_user, new_values={"archived": True},
+        description=f"Work Order #{work_order.id} archived.",
+    )
     db.commit()
-    return {"message": "Work order deleted."}
+    return {"message": "Work Order archived."}
 
 
 @router.put("/{work_order_id}/archive", response_model=WorkOrderOut)
-def archive_work_order(work_order_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def archive_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     work_order = work_order_query(db).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="Work order not found.")
     work_order.archived = True
+    work_order.archived_at = datetime.utcnow()
+    work_order.archived_by = current_user.id
     work_order.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Work Order archived", entity_type="WorkOrder", entity_id=work_order.id,
+        user=current_user, new_values={"archived": True},
+        description=f"Work Order #{work_order.id} archived.",
+    )
     db.commit()
     return work_order_out(work_order)
+
+
+@router.post("/{work_order_id}/restore", response_model=WorkOrderOut)
+def restore_work_order(
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin)),
+):
+    work_order = work_order_query(db).filter(WorkOrder.id == work_order_id).first()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="Work order not found.")
+    work_order.archived = False
+    work_order.archived_at = None
+    work_order.archived_by = None
+    work_order.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Work Order restored", entity_type="WorkOrder", entity_id=work_order.id,
+        user=current_user, new_values={"archived": False},
+        description=f"Work Order #{work_order.id} restored.",
+    )
+    db.commit()
+    return work_order_out(work_order)
+
+
+@router.post("/{work_order_id}/complete", response_model=WorkOrderCompletionOut)
+def complete_work_order(
+    work_order_id: int,
+    payload: WorkOrderCompletionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic)),
+):
+    try:
+        work_order, service, reminder_resolved, next_reminder_created = complete_work_order_transaction(
+            db, work_order_id, payload, current_user
+        )
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"Work Order #{work_order_id} already has a linked Service.") from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    refreshed = work_order_query(db).filter(WorkOrder.id == work_order_id).one()
+    linked = None
+    if service:
+        linked = LinkedService(
+            id=service.id,
+            service_type=service.service_type,
+            service_date=format_date(service.service_date) or "",
+            total_cost=service.cost,
+        )
+    return WorkOrderCompletionOut(
+        work_order=work_order_out(refreshed),
+        service=linked,
+        reminder_resolved=reminder_resolved,
+        next_reminder_created=next_reminder_created,
+    )

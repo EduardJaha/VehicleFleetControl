@@ -11,6 +11,7 @@ from app.models import Driver, User, Vehicle
 from app.schemas import DriverCreate, DriverOut, DriverStatus, DriverUpdate, UserRole
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate
+from app.services.audit import record_audit, snapshot
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -33,6 +34,9 @@ def driver_out(driver: Driver) -> DriverOut:
         notes=driver.notes,
         created_at=driver.created_at.isoformat(),
         updated_at=driver.updated_at.isoformat(),
+        archived=driver.archived,
+        archived_at=driver.archived_at.isoformat() if driver.archived_at else None,
+        archived_by=driver.archived_by,
     )
 
 
@@ -74,9 +78,15 @@ def list_drivers(
     department: str | None = None,
     assigned_vehicle_id: int | None = None,
     license_expiring_before: str | None = None,
+    include_archived: bool = False,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     query = db.query(Driver).options(joinedload(Driver.assigned_vehicle))
+    if include_archived and current_user.role != UserRole.admin.value:
+        raise HTTPException(status_code=403, detail="Only Admin users can include archived Drivers.")
+    if not include_archived:
+        query = query.filter(Driver.archived.is_(False))
     if search:
         text = f"%{search.strip()}%"
         query = query.filter(
@@ -101,11 +111,17 @@ def list_drivers(
 
 
 @router.post("", response_model=DriverOut, status_code=201)
-def create_driver(payload: DriverCreate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def create_driver(payload: DriverCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     driver = Driver()
     apply_driver_payload(driver, payload, db)
     db.add(driver)
     try:
+        db.flush()
+        record_audit(
+            db, action="Driver created", entity_type="Driver", entity_id=driver.id,
+            user=current_user, new_values=snapshot(driver),
+            description=f"Driver {driver.full_name} created.",
+        )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -123,12 +139,28 @@ def get_driver(driver_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{driver_id}", response_model=DriverOut)
-def update_driver(driver_id: int, payload: DriverUpdate, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def update_driver(driver_id: int, payload: DriverUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     driver = db.query(Driver).options(joinedload(Driver.assigned_vehicle)).filter(Driver.id == driver_id).first()
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found.")
+    old_values = snapshot(driver)
+    old_assignment = driver.assigned_vehicle_id
     apply_driver_payload(driver, payload, db)
     driver.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Driver updated", entity_type="Driver", entity_id=driver.id,
+        user=current_user, old_values=old_values, new_values=snapshot(driver),
+        description=f"Driver {driver.full_name} updated.",
+    )
+    if old_assignment != driver.assigned_vehicle_id:
+        record_audit(
+            db,
+            action="Vehicle assigned to Driver" if driver.assigned_vehicle_id else "Vehicle unassigned",
+            entity_type="Driver", entity_id=driver.id, user=current_user,
+            old_values={"assigned_vehicle_id": old_assignment},
+            new_values={"assigned_vehicle_id": driver.assigned_vehicle_id},
+            description=f"Vehicle assignment changed for {driver.full_name}.",
+        )
     try:
         db.commit()
     except IntegrityError as exc:
@@ -139,10 +171,39 @@ def update_driver(driver_id: int, payload: DriverUpdate, db: Session = Depends(g
 
 
 @router.delete("/{driver_id}")
-def delete_driver(driver_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def delete_driver(driver_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     driver = db.get(Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found.")
-    db.delete(driver)
+    driver.archived = True
+    driver.archived_at = datetime.utcnow()
+    driver.archived_by = current_user.id
+    record_audit(
+        db, action="Driver archived", entity_type="Driver", entity_id=driver.id,
+        user=current_user, new_values={"archived": True},
+        description=f"Driver {driver.full_name} archived.",
+    )
     db.commit()
-    return {"message": "Driver deleted."}
+    return {"message": "Driver archived."}
+
+
+@router.post("/{driver_id}/restore", response_model=DriverOut)
+def restore_driver(
+    driver_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin)),
+):
+    driver = db.query(Driver).options(joinedload(Driver.assigned_vehicle)).filter(Driver.id == driver_id).first()
+    if not driver:
+        raise HTTPException(status_code=404, detail="Driver not found.")
+    driver.archived = False
+    driver.archived_at = None
+    driver.archived_by = None
+    driver.updated_at = datetime.utcnow()
+    record_audit(
+        db, action="Driver restored", entity_type="Driver", entity_id=driver.id,
+        user=current_user, new_values={"archived": False},
+        description=f"Driver {driver.full_name} restored.",
+    )
+    db.commit()
+    return driver_out(driver)

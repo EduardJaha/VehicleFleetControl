@@ -1,0 +1,103 @@
+from datetime import datetime
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.models import Notification, User
+
+ACTIVE_STATUSES = {"Unread", "Read"}
+
+
+def notify_user(
+    db: Session,
+    *,
+    user_id: int,
+    notification_type: str,
+    title: str,
+    message: str,
+    priority: str,
+    entity_type: str | None,
+    entity_id: int | None,
+    deduplication_key: str,
+) -> Notification:
+    existing = db.query(Notification).filter(
+        Notification.deduplication_key == deduplication_key,
+    ).first()
+    if existing:
+        existing.notification_type = notification_type
+        existing.title = title
+        existing.message = message
+        existing.priority = priority
+        existing.entity_type = entity_type
+        existing.entity_id = entity_id
+        if existing.status in {"Resolved", "Dismissed"}:
+            existing.status = "Unread"
+            existing.read_at = None
+            existing.resolved_at = None
+            existing.dismissed_at = None
+        return existing
+
+    notification = Notification(
+        user_id=user_id,
+        notification_type=notification_type,
+        title=title,
+        message=message,
+        priority=priority,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        deduplication_key=deduplication_key,
+    )
+    db.add(notification)
+    return notification
+
+
+def notify_roles(
+    db: Session,
+    *,
+    roles: set[str],
+    notification_type: str,
+    title: str,
+    message: str,
+    priority: str,
+    entity_type: str | None,
+    entity_id: int | None,
+    deduplication_key: str,
+) -> list[Notification]:
+    users = db.query(User).filter(User.is_active.is_(True), User.role.in_(roles)).all()
+    return [
+        notify_user(
+            db,
+            user_id=user.id,
+            notification_type=notification_type,
+            title=title,
+            message=message,
+            priority=priority,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            deduplication_key=f"{deduplication_key}:user:{user.id}",
+        )
+        for user in users
+    ]
+
+
+def transition(notification: Notification, status: str) -> None:
+    now = datetime.utcnow()
+    notification.status = status
+    if status == "Read":
+        notification.read_at = notification.read_at or now
+    elif status == "Resolved":
+        notification.read_at = notification.read_at or now
+        notification.resolved_at = now
+    elif status == "Dismissed":
+        notification.read_at = notification.read_at or now
+        notification.dismissed_at = now
+
+
+def resolve_by_prefix(db: Session, prefix: str) -> int:
+    rows = db.query(Notification).filter(
+        Notification.deduplication_key.like(f"{prefix}%"),
+        Notification.status.in_(ACTIVE_STATUSES),
+    ).all()
+    for row in rows:
+        transition(row, "Resolved")
+    return len(rows)

@@ -45,17 +45,17 @@ export default function LoginPage() {
         <form className="form fullWidthForm" onSubmit={submit}>
           {mode === "register" && (
             <div className="formRow">
-              <label>Full name</label>
-              <input className="input" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+              <label htmlFor="full-name">Full name</label>
+              <input id="full-name" className="input" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
             </div>
           )}
           <div className="formRow">
-            <label>Email</label>
-            <input className="input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            <label htmlFor="email">Email</label>
+            <input id="email" className="input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
           </div>
           <div className="formRow">
-            <label>Password</label>
-            <input className="input" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required />
+            <label htmlFor="password">Password</label>
+            <input id="password" className="input" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required />
           </div>
           <button className="button" type="submit" disabled={loading}>
             {loading ? "Please wait..." : mode === "register" ? "Create Admin" : "Login"}

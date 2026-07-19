@@ -70,9 +70,20 @@ class VehicleModel(Base):
 class Vehicle(Base):
     __tablename__ = "Vehicles"
     __table_args__ = (
-        UniqueConstraint("LicensePlate", name="uq_vehicles_license_plate"),
+        UniqueConstraint(
+            "RegistrationCountry",
+            "LicensePlateNormalized",
+            name="uq_vehicles_registration_country_license_plate_normalized",
+        ),
         Index("ix_vehicles_brand_id", "BrandId"),
         Index("ix_vehicles_model_id", "ModelId"),
+        Index("ix_vehicles_registration_country", "RegistrationCountry"),
+        Index("ix_vehicles_license_plate_normalized", "LicensePlateNormalized"),
+        Index(
+            "ix_vehicles_registration_country_license_plate_normalized",
+            "RegistrationCountry",
+            "LicensePlateNormalized",
+        ),
     )
 
     id = Column("Id", Integer, primary_key=True, index=True)
@@ -83,6 +94,8 @@ class Vehicle(Base):
     fuel_type = Column("FuelType", String, nullable=False)
     vehicle_location = Column("VehicleLocation", String, nullable=False)
     license_plate = Column("LicensePlate", String, nullable=False, index=True)
+    registration_country = Column("RegistrationCountry", String(2), nullable=False)
+    license_plate_normalized = Column("LicensePlateNormalized", String(7), nullable=False)
     status = Column("Status", Integer, nullable=False, default=0)
     engine_cc = Column("EngineCc", Integer, nullable=True)
     vin_number = Column("VinNumber", String(50), nullable=True)

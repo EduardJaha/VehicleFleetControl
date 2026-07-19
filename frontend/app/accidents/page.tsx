@@ -123,7 +123,7 @@ export default function AccidentsPage() {
         <form onSubmit={reportAccident} className="form dialogForm">
           {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label htmlFor="accident-license-plate">License plate</label><input id="accident-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label htmlFor="accident-license-plate">Licence plate</label><input id="accident-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="Albania or Kosovo plate" required /></div>
             <div className="formRow"><label htmlFor="accident-date">Accident date</label><input id="accident-date" className="input" type="date" value={form.accident_date} onChange={(e) => setForm({ ...form, accident_date: e.target.value })} required /></div>
             <div className="formRow"><label htmlFor="accident-location">Location</label><input id="accident-location" className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} required /></div>
             <div className="formRow"><label htmlFor="accident-files">Photos</label><input id="accident-files" className="input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple onChange={(e) => setFiles(e.target.files)} /><span className="muted">JPEG, PNG, or WebP; maximum 8 MB each.</span></div>

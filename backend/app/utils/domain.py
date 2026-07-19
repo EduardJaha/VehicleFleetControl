@@ -1,7 +1,7 @@
 from enum import IntEnum
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from app.services.license_plates import normalized_plate_search
 from app.models import Vehicle
 
 
@@ -20,7 +20,7 @@ class ReservationStatusEnum(IntEnum):
 
 
 def normalize_plate(plate: str | None) -> str:
-    return (plate or "").upper().replace(" ", "").strip()
+    return normalized_plate_search(plate)
 
 
 def status_name(status: int) -> str:
@@ -67,6 +67,6 @@ def find_vehicle_by_plate(db: Session, plate: str) -> Vehicle | None:
     normalized = normalize_plate(plate)
     return (
         db.query(Vehicle)
-        .filter(func.upper(func.replace(Vehicle.license_plate, " ", "")) == normalized)
+        .filter(Vehicle.license_plate_normalized == normalized)
         .first()
     )

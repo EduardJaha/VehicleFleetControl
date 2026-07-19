@@ -5,9 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
 import { VehicleForm, vehicleToPayload } from "@/components/vehicles/VehicleForm";
-import { apiDelete, apiGet, apiPost, apiPut, buildQuery } from "@/lib/api";
+import { apiDelete, apiGet, apiPost, apiPut, buildQuery, vehicleRegistrationApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { ApiMessage, Vehicle, VehiclePayload } from "@/lib/types";
+import { normalizePlateInput } from "@/lib/licensePlates";
+import type { ApiMessage, RegistrationCountryCode, RegistrationCountryOption, Vehicle, VehiclePayload } from "@/lib/types";
 import { FUEL_TYPES, VEHICLE_STATUS_LABELS, VEHICLE_STATUSES } from "@/lib/constants";
 
 export default function VehiclesPage() {
@@ -23,13 +24,24 @@ export default function VehiclesPage() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
-  const [filters, setFilters] = useState({ search: "", fuel: "", location: "", status: "", include_archived: false });
+  const [countries, setCountries] = useState<RegistrationCountryOption[]>([]);
+  const [filters, setFilters] = useState({ search: "", registration_country: "" as RegistrationCountryCode | "", fuel: "", location: "", status: "", include_archived: false });
 
-  async function loadVehicles(status = filters.status, includeArchived = filters.include_archived) {
+  async function loadVehicles(
+    status = filters.status,
+    includeArchived = filters.include_archived,
+    registrationCountry = filters.registration_country,
+    search = filters.search
+  ) {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiGet<Vehicle[]>(`/vehicles${buildQuery({ status, include_archived: includeArchived || undefined })}`);
+      const data = await apiGet<Vehicle[]>(`/vehicles${buildQuery({
+        status,
+        registration_country: registrationCountry,
+        search,
+        include_archived: includeArchived || undefined
+      })}`);
       setVehicles(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load vehicles");
@@ -40,6 +52,7 @@ export default function VehiclesPage() {
 
   useEffect(() => {
     void loadVehicles("");
+    void vehicleRegistrationApi.getCountries().then(setCountries).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -47,8 +60,11 @@ export default function VehiclesPage() {
 
   const filtered = useMemo(() => {
     const text = filters.search.trim().toLowerCase();
+    const normalizedPlate = normalizePlateInput(filters.search);
     return vehicles.filter((vehicle) => {
-      const matchesText = !text || [vehicle.license_plate, vehicle.brand, vehicle.model, vehicle.vehicle_location, vehicle.vin_number ?? ""].some((value) => value.toLowerCase().includes(text));
+      const matchesText = !text
+        || normalizePlateInput(vehicle.license_plate).includes(normalizedPlate)
+        || [vehicle.brand, vehicle.model, vehicle.vehicle_location, vehicle.vin_number ?? ""].some((value) => value.toLowerCase().includes(text));
       const matchesFuel = !filters.fuel || vehicle.fuel_type === filters.fuel;
       const matchesLocation = !filters.location || vehicle.vehicle_location === filters.location;
       return matchesText && matchesFuel && matchesLocation;
@@ -181,6 +197,20 @@ export default function VehiclesPage() {
 
       <div className="card filtersGrid">
         <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, brand, model, VIN, location" />
+        <button className="secondaryButton" type="button" onClick={() => void loadVehicles()}>Search</button>
+        <select
+          className="select"
+          aria-label="Registration country"
+          value={filters.registration_country}
+          onChange={(e) => {
+            const registration_country = e.target.value as RegistrationCountryCode | "";
+            setFilters((current) => ({ ...current, registration_country }));
+            void loadVehicles(filters.status, filters.include_archived, registration_country);
+          }}
+        >
+          <option value="">All countries</option>
+          {countries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
+        </select>
         <select className="select" value={filters.status} onChange={(e) => { const status = e.target.value; setFilters((current) => ({ ...current, status })); void loadVehicles(status); }}>
           <option value="">All statuses</option>
           {VEHICLE_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
@@ -202,12 +232,13 @@ export default function VehiclesPage() {
         <table className="table">
           <thead>
             <tr>
-              <th>Plate</th><th>Brand</th><th>Model</th><th>Fuel</th><th>Location</th><th>Odometer</th><th>Status</th><th>Actions</th>
+              <th>Country</th><th>Licence plate</th><th>Brand</th><th>Model</th><th>Fuel</th><th>Location</th><th>Odometer</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((vehicle) => (
               <tr key={vehicle.id}>
+                <td>{vehicle.registration_country_name ?? "Unresolved"}</td>
                 <td><strong>{vehicle.license_plate}</strong></td>
                 <td>{vehicle.brand}</td>
                 <td>{vehicle.model}</td>
@@ -226,7 +257,7 @@ export default function VehiclesPage() {
                   </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={8} className="muted">No vehicles match your filters.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={9} className="muted">No vehicles match your filters.</td></tr>}
           </tbody>
         </table>
       )}

@@ -63,6 +63,7 @@ def vehicle_and_order(db: Session, *, odometer: int = 100_000) -> tuple[Vehicle,
     vehicle = Vehicle(
         brand="Toyota", model="Corolla", fuel_type="Hybrid",
         vehicle_location="Belgrade", license_plate=f"01-{sequence:03d}-AA",
+        registration_country="XK", license_plate_normalized=f"01{sequence:03d}AA",
         status=0, odometer_km=odometer,
     )
     db.add(vehicle)
@@ -198,8 +199,8 @@ def test_vehicle_delete_archives_and_admin_can_restore(db: Session, users):
     assert db.get(Vehicle, vehicle.id) is not None
     assert db.get(Vehicle, vehicle.id).archived is True
     assert db.get(WorkOrder, order.id) is not None
-    assert list_vehicles(None, None, None, None, False, db, users["viewer"]) == []
-    archived = list_vehicles(None, None, None, None, True, db, users["admin"])
+    assert list_vehicles(None, None, None, None, None, False, db, users["viewer"]) == []
+    archived = list_vehicles(None, None, None, None, None, True, db, users["admin"])
     assert [row.id for row in archived] == [vehicle.id]
     restored = restore_vehicle(vehicle.id, db, users["admin"])
     assert restored.archived is False
@@ -249,7 +250,8 @@ def test_notifications_deduplicate_and_transitions_are_user_scoped(db: Session, 
 def test_numeric_sorting_and_aggregation_use_database_numeric_types(db: Session):
     vehicle = Vehicle(
         brand="A", model="B", fuel_type="Diesel", vehicle_location="Belgrade",
-        license_plate="01-777-AA", status=0,
+        registration_country="XK", license_plate="01-777-AA",
+        license_plate_normalized="01777AA", status=0,
     )
     db.add(vehicle)
     db.flush()

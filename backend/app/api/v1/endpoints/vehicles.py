@@ -7,12 +7,17 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
 from app.models import User, Vehicle, VehicleBrand, VehicleModel
-from app.schemas import UserRole, VehicleCreate, VehicleOut, VehicleUpdate, UpdateLocation, UpdateStatus
+from app.schemas import RegistrationCountry, UserRole, VehicleCreate, VehicleOut, VehicleUpdate, UpdateLocation, UpdateStatus
 from app.schemas import MaintenanceTimelinePage, VehicleMaintenanceSummaryOut
 from app.api.v1.endpoints.maintenance import vehicle_summary, vehicle_timeline
 from app.utils.domain import find_vehicle_by_plate, parse_vehicle_status, status_name
 from app.services.audit import record_audit, snapshot
 from app.services.notifications import notify_roles
+from app.services.license_plates import (
+    normalized_plate_search,
+    normalize_license_plate,
+    registration_country_name,
+)
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -26,6 +31,8 @@ def vehicle_out(vehicle: Vehicle) -> VehicleOut:
         model=vehicle.model,
         fuel_type=vehicle.fuel_type,
         vehicle_location=vehicle.vehicle_location,
+        registration_country=vehicle.registration_country,
+        registration_country_name=registration_country_name(vehicle.registration_country),
         license_plate=vehicle.license_plate,
         year=vehicle.year,
         vin_number=vehicle.vin_number,
@@ -70,6 +77,7 @@ def list_vehicles(
     search: str | None = None,
     brand_id: int | None = None,
     model_id: int | None = None,
+    registration_country: RegistrationCountry | None = None,
     include_archived: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -85,10 +93,13 @@ def list_vehicles(
         query = query.filter(Vehicle.brand_id == brand_id)
     if model_id is not None:
         query = query.filter(Vehicle.model_id == model_id)
+    if registration_country is not None:
+        query = query.filter(Vehicle.registration_country == registration_country.value)
     if search and search.strip():
         term = f"%{search.strip()}%"
+        normalized_term = f"%{normalized_plate_search(search)}%"
         query = query.filter(or_(
-            Vehicle.license_plate.ilike(term),
+            Vehicle.license_plate_normalized.ilike(normalized_term),
             Vehicle.brand.ilike(term),
             Vehicle.model.ilike(term),
             Vehicle.vehicle_location.ilike(term),
@@ -100,6 +111,21 @@ def list_vehicles(
 @router.post("", response_model=VehicleOut, status_code=201)
 def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
     brand, model = validate_catalog_selection(db, payload.brand_id, payload.model_id)
+    normalized_plate = normalize_license_plate(payload.registration_country, payload.license_plate)
+    existing = (
+        db.query(Vehicle)
+        .filter(
+            Vehicle.registration_country == payload.registration_country.value,
+            Vehicle.license_plate_normalized == normalized_plate,
+        )
+        .first()
+    )
+    if existing:
+        country_name = registration_country_name(payload.registration_country)
+        raise HTTPException(
+            status_code=409,
+            detail=f"This licence plate is already assigned to another Vehicle in {country_name}.",
+        )
     vehicle = Vehicle(
         brand_id=brand.id,
         model_id=model.id,
@@ -107,7 +133,9 @@ def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), curren
         model=model.name,
         fuel_type=payload.fuel_type.strip(),
         vehicle_location=payload.vehicle_location.strip(),
+        registration_country=payload.registration_country.value,
         license_plate=payload.license_plate,
+        license_plate_normalized=normalized_plate,
         year=payload.year,
         vin_number=payload.vin_number.strip() if payload.vin_number else None,
         engine_cc=payload.engine_cc,
@@ -125,7 +153,11 @@ def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), curren
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail=f"License plate '{payload.license_plate}' already exists.") from exc
+        country_name = registration_country_name(payload.registration_country)
+        raise HTTPException(
+            status_code=409,
+            detail=f"This licence plate is already assigned to another Vehicle in {country_name}.",
+        ) from exc
     db.refresh(vehicle)
     return vehicle_out(vehicle)
 
@@ -164,9 +196,22 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
 
     old_values = snapshot(vehicle)
     old_odometer = vehicle.odometer_km
-    existing = find_vehicle_by_plate(db, payload.license_plate)
-    if existing and existing.id != vehicle_id:
-        raise HTTPException(status_code=409, detail=f"License plate '{payload.license_plate}' already exists.")
+    normalized_plate = normalize_license_plate(payload.registration_country, payload.license_plate)
+    existing = (
+        db.query(Vehicle)
+        .filter(
+            Vehicle.registration_country == payload.registration_country.value,
+            Vehicle.license_plate_normalized == normalized_plate,
+            Vehicle.id != vehicle_id,
+        )
+        .first()
+    )
+    if existing:
+        country_name = registration_country_name(payload.registration_country)
+        raise HTTPException(
+            status_code=409,
+            detail=f"This licence plate is already assigned to another Vehicle in {country_name}.",
+        )
 
     brand, model = validate_catalog_selection(
         db,
@@ -182,7 +227,11 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
         vehicle.model = model.name
     vehicle.fuel_type = payload.fuel_type.strip()
     vehicle.vehicle_location = payload.vehicle_location.strip()
+    old_registration_country = vehicle.registration_country
+    old_license_plate = vehicle.license_plate
+    vehicle.registration_country = payload.registration_country.value
     vehicle.license_plate = payload.license_plate
+    vehicle.license_plate_normalized = normalized_plate
     vehicle.year = payload.year
     vehicle.vin_number = payload.vin_number.strip() if payload.vin_number else None
     vehicle.engine_cc = payload.engine_cc
@@ -193,6 +242,28 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
         user=current_user, old_values=old_values, new_values=snapshot(vehicle),
         description=f"Vehicle {vehicle.license_plate} updated.",
     )
+    registration_changes = {}
+    if old_registration_country != vehicle.registration_country:
+        registration_changes["registration_country"] = {
+            "old": old_registration_country,
+            "new": vehicle.registration_country,
+        }
+    if old_license_plate != vehicle.license_plate:
+        registration_changes["license_plate"] = {
+            "old": old_license_plate,
+            "new": vehicle.license_plate,
+        }
+    if registration_changes:
+        record_audit(
+            db,
+            action="Vehicle registration changed",
+            entity_type="Vehicle",
+            entity_id=vehicle.id,
+            user=current_user,
+            old_values={key: value["old"] for key, value in registration_changes.items()},
+            new_values={key: value["new"] for key, value in registration_changes.items()},
+            description=f"Vehicle registration changed to {vehicle.license_plate}.",
+        )
     if old_odometer != vehicle.odometer_km:
         record_audit(
             db, action="Vehicle odometer changed", entity_type="Vehicle", entity_id=vehicle.id,
@@ -200,7 +271,15 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
             new_values={"odometer_km": vehicle.odometer_km},
             description=f"Vehicle {vehicle.license_plate} odometer changed.",
         )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        country_name = registration_country_name(payload.registration_country)
+        raise HTTPException(
+            status_code=409,
+            detail=f"This licence plate is already assigned to another Vehicle in {country_name}.",
+        ) from exc
     db.refresh(vehicle)
     return vehicle_out(vehicle)
 

@@ -13,7 +13,8 @@ from app.db.session import get_db
 from app.models import Driver, User, Vehicle, VehicleFuel, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
 from app.schemas import UserRole
 from app.utils.dates import format_date, parse_date
-from app.utils.domain import parse_vehicle_status, reservation_status_name, status_name
+from app.utils.domain import normalize_plate, parse_vehicle_status, reservation_status_name, status_name
+from app.services.license_plates import RegistrationCountry, registration_country_name
 from app.services.audit import record_audit
 
 router = APIRouter(dependencies=[Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.finance))])
@@ -42,10 +43,23 @@ def in_date_range(value: datetime | None, from_date: datetime | None, to_date: d
     return True
 
 
-def filtered_vehicles(db: Session, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None) -> list[Vehicle]:
+def filtered_vehicles(
+    db: Session,
+    license_plate: str | None = None,
+    vehicle_status: str | None = None,
+    department: str | None = None,
+    driver_id: int | None = None,
+    registration_country: str | None = None,
+) -> list[Vehicle]:
     query = db.query(Vehicle).options(joinedload(Vehicle.assigned_drivers)).filter(Vehicle.archived.is_(False))
     if license_plate:
-        query = query.filter(Vehicle.license_plate.ilike(f"%{license_plate.strip().upper()}%"))
+        query = query.filter(Vehicle.license_plate_normalized.ilike(f"%{normalize_plate(license_plate)}%"))
+    if registration_country:
+        try:
+            country = RegistrationCountry(registration_country.strip().upper())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Only Albania and Kosovo are currently supported.") from exc
+        query = query.filter(Vehicle.registration_country == country.value)
     if vehicle_status:
         query = query.filter(Vehicle.status == parse_vehicle_status(vehicle_status))
     if department or driver_id:
@@ -61,10 +75,18 @@ def report_response(kpis: dict, rows: list[dict]) -> dict:
     return {"kpis": kpis, "rows": rows}
 
 
+def registration_fields(vehicle: Vehicle) -> dict:
+    return {
+        "registration_country": vehicle.registration_country,
+        "registration_country_name": registration_country_name(vehicle.registration_country),
+    }
+
+
 def fleet_summary_report(db: Session, **filters) -> dict:
-    vehicles = filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))
+    vehicles = filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"), filters.get("registration_country"))
     rows = [
         {
+            **registration_fields(vehicle),
             "license_plate": vehicle.license_plate,
             "brand": vehicle.brand,
             "model": vehicle.model,
@@ -89,7 +111,7 @@ def fleet_summary_report(db: Session, **filters) -> dict:
 def fuel_costs_report(db: Session, **filters) -> dict:
     from_date = date_or_none(filters.get("from_date"), "from_date")
     to_date = date_or_none(filters.get("to_date"), "to_date")
-    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
+    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"), filters.get("registration_country"))}
     records = db.query(VehicleFuel).options(joinedload(VehicleFuel.vehicle)).filter(VehicleFuel.archived.is_(False)).order_by(VehicleFuel.refuel_date.desc()).all()
     rows = []
     total = Decimal("0")
@@ -102,6 +124,7 @@ def fuel_costs_report(db: Session, **filters) -> dict:
         total += row_total
         liters += row_liters
         rows.append({
+            **registration_fields(record.vehicle),
             "license_plate": record.vehicle.license_plate,
             "date": format_date(record.refuel_date),
             "fuel_type": record.fuel_type,
@@ -117,7 +140,7 @@ def fuel_costs_report(db: Session, **filters) -> dict:
 def service_costs_report(db: Session, **filters) -> dict:
     from_date = date_or_none(filters.get("from_date"), "from_date")
     to_date = date_or_none(filters.get("to_date"), "to_date")
-    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
+    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"), filters.get("registration_country"))}
     records = db.query(VehicleService).options(joinedload(VehicleService.vehicle)).filter(VehicleService.archived.is_(False)).order_by(VehicleService.service_date.desc()).all()
     rows = []
     total = Decimal("0")
@@ -127,6 +150,7 @@ def service_costs_report(db: Session, **filters) -> dict:
         row_cost = money(record.cost)
         total += row_cost
         rows.append({
+            **registration_fields(record.vehicle),
             "license_plate": record.vehicle.license_plate,
             "date": format_date(record.service_date),
             "service_type": record.service_type,
@@ -141,7 +165,7 @@ def service_costs_report(db: Session, **filters) -> dict:
 def work_orders_report(db: Session, **filters) -> dict:
     from_date = date_or_none(filters.get("from_date"), "from_date")
     to_date = date_or_none(filters.get("to_date"), "to_date")
-    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
+    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"), filters.get("registration_country"))}
     records = db.query(WorkOrder).options(
         joinedload(WorkOrder.vehicle), joinedload(WorkOrder.driver), joinedload(WorkOrder.linked_service)
     ).filter(WorkOrder.archived.is_(False)).order_by(WorkOrder.created_at.desc()).all()
@@ -160,6 +184,7 @@ def work_orders_report(db: Session, **filters) -> dict:
         priority_counts[record.priority] = priority_counts.get(record.priority, 0) + 1
         rows.append({
             "id": record.id,
+            **registration_fields(record.vehicle),
             "license_plate": record.vehicle.license_plate,
             "driver": record.driver.full_name if record.driver else None,
             "title": record.title,
@@ -182,13 +207,14 @@ def work_orders_report(db: Session, **filters) -> dict:
 
 
 def vehicle_costs_report(db: Session, **filters) -> dict:
-    vehicles = filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))
+    vehicles = filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"), filters.get("registration_country"))
     fuel = fuel_costs_report(db, **filters)["rows"]
     services = service_costs_report(db, **filters)["rows"]
     work_orders = work_orders_report(db, **filters)["rows"]
     by_plate: dict[str, dict] = {}
     for vehicle in vehicles:
         by_plate[vehicle.license_plate] = {
+            **registration_fields(vehicle),
             "license_plate": vehicle.license_plate,
             "brand": vehicle.brand,
             "model": vehicle.model,
@@ -216,7 +242,7 @@ def vehicle_costs_report(db: Session, **filters) -> dict:
 def reservations_report(db: Session, **filters) -> dict:
     from_date = date_or_none(filters.get("from_date"), "from_date")
     to_date = date_or_none(filters.get("to_date"), "to_date")
-    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
+    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"), filters.get("registration_country"))}
     records = db.query(VehicleReservation).options(joinedload(VehicleReservation.vehicle)).filter(VehicleReservation.archived.is_(False)).order_by(VehicleReservation.start_date.desc()).all()
     rows = []
     counts: dict[str, int] = {}
@@ -226,6 +252,7 @@ def reservations_report(db: Session, **filters) -> dict:
         status = reservation_status_name(record.status)
         counts[status] = counts.get(status, 0) + 1
         rows.append({
+            **registration_fields(record.vehicle),
             "license_plate": record.vehicle.license_plate,
             "reserved_by": record.reserved_by,
             "type": record.reservation_type,
@@ -242,7 +269,7 @@ def reservations_report(db: Session, **filters) -> dict:
 def document_expiry_report(db: Session, **filters) -> dict:
     today = datetime.utcnow()
     upcoming_cutoff = today + timedelta(days=30)
-    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"))}
+    vehicle_ids = {vehicle.id for vehicle in filtered_vehicles(db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"), filters.get("driver_id"), filters.get("registration_country"))}
     records = db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle)).filter(VehiclePaper.archived.is_(False)).order_by(VehiclePaper.expiry_date.asc()).all()
     rows = []
     overdue = 0
@@ -258,6 +285,7 @@ def document_expiry_report(db: Session, **filters) -> dict:
             state = "Upcoming"
             upcoming += 1
         rows.append({
+            **registration_fields(record.vehicle),
             "license_plate": record.vehicle.license_plate,
             "document_type": record.document_type,
             "issue_date": format_date(record.issue_date),
@@ -312,7 +340,15 @@ def excel_response(report_name: str, data: dict) -> StreamingResponse:
     )
 
 
-def report_filters(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None) -> dict:
+def report_filters(
+    from_date: str | None = None,
+    to_date: str | None = None,
+    license_plate: str | None = None,
+    vehicle_status: str | None = None,
+    department: str | None = None,
+    driver_id: int | None = None,
+    registration_country: str | None = None,
+) -> dict:
     return {
         "from_date": from_date,
         "to_date": to_date,
@@ -320,42 +356,43 @@ def report_filters(from_date: str | None = None, to_date: str | None = None, lic
         "vehicle_status": vehicle_status,
         "department": department,
         "driver_id": driver_id,
+        "registration_country": registration_country,
     }
 
 
 @router.get("/fleet-summary")
-def fleet_summary(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, db: Session = Depends(get_db)):
-    return fleet_summary_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id))
+def fleet_summary(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return fleet_summary_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/fuel-costs")
-def fuel_costs(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, db: Session = Depends(get_db)):
-    return fuel_costs_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id))
+def fuel_costs(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return fuel_costs_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/service-costs")
-def service_costs(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, db: Session = Depends(get_db)):
-    return service_costs_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id))
+def service_costs(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return service_costs_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/vehicle-costs")
-def vehicle_costs(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, db: Session = Depends(get_db)):
-    return vehicle_costs_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id))
+def vehicle_costs(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return vehicle_costs_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/reservations")
-def reservations(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, db: Session = Depends(get_db)):
-    return reservations_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id))
+def reservations(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return reservations_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/document-expiry")
-def document_expiry(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, db: Session = Depends(get_db)):
-    return document_expiry_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id))
+def document_expiry(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return document_expiry_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/work-orders")
-def work_orders(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, db: Session = Depends(get_db)):
-    return work_orders_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id))
+def work_orders(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return work_orders_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/{report_name}/export")
@@ -363,13 +400,14 @@ def export_report(
     report_name: str, from_date: str | None = None, to_date: str | None = None,
     license_plate: str | None = None, vehicle_status: str | None = None,
     department: str | None = None, driver_id: int | None = None,
+    registration_country: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.finance)),
 ):
     report = REPORTS.get(report_name)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found.")
-    data = report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id))
+    data = report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
     record_audit(
         db, action="Report exported", entity_type="Report", entity_id=None, user=current_user,
         new_values={"report_name": report_name}, description=f"Report '{report_name}' exported.",

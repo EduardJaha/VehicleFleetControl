@@ -8,7 +8,7 @@ from app.db.session import get_db
 from app.models import Attachment, User, Vehicle, VehicleFuel
 from app.schemas import FuelOverviewOut, FuelRecordOut, FuelUpdate, UserRole
 from app.utils.dates import format_date, parse_date
-from app.utils.domain import find_vehicle_by_plate
+from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.utils.files import store_upload
 from app.services.audit import record_audit, snapshot
 
@@ -170,7 +170,7 @@ def all_fuel_records(
 def overview(plate: str | None = None, from_date: str | None = None, to_date: str | None = None, fuel_type: str | None = None, location: str | None = None, station: str | None = None, db: Session = Depends(get_db)):
     query = db.query(VehicleFuel).options(joinedload(VehicleFuel.vehicle)).join(VehicleFuel.vehicle).filter(VehicleFuel.archived.is_(False))
     if plate:
-        query = query.filter(Vehicle.license_plate.ilike(f"%{plate.upper()}%"))
+        query = query.filter(Vehicle.license_plate_normalized.ilike(f"%{normalize_plate(plate)}%"))
     if fuel_type:
         query = query.filter(VehicleFuel.fuel_type == fuel_type)
     if location:

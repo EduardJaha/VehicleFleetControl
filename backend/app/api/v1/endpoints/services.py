@@ -405,11 +405,12 @@ def reminders(
     status_expr = reminder_status_expression(datetime.combine(datetime.today().date(), datetime.min.time()))
     if search:
         text = f"%{search.strip()}%"
-        query = query.filter(or_(Vehicle.license_plate.ilike(text), VehicleService.service_type.ilike(text)))
+        normalized_text = f"%{normalize_plate(search)}%"
+        query = query.filter(or_(Vehicle.license_plate_normalized.ilike(normalized_text), VehicleService.service_type.ilike(text)))
     if vehicle_id is not None:
         query = query.filter(VehicleService.vehicle_id == vehicle_id)
     if license_plate:
-        query = query.filter(Vehicle.license_plate.ilike(f"%{normalize_plate(license_plate)}%"))
+        query = query.filter(Vehicle.license_plate_normalized.ilike(f"%{normalize_plate(license_plate)}%"))
     if reminder_type:
         query = query.filter(VehicleService.service_type == reminder_type)
     requested_status = ReminderStatus.overdue if overdue_only else status
@@ -477,11 +478,12 @@ def service_history(
         query = query.join(VehicleService.vehicle)
     if search:
         text = f"%{search.strip()}%"
-        query = query.filter(or_(Vehicle.license_plate.ilike(text), VehicleService.service_type.ilike(text), VehicleService.description.ilike(text), VehicleService.workshop.ilike(text)))
+        normalized_text = f"%{normalize_plate(search)}%"
+        query = query.filter(or_(Vehicle.license_plate_normalized.ilike(normalized_text), VehicleService.service_type.ilike(text), VehicleService.description.ilike(text), VehicleService.workshop.ilike(text)))
     if vehicle_id is not None:
         query = query.filter(VehicleService.vehicle_id == vehicle_id)
     if license_plate:
-        query = query.filter(Vehicle.license_plate.ilike(f"%{normalize_plate(license_plate)}%"))
+        query = query.filter(Vehicle.license_plate_normalized.ilike(f"%{normalize_plate(license_plate)}%"))
     if service_type:
         query = query.filter(VehicleService.service_type == service_type)
     if workshop:
@@ -510,7 +512,7 @@ def service_history(
 def overview_filter(plate: str | None = None, type: str | None = None, workshop: str | None = None, from_date: str | None = None, to_date: str | None = None, db: Session = Depends(get_db)):
     query = service_query(db).filter(VehicleService.archived.is_(False))
     if plate:
-        query = query.join(VehicleService.vehicle).filter(Vehicle.license_plate.ilike(f"%{normalize_plate(plate)}%"))
+        query = query.join(VehicleService.vehicle).filter(Vehicle.license_plate_normalized.ilike(f"%{normalize_plate(plate)}%"))
     if type:
         query = query.filter(VehicleService.service_type == type)
     if workshop:

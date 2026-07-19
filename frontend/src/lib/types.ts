@@ -1,3 +1,20 @@
+export type RegistrationCountryCode = "AL" | "XK";
+
+export interface RegistrationCountryRegion {
+  code: string;
+  name: string;
+}
+
+export interface RegistrationCountryOption {
+  code: RegistrationCountryCode;
+  name: string;
+  placeholder: string;
+  example: string;
+  description: string;
+  helper_text: string[];
+  regions?: RegistrationCountryRegion[];
+}
+
 export type Vehicle = {
   id: number;
   brand_id: number | null;
@@ -6,6 +23,8 @@ export type Vehicle = {
   model: string;
   fuel_type: string;
   vehicle_location: string;
+  registration_country: RegistrationCountryCode | null;
+  registration_country_name: string | null;
   license_plate: string;
   year?: number | null;
   vin_number?: string | null;
@@ -47,14 +66,16 @@ export type AuthResponse = {
   user: CurrentUser;
 };
 
-export type VehiclePayload = Omit<Vehicle, "id" | "status_name" | "brand" | "model" | "brand_id" | "model_id"> & {
+export type VehiclePayload = Omit<Vehicle, "id" | "status_name" | "registration_country_name" | "brand" | "model" | "brand_id" | "model_id"> & {
   brand_id: number;
   model_id: number;
+  registration_country: RegistrationCountryCode;
 };
 
-export type VehicleFormValues = Omit<VehiclePayload, "brand_id" | "model_id"> & {
+export type VehicleFormValues = Omit<VehiclePayload, "brand_id" | "model_id" | "registration_country"> & {
   brand_id: number | null;
   model_id: number | null;
+  registration_country: RegistrationCountryCode | null;
 };
 
 export type VehicleFormInitialValues = VehicleFormValues & {

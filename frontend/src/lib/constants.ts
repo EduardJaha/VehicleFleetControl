@@ -27,6 +27,7 @@ export const RESERVATION_STATUSES = [
 ];
 
 export const FUEL_TYPES = ["Petrol", "Diesel", "Hybrid", "Electric", "LPG", "CNG", "Gas"];
+export const ENERGY_UNITS = ["L", "KWH"] as const;
 export const SERVICE_TYPES = ["General Service", "Oil Change", "Tire Change/Control", "Part Change", "Maintenance", "Other"];
 export const SERVICE_KM_INTERVALS = [5000, 10000, 15000];
 export const DOCUMENT_TYPES = ["Registration", "Insurance", "Technical Control", "Ownership", "Other"];

@@ -9,7 +9,7 @@ from app.db.session import engine
 FIELDS = {
     "WorkOrders": ("LaborCost", "PartsCost", "TotalCost"),
     "VehicleServices": ("Cost", "LaborCost", "PartsCost"),
-    "VehicleFuels": ("Liters", "CostPerLiter", "TotalCost"),
+    "VehicleFuels": ("Quantity", "UnitCost", "TotalCost", "Liters", "CostPerLiter"),
 }
 
 

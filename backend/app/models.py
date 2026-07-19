@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -290,14 +291,26 @@ class ServiceBill(Base):
 
 class VehicleFuel(Base):
     __tablename__ = "VehicleFuels"
+    __table_args__ = (
+        CheckConstraint('"Quantity" >= 0', name="ck_vehicle_fuels_quantity_nonnegative"),
+        CheckConstraint('"UnitCost" >= 0', name="ck_vehicle_fuels_unit_cost_nonnegative"),
+        CheckConstraint('"EnergyUnit" IN (\'L\', \'KWH\')', name="ck_vehicle_fuels_energy_unit"),
+        Index("ix_vehicle_fuels_energy_unit", "EnergyUnit"),
+    )
 
     id = Column("Id", Integer, primary_key=True, index=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
     refuel_date = Column("RefuelDate", DateTime, nullable=False)
-    liters = Column("Liters", Numeric(12, 3), nullable=False)
-    cost_per_liter = Column("CostPerLiter", Numeric(12, 3), nullable=False, default=0)
+    quantity = Column("Quantity", Numeric(12, 3), nullable=False)
+    unit = Column("EnergyUnit", String(8), nullable=False)
+    unit_cost = Column("UnitCost", Numeric(12, 4), nullable=False, default=0)
     total_cost = Column("TotalCost", Numeric(12, 2), nullable=False, default=0)
     fuel_type = Column("FuelType", String, nullable=False)
+    unit_review_required = Column("UnitReviewRequired", Boolean, nullable=False, default=False)
+    # Transitional historical columns. New records deliberately leave these
+    # empty so Electric energy is never written to a column named Liters.
+    liters = Column("Liters", Numeric(12, 3), nullable=True)
+    cost_per_liter = Column("CostPerLiter", Numeric(12, 3), nullable=True)
     location = Column("Location", String, nullable=False)
     station_name = Column("StationName", String, nullable=False, default="")
     bill_file_path = Column("BillFilePath", String, nullable=True)

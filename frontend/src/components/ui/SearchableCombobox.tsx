@@ -110,6 +110,10 @@ export function SearchableCombobox({
             setQuery("");
             setOpen(true);
           }}
+          onClick={() => {
+            setQuery("");
+            setOpen(true);
+          }}
           onBlur={() => window.setTimeout(() => {
             setQuery("");
             setOpen(false);

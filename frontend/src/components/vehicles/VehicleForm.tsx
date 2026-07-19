@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import { FUEL_TYPES, VEHICLE_STATUSES } from "@/lib/constants";
-import { vehicleCatalogApi } from "@/lib/api";
+import { vehicleCatalogApi, vehicleRegistrationApi } from "@/lib/api";
+import { formatLicensePlateInput, validateLicensePlateInput } from "@/lib/licensePlates";
 import type {
-  Vehicle, VehicleBrand, VehicleFormInitialValues, VehicleFormValues,
-  VehicleModel, VehiclePayload
+  RegistrationCountryCode, RegistrationCountryOption, Vehicle, VehicleBrand,
+  VehicleFormInitialValues, VehicleFormValues, VehicleModel, VehiclePayload
 } from "@/lib/types";
 
 type VehicleFormProps = {
@@ -24,6 +25,7 @@ const initialVehicleForm: VehicleFormValues = {
   model_id: null,
   fuel_type: "Diesel",
   vehicle_location: "",
+  registration_country: null,
   license_plate: "",
   year: null,
   vin_number: null,
@@ -40,6 +42,7 @@ export function vehicleToPayload(vehicle: Vehicle): VehicleFormInitialValues {
     model_name: vehicle.model,
     fuel_type: vehicle.fuel_type,
     vehicle_location: vehicle.vehicle_location,
+    registration_country: vehicle.registration_country,
     license_plate: vehicle.license_plate,
     year: vehicle.year ?? null,
     vin_number: vehicle.vin_number ?? null,
@@ -58,6 +61,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
       model_id: initialValues.model_id,
       fuel_type: initialValues.fuel_type,
       vehicle_location: initialValues.vehicle_location,
+      registration_country: initialValues.registration_country,
       license_plate: initialValues.license_plate,
       year: initialValues.year,
       vin_number: initialValues.vin_number,
@@ -77,6 +81,9 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
   const [brandError, setBrandError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [countries, setCountries] = useState<RegistrationCountryOption[]>([]);
+  const [countryError, setCountryError] = useState<string | null>(null);
+  const [plateError, setPlateError] = useState<string | null>(null);
 
   const loadBrands = useCallback((force = false) => {
     setLoadingBrands(true);
@@ -90,6 +97,12 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
   useEffect(() => {
     loadBrands();
   }, [loadBrands]);
+
+  useEffect(() => {
+    vehicleRegistrationApi.getCountries()
+      .then(setCountries)
+      .catch(() => setCountryError("Registration countries could not be loaded."));
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -124,17 +137,87 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
       setSelectionError("Select a vehicle model.");
       return;
     }
+    if (form.registration_country === null) {
+      setSelectionError("Select a registration country.");
+      return;
+    }
+    const validationMessage = validateLicensePlateInput(form.registration_country, form.license_plate);
+    if (validationMessage) {
+      setPlateError(validationMessage);
+      return;
+    }
+    setPlateError(null);
     setSelectionError(null);
-    await onSubmit({ ...form, brand_id: form.brand_id, model_id: form.model_id });
+    await onSubmit({
+      ...form,
+      brand_id: form.brand_id,
+      model_id: form.model_id,
+      registration_country: form.registration_country
+    });
   }
+
+  const selectedCountry = countries.find((country) => country.code === form.registration_country);
 
   return (
     <form onSubmit={submit} className={`form fullWidthForm ${className}`.trim()}>
-      {(error || selectionError) && <div className="error" role="alert">{error || selectionError}</div>}
+      {(error || selectionError || countryError) && <div className="error" role="alert">{error || selectionError || countryError}</div>}
       <div className="formGrid">
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-license-plate`}>License plate</label>
-          <input id={`${fieldPrefix}-license-plate`} className="input" value={form.license_plate} onChange={(event) => setForm({ ...form, license_plate: event.target.value })} placeholder="01-123-AB" required />
+          <label htmlFor={`${fieldPrefix}-registration-country`}>Registration country</label>
+          <select
+            id={`${fieldPrefix}-registration-country`}
+            className="select"
+            value={form.registration_country ?? ""}
+            onChange={(event) => {
+              const registration_country = event.target.value as RegistrationCountryCode | "";
+              setPlateError(null);
+              setSelectionError(null);
+              setForm((current) => ({
+                ...current,
+                registration_country: registration_country || null,
+                license_plate: ""
+              }));
+            }}
+            required
+          >
+            <option value="">Select country</option>
+            {countries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
+          </select>
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-license-plate`}>Licence plate</label>
+          <input
+            id={`${fieldPrefix}-license-plate`}
+            className="input"
+            value={form.license_plate}
+            onChange={(event) => {
+              if (!form.registration_country) return;
+              setPlateError(null);
+              setForm({
+                ...form,
+                license_plate: formatLicensePlateInput(form.registration_country, event.target.value)
+              });
+            }}
+            onBlur={() => {
+              if (form.registration_country && form.license_plate) {
+                setPlateError(validateLicensePlateInput(form.registration_country, form.license_plate));
+              }
+            }}
+            placeholder={selectedCountry?.placeholder ?? "Select a registration country first"}
+            aria-describedby={`${fieldPrefix}-license-plate-help`}
+            aria-invalid={Boolean(plateError)}
+            disabled={!form.registration_country}
+            inputMode="text"
+            autoComplete="off"
+            maxLength={9}
+            required
+          />
+          <span id={`${fieldPrefix}-license-plate-help`} className={plateError ? "errorText" : "muted"} aria-live="polite">
+            {plateError ?? selectedCountry?.helper_text.join(" · ") ?? "Select a registration country before entering the licence plate."}
+          </span>
+          {mode === "edit" && !initialValues?.registration_country && (
+            <span className="errorText" role="alert">Registration country must be selected before this Vehicle can be updated.</span>
+          )}
         </div>
         <div className="formRow">
           <label htmlFor={`${fieldPrefix}-brand`}>Brand</label>

@@ -24,12 +24,18 @@ from app.schemas import (
 )
 
 
-def vehicle_create(brand_id: int, model_id: int, plate: str = "01-123-AB") -> VehicleCreate:
+def vehicle_create(
+    brand_id: int,
+    model_id: int,
+    plate: str = "01-123-AB",
+    country: str = "XK",
+) -> VehicleCreate:
     return VehicleCreate(
         brand_id=brand_id,
         model_id=model_id,
         fuel_type="Hybrid",
         vehicle_location="Belgrade",
+        registration_country=country,
         license_plate=plate,
         year=2024,
         vin_number=None,

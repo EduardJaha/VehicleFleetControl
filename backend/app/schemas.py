@@ -1,10 +1,12 @@
 from decimal import Decimal
 from enum import Enum, IntEnum
-from pydantic import BaseModel, Field, ConfigDict, field_validator
-import re
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from app.utils.vehicle_catalog import clean_catalog_name
-
-LICENSE_PLATE_REGEX = re.compile(r"^(0[1-7])-[0-9]{3}-[A-Z]{2}$")
+from app.services.license_plates import (
+    RegistrationCountry,
+    PlateValidationError,
+    validate_license_plate,
+)
 
 
 class VehicleStatus(IntEnum):
@@ -405,6 +407,7 @@ class WorkOrderOut(WorkOrderBase):
 class VehicleFields(BaseModel):
     fuel_type: str
     vehicle_location: str
+    registration_country: RegistrationCountry | None = None
     license_plate: str
     year: int | None = Field(default=None, ge=1900, le=2100)
     vin_number: str | None = Field(default=None, max_length=50)
@@ -414,16 +417,25 @@ class VehicleFields(BaseModel):
 
     @field_validator("license_plate")
     @classmethod
-    def validate_plate(cls, value: str) -> str:
-        plate = value.strip().upper().replace(" ", "")
-        if not LICENSE_PLATE_REGEX.match(plate):
-            raise ValueError("License plate must be in format 01-123-AB.")
-        return plate
+    def clean_plate(cls, value: str) -> str:
+        return value.strip()
 
 
 class VehicleWriteBase(VehicleFields):
+    registration_country: RegistrationCountry
     brand_id: int = Field(gt=0)
     model_id: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_registration(self):
+        try:
+            self.license_plate = validate_license_plate(
+                self.registration_country,
+                self.license_plate,
+            )
+        except PlateValidationError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
 
 
 class VehicleCreate(VehicleWriteBase):
@@ -441,6 +453,7 @@ class VehicleOut(VehicleFields):
     brand: str
     model: str
     status_name: str
+    registration_country_name: str | None = None
     archived: bool = False
     archived_at: str | None = None
     archived_by: int | None = None

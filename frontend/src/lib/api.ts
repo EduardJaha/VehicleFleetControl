@@ -1,7 +1,8 @@
 import type {
   Inspection, MaintenanceSummary, MaintenanceTimelineEvent, PageResult, ServiceReminder,
   VehicleBrand, VehicleMaintenanceSummary, VehicleModel, VehicleServiceDetail,
-  VehicleServiceOverview, WorkOrder, WorkOrderCompletionPayload, WorkOrderCompletionResult
+  VehicleServiceOverview, WorkOrder, WorkOrderCompletionPayload, WorkOrderCompletionResult,
+  RegistrationCountryOption
 } from "@/lib/types";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -136,6 +137,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
 
 let vehicleBrandCache: Promise<VehicleBrand[]> | null = null;
 const vehicleModelCache = new Map<number, Promise<VehicleModel[]>>();
+let registrationCountryCache: Promise<RegistrationCountryOption[]> | null = null;
 
 function alphabetically<T extends { name: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
@@ -181,6 +183,20 @@ export const vehicleCatalogApi = {
     });
     vehicleModelCache.delete(brandId);
     return model;
+  }
+};
+
+export const vehicleRegistrationApi = {
+  getCountries(force = false): Promise<RegistrationCountryOption[]> {
+    if (force) registrationCountryCache = null;
+    if (!registrationCountryCache) {
+      registrationCountryCache = apiGet<RegistrationCountryOption[]>("/vehicle-registration/countries")
+        .catch((error) => {
+          registrationCountryCache = null;
+          throw error;
+        });
+    }
+    return registrationCountryCache;
   }
 };
 

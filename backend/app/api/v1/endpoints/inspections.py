@@ -182,14 +182,15 @@ def list_inspections(
         query = query.filter(Inspection.archived.is_(False))
     if search:
         text = f"%{search.strip()}%"
+        normalized_text = f"%{normalize_plate(search)}%"
         query = query.outerjoin(Inspection.vehicle).outerjoin(Inspection.driver).filter(or_(
-            Vehicle.license_plate.ilike(text), Inspection.inspection_type.ilike(text),
+            Vehicle.license_plate_normalized.ilike(normalized_text), Inspection.inspection_type.ilike(text),
             Inspection.notes.ilike(text), Driver.full_name.ilike(text), Inspection.inspector.ilike(text),
         ))
     if vehicle_id is not None:
         query = query.filter(Inspection.vehicle_id == vehicle_id)
     if license_plate:
-        query = query.join(Inspection.vehicle).filter(Vehicle.license_plate.ilike(f"%{normalize_plate(license_plate)}%"))
+        query = query.join(Inspection.vehicle).filter(Vehicle.license_plate_normalized.ilike(f"%{normalize_plate(license_plate)}%"))
     if driver_id is not None:
         query = query.filter(Inspection.driver_id == driver_id)
     if inspection_type:

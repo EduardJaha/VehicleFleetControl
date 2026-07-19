@@ -140,7 +140,7 @@ export default function PapersPage() {
         <form onSubmit={uploadPaper} className="form dialogForm">
           {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label htmlFor="document-license-plate">License plate</label><input id="document-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label htmlFor="document-license-plate">Licence plate</label><input id="document-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="Albania or Kosovo plate" required /></div>
             <div className="formRow"><label htmlFor="document-type">Document type</label><select id="document-type" className="select" value={form.document_type} onChange={(e) => setForm({ ...form, document_type: e.target.value })}>{DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
             <div className="formRow"><label htmlFor="document-issue-date">Issue date</label><input id="document-issue-date" className="input" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} required /></div>
             <div className="formRow"><label htmlFor="document-expiry-date">Expiry date</label><input id="document-expiry-date" className="input" type="date" min={form.issue_date} value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} required /></div>

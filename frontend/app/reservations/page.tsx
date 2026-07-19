@@ -135,7 +135,7 @@ export default function ReservationsPage() {
         <form onSubmit={createReservation} className="form dialogForm">
           {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label htmlFor="reservation-license-plate">License plate</label><input id="reservation-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label htmlFor="reservation-license-plate">Licence plate</label><input id="reservation-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="Albania or Kosovo plate" required /></div>
             <div className="formRow"><label htmlFor="reservation-reserved-by">Reserved by</label><input id="reservation-reserved-by" className="input" value={form.reserved_by} onChange={(e) => setForm({ ...form, reserved_by: e.target.value })} required /></div>
             <div className="formRow"><label htmlFor="reservation-type">Type</label><select id="reservation-type" className="select" value={form.reservation_type} onChange={(e) => setForm({ ...form, reservation_type: e.target.value })}>{RESERVATION_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
             <div className="formRow"><label htmlFor="reservation-start-date">Start date</label><input id="reservation-start-date" className="input" type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} required /></div>

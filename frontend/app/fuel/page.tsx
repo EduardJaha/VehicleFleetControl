@@ -200,7 +200,7 @@ export default function FuelPage() {
         <form onSubmit={registerFuel} className="form dialogForm">
           {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label htmlFor="fuel-license-plate">License plate</label><input id="fuel-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="01-123-AB" required /></div>
+            <div className="formRow"><label htmlFor="fuel-license-plate">Licence plate</label><input id="fuel-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="Albania or Kosovo plate" required /></div>
             <div className="formRow"><label htmlFor="fuel-refuel-date">Refuel date</label><input id="fuel-refuel-date" className="input" type="date" value={form.refuel_date} onChange={(e) => setForm({ ...form, refuel_date: e.target.value })} required /></div>
             <div className="formRow"><label htmlFor="fuel-type">Fuel type</label><select id="fuel-type" className="select" value={form.fuel_type} onChange={(e) => setForm({ ...form, fuel_type: e.target.value })}>{FUEL_TYPES.map((fuel) => <option key={fuel}>{fuel}</option>)}</select></div>
             <div className="formRow"><label htmlFor="fuel-liters">Liters</label><input id="fuel-liters" className="input" type="number" min="0.01" step="0.01" value={form.liters} onChange={(e) => setForm({ ...form, liters: e.target.value })} required /></div>

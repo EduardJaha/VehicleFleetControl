@@ -252,7 +252,7 @@ def list_work_orders(
         text = f"%{search.strip()}%"
         query = query.filter(or_(WorkOrder.title.ilike(text), WorkOrder.description.ilike(text), WorkOrder.reported_issue.ilike(text), WorkOrder.requested_by.ilike(text), WorkOrder.assigned_to.ilike(text)))
     if license_plate:
-        query = query.join(WorkOrder.vehicle).filter(Vehicle.license_plate.ilike(f"%{normalize_plate(license_plate)}%"))
+        query = query.join(WorkOrder.vehicle).filter(Vehicle.license_plate_normalized.ilike(f"%{normalize_plate(license_plate)}%"))
     if vehicle_id is not None:
         query = query.filter(WorkOrder.vehicle_id == vehicle_id)
     if status:

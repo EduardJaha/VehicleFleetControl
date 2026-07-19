@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiDownload, apiGet, buildQuery } from "@/lib/api";
+import { apiDownload, apiGet, buildQuery, vehicleRegistrationApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { REPORTS, VEHICLE_STATUSES } from "@/lib/constants";
 import { toApiDate } from "@/lib/format";
-import type { ReportData } from "@/lib/types";
+import type { RegistrationCountryCode, RegistrationCountryOption, ReportData } from "@/lib/types";
 
 type ReportFilters = {
   from_date: string;
   to_date: string;
   license_plate: string;
+  registration_country: RegistrationCountryCode | "";
   vehicle_status: string;
   department: string;
   driver_id: string;
@@ -20,6 +21,7 @@ const initialFilters: ReportFilters = {
   from_date: "",
   to_date: "",
   license_plate: "",
+  registration_country: "",
   vehicle_status: "",
   department: "",
   driver_id: ""
@@ -45,11 +47,13 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [countries, setCountries] = useState<RegistrationCountryOption[]>([]);
 
   const query = useMemo(() => buildQuery({
     from_date: toApiDate(filters.from_date),
     to_date: toApiDate(filters.to_date),
     license_plate: filters.license_plate,
+    registration_country: filters.registration_country,
     vehicle_status: filters.vehicle_status,
     department: filters.department,
     driver_id: filters.driver_id
@@ -76,6 +80,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     void loadReports(selectedReport);
+    void vehicleRegistrationApi.getCountries().then(setCountries).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canReadReports, selectedReport]);
 
@@ -124,6 +129,10 @@ export default function ReportsPage() {
         <input className="input" type="date" value={filters.from_date} onChange={(event) => setFilters({ ...filters, from_date: event.target.value })} />
         <input className="input" type="date" value={filters.to_date} onChange={(event) => setFilters({ ...filters, to_date: event.target.value })} />
         <input className="input" value={filters.license_plate} onChange={(event) => setFilters({ ...filters, license_plate: event.target.value })} placeholder="Plate" />
+        <select className="select" value={filters.registration_country} onChange={(event) => setFilters({ ...filters, registration_country: event.target.value as RegistrationCountryCode | "" })}>
+          <option value="">All countries</option>
+          {countries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
+        </select>
         <select className="select" value={filters.vehicle_status} onChange={(event) => setFilters({ ...filters, vehicle_status: event.target.value })}>
           <option value="">All vehicle statuses</option>
           {VEHICLE_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}

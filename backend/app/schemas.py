@@ -32,6 +32,11 @@ class UserRole(str, Enum):
     viewer = "viewer"
 
 
+class EnergyUnit(str, Enum):
+    liter = "L"
+    kilowatt_hour = "KWH"
+
+
 class DriverStatus(str, Enum):
     active = "Active"
     suspended = "Suspended"
@@ -758,38 +763,62 @@ class MaintenanceTimelinePage(BaseModel):
 
 class FuelUpdate(BaseModel):
     refuel_date: str
-    fuel_type: str
-    liters: Decimal
-    cost_per_liter: Decimal | None = None
+    quantity: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
+    unit_cost: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=4)
     location: str | None = None
     station_name: str | None = None
     odometer_km: int | None = None
+    # Deprecated compatibility inputs. They are accepted only for stored
+    # liter-based records and are never emitted by the API.
+    liters: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=3)
+    cost_per_liter: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=4)
+    fuel_type: str | None = None
+    unit: EnergyUnit | None = None
+
+    @model_validator(mode="after")
+    def require_quantity(self):
+        if self.quantity is None and self.liters is None:
+            raise ValueError("Quantity is required.")
+        return self
 
 
 class FuelRecordOut(BaseModel):
     id: int
+    vehicle_id: int
     license_plate: str
     brand: str
     model: str
     refuel_date: str
     fuel_type: str
-    liters: Decimal
-    cost_per_liter: Decimal
+    quantity: Decimal
+    unit: EnergyUnit
+    unit_cost: Decimal
     total_cost: Decimal
     location: str
     station_name: str
     bill_file_path: str | None = None
     odometer_km: int
     archived: bool = False
+    unit_review_required: bool = False
 
 
 class FuelOverviewOut(BaseModel):
+    vehicle_id: int
     license_plate: str
     brand: str
     model: str
-    total_liters: Decimal
+    fuel_type: str
+    unit: EnergyUnit
+    total_quantity: Decimal
     total_cost: Decimal
-    refuel_count: int
+    record_count: int
+
+
+class FuelFleetTotalsOut(BaseModel):
+    total_fuel_cost: Decimal
+    total_liters: Decimal
+    total_kwh: Decimal
+    record_count: int
 
 
 class VehiclePaperListOut(BaseModel):

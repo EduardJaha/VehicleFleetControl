@@ -405,21 +405,26 @@ export type MaintenanceTimelineEvent = {
   href: string;
 };
 
+export type EnergyUnit = "L" | "KWH";
+
 export type FuelRecord = {
   id: number;
+  vehicle_id: number;
   license_plate: string;
   brand: string;
   model: string;
   refuel_date: string;
   fuel_type: string;
-  liters: string | number;
-  cost_per_liter: string | number;
+  quantity: string | number;
+  unit: EnergyUnit;
+  unit_cost: string | number;
   total_cost: string | number;
   location: string;
   station_name: string;
   bill_file_path?: string | null;
   odometer_km: number;
   archived?: boolean;
+  unit_review_required?: boolean;
 };
 
 export type VehiclePaper = {

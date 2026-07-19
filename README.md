@@ -102,9 +102,15 @@ VehicleFleetControl currently includes the following modules:
 * Edit fuel records
 * Delete fuel records
 * Upload fuel bills
-* Track liters, cost per liter, and total fuel cost
+* Track unit-aware fuel and charging quantities, unit prices, and total cost
+* Derive each record's fuel or energy type from the selected Vehicle
+* Track liquid fuels in liters and Electric charging in kWh
 * Search and filter fuel records
 * View fuel history by vehicle
+
+Hybrid Vehicles remain liter-based because the current propulsion model does
+not distinguish standard hybrids from plug-in hybrids. Dual-unit plug-in
+hybrid records and advanced charging-session fields are deferred follow-up work.
 
 ### Vehicle Papers
 

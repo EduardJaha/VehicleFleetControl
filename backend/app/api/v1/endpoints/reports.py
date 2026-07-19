@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.security import require_roles
 from app.db.session import get_db
 from app.models import Driver, User, Vehicle, VehicleFuel, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
-from app.schemas import UserRole
+from app.schemas import EnergyUnit, UserRole
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import normalize_plate, parse_vehicle_status, reservation_status_name, status_name
 from app.services.license_plates import RegistrationCountry, registration_country_name
@@ -115,26 +115,45 @@ def fuel_costs_report(db: Session, **filters) -> dict:
     records = db.query(VehicleFuel).options(joinedload(VehicleFuel.vehicle)).filter(VehicleFuel.archived.is_(False)).order_by(VehicleFuel.refuel_date.desc()).all()
     rows = []
     total = Decimal("0")
-    liters = Decimal("0")
+    total_liters = Decimal("0")
+    total_kwh = Decimal("0")
+    liquid_record_count = 0
+    charging_session_count = 0
     for record in records:
         if record.vehicle_id not in vehicle_ids or not in_date_range(record.refuel_date, from_date, to_date):
             continue
         row_total = money(record.total_cost)
-        row_liters = money(record.liters)
+        row_quantity = money(record.quantity)
         total += row_total
-        liters += row_liters
+        if record.unit == EnergyUnit.kilowatt_hour.value:
+            total_kwh += row_quantity
+            charging_session_count += 1
+        else:
+            total_liters += row_quantity
+            liquid_record_count += 1
         rows.append({
             **registration_fields(record.vehicle),
             "license_plate": record.vehicle.license_plate,
+            "vehicle": f"{record.vehicle.brand} {record.vehicle.model}",
             "date": format_date(record.refuel_date),
-            "fuel_type": record.fuel_type,
-            "liters": float(row_liters),
-            "cost_per_liter": float(money(record.cost_per_liter)),
+            "fuel_or_energy_type": record.fuel_type,
+            "quantity": float(row_quantity),
+            "unit": record.unit,
+            "unit_price": float(money(record.unit_cost)),
             "total_cost": float(row_total),
-            "station": record.station_name,
+            "location": record.location,
+            "station_or_provider": record.station_name,
             "odometer_km": record.odometer_km,
         })
-    return report_response({"total_fuel_cost": float(total), "total_liters": float(liters), "record_count": len(rows)}, rows)
+    return report_response({
+        "total_fuel_cost": float(total),
+        "total_fuel_and_charging_cost": float(total),
+        "total_liters": float(total_liters),
+        "total_kwh": float(total_kwh),
+        "liquid_fuel_record_count": liquid_record_count,
+        "charging_session_count": charging_session_count,
+        "record_count": len(rows),
+    }, rows)
 
 
 def service_costs_report(db: Session, **filters) -> dict:
@@ -318,7 +337,7 @@ def build_excel(report_name: str, data: dict) -> BytesIO:
     rows = data["rows"]
     if rows:
         headers = list(rows[0].keys())
-        rows_sheet.append(headers)
+        rows_sheet.append([excel_heading(header) for header in headers])
         for row in rows:
             rows_sheet.append([row.get(header) for header in headers])
     else:
@@ -328,6 +347,23 @@ def build_excel(report_name: str, data: dict) -> BytesIO:
     workbook.save(output)
     output.seek(0)
     return output
+
+
+def excel_heading(value: str) -> str:
+    overrides = {
+        "license_plate": "Licence Plate",
+        "fuel_or_energy_type": "Fuel or Energy Type",
+        "quantity": "Quantity",
+        "unit": "Unit",
+        "unit_price": "Unit Price",
+        "total_cost": "Total Cost",
+        "station_or_provider": "Station or Provider",
+        "odometer_km": "Odometer KM",
+    }
+    return overrides.get(
+        value,
+        value.replace("_", " ").title().replace("Km", "KM"),
+    )
 
 
 def excel_response(report_name: str, data: dict) -> StreamingResponse:

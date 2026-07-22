@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import { FUEL_TYPES, VEHICLE_STATUSES } from "@/lib/constants";
 import { vehicleCatalogApi, vehicleRegistrationApi } from "@/lib/api";
@@ -53,6 +54,7 @@ export function vehicleToPayload(vehicle: Vehicle): VehicleFormInitialValues {
 }
 
 export function VehicleForm({ mode = "create", initialValues, error, submitting, onSubmit, onCancel, className = "" }: VehicleFormProps) {
+  const { t, i18n } = useTranslation(["common", "modules"]);
   const fieldPrefix = useId();
   const [form, setForm] = useState<VehicleFormValues>(() => {
     if (!initialValues) return { ...initialVehicleForm };
@@ -90,9 +92,9 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
     setBrandError(null);
     vehicleCatalogApi.getBrands(force)
       .then(setBrands)
-      .catch(() => setBrandError("Vehicle brands could not be loaded."))
+      .catch(() => setBrandError(t("modules:vehicles.brandLoadError")))
       .finally(() => setLoadingBrands(false));
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadBrands();
@@ -101,8 +103,8 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
   useEffect(() => {
     vehicleRegistrationApi.getCountries()
       .then(setCountries)
-      .catch(() => setCountryError("Registration countries could not be loaded."));
-  }, []);
+      .catch(() => setCountryError(t("modules:vehicles.countryLoadError")));
+  }, [i18n.language, t]);
 
   useEffect(() => {
     let active = true;
@@ -119,7 +121,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
         if (active) setModels(items);
       })
       .catch(() => {
-        if (active) setModelError("Vehicle models could not be loaded for the selected brand.");
+        if (active) setModelError(t("modules:vehicles.modelLoadError"));
       })
       .finally(() => {
         if (active) setLoadingModels(false);
@@ -130,15 +132,15 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (form.brand_id === null) {
-      setSelectionError("Select a vehicle brand.");
+      setSelectionError(t("modules:vehicles.selectBrandRequired"));
       return;
     }
     if (form.model_id === null) {
-      setSelectionError("Select a vehicle model.");
+      setSelectionError(t("modules:vehicles.selectModelRequired"));
       return;
     }
     if (form.registration_country === null) {
-      setSelectionError("Select a registration country.");
+      setSelectionError(t("modules:vehicles.selectCountryRequired"));
       return;
     }
     const validationMessage = validateLicensePlateInput(form.registration_country, form.license_plate);
@@ -163,7 +165,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
       {(error || selectionError || countryError) && <div className="error" role="alert">{error || selectionError || countryError}</div>}
       <div className="formGrid">
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-registration-country`}>Registration country</label>
+          <label htmlFor={`${fieldPrefix}-registration-country`}>{t("modules:vehicles.registrationCountry")}</label>
           <select
             id={`${fieldPrefix}-registration-country`}
             className="select"
@@ -180,12 +182,12 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
             }}
             required
           >
-            <option value="">Select country</option>
-            {countries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
+            <option value="">{t("modules:vehicles.selectCountry")}</option>
+            {countries.map((country) => <option key={country.code} value={country.code}>{t(`common:countries.${country.code}`)}</option>)}
           </select>
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-license-plate`}>Licence plate</label>
+          <label htmlFor={`${fieldPrefix}-license-plate`}>{t("common:labels.licencePlate")}</label>
           <input
             id={`${fieldPrefix}-license-plate`}
             className="input"
@@ -203,7 +205,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
                 setPlateError(validateLicensePlateInput(form.registration_country, form.license_plate));
               }
             }}
-            placeholder={selectedCountry?.placeholder ?? "Select a registration country first"}
+            placeholder={selectedCountry?.placeholder ?? t("modules:vehicles.selectCountryFirst")}
             aria-describedby={`${fieldPrefix}-license-plate-help`}
             aria-invalid={Boolean(plateError)}
             disabled={!form.registration_country}
@@ -213,14 +215,14 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
             required
           />
           <span id={`${fieldPrefix}-license-plate-help`} className={plateError ? "errorText" : "muted"} aria-live="polite">
-            {plateError ?? selectedCountry?.helper_text.join(" · ") ?? "Select a registration country before entering the licence plate."}
+            {plateError ?? selectedCountry?.helper_text.join(" · ") ?? t("modules:vehicles.selectCountryHelp")}
           </span>
           {mode === "edit" && !initialValues?.registration_country && (
-            <span className="errorText" role="alert">Registration country must be selected before this Vehicle can be updated.</span>
+            <span className="errorText" role="alert">{t("modules:vehicles.countryRequiredUpdate")}</span>
           )}
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-brand`}>Brand</label>
+          <label htmlFor={`${fieldPrefix}-brand`}>{t("common:labels.brand")}</label>
           <SearchableCombobox
             id={`${fieldPrefix}-brand`}
             options={brands}
@@ -231,18 +233,18 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
               setSelectionError(null);
               setForm((current) => ({ ...current, brand_id: brandId, model_id: null }));
             }}
-            placeholder={loadingBrands ? "Loading brands..." : "Select vehicle brand"}
-            searchPlaceholder="Search brands..."
-            emptyText="No vehicle brands found."
-            loadingText="Loading brands..."
+            placeholder={loadingBrands ? t("modules:vehicles.loadingBrands") : t("modules:vehicles.selectBrand")}
+            searchPlaceholder={t("modules:vehicles.searchBrands")}
+            emptyText={t("modules:vehicles.emptyBrands")}
+            loadingText={t("modules:vehicles.loadingBrands")}
             loading={loadingBrands}
             error={brandError}
             required
           />
-          {brandError && <button className="linkButton retryButton" type="button" onClick={() => loadBrands(true)}>Retry loading brands</button>}
+          {brandError && <button className="linkButton retryButton" type="button" onClick={() => loadBrands(true)}>{t("modules:vehicles.retryBrands")}</button>}
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-model`}>Model</label>
+          <label htmlFor={`${fieldPrefix}-model`}>{t("common:labels.model")}</label>
           <SearchableCombobox
             id={`${fieldPrefix}-model`}
             options={models}
@@ -253,10 +255,10 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
               setSelectionError(null);
               setForm((current) => ({ ...current, model_id: modelId }));
             }}
-            placeholder={form.brand_id === null ? "Select a brand first" : "Select vehicle model"}
-            searchPlaceholder="Search models..."
-            emptyText="No models are available for this brand."
-            loadingText="Loading models..."
+            placeholder={form.brand_id === null ? t("modules:vehicles.selectBrandFirst") : t("modules:vehicles.selectModel")}
+            searchPlaceholder={t("modules:vehicles.searchModels")}
+            emptyText={t("modules:vehicles.emptyModels")}
+            loadingText={t("modules:vehicles.loadingModels")}
             loading={loadingModels}
             disabled={form.brand_id === null}
             error={modelError}
@@ -272,51 +274,51 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
                 setModelError(null);
                 vehicleCatalogApi.getModelsByBrand(form.brand_id, true)
                   .then(setModels)
-                  .catch(() => setModelError("Vehicle models could not be loaded for the selected brand."))
+                  .catch(() => setModelError(t("modules:vehicles.modelLoadError")))
                   .finally(() => setLoadingModels(false));
               }}
             >
-              Retry loading models
+              {t("modules:vehicles.retryModels")}
             </button>
           )}
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-fuel-type`}>Fuel type</label>
+          <label htmlFor={`${fieldPrefix}-fuel-type`}>{t("modules:vehicles.fuelType")}</label>
           <select id={`${fieldPrefix}-fuel-type`} className="select" value={form.fuel_type} onChange={(event) => setForm({ ...form, fuel_type: event.target.value })} required>
-            {FUEL_TYPES.map((fuel) => <option key={fuel}>{fuel}</option>)}
+            {FUEL_TYPES.map((fuel) => <option key={fuel} value={fuel}>{t(`common:types.${fuel}`)}</option>)}
           </select>
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-location`}>Location</label>
+          <label htmlFor={`${fieldPrefix}-location`}>{t("common:labels.location")}</label>
           <input id={`${fieldPrefix}-location`} className="input" value={form.vehicle_location} onChange={(event) => setForm({ ...form, vehicle_location: event.target.value })} required />
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-year`}>Year</label>
+          <label htmlFor={`${fieldPrefix}-year`}>{t("modules:vehicles.year")}</label>
           <input id={`${fieldPrefix}-year`} className="input" type="number" min="1900" max="2100" value={form.year ?? ""} onChange={(event) => setForm({ ...form, year: event.target.value ? Number(event.target.value) : null })} />
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-vin`}>VIN</label>
+          <label htmlFor={`${fieldPrefix}-vin`}>{t("modules:vehicles.vin")}</label>
           <input id={`${fieldPrefix}-vin`} className="input" maxLength={50} value={form.vin_number ?? ""} onChange={(event) => setForm({ ...form, vin_number: event.target.value || null })} />
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-engine-cc`}>Engine CC</label>
+          <label htmlFor={`${fieldPrefix}-engine-cc`}>{t("modules:vehicles.engineCc")}</label>
           <input id={`${fieldPrefix}-engine-cc`} className="input" type="number" min="50" max="10000" value={form.engine_cc ?? ""} onChange={(event) => setForm({ ...form, engine_cc: event.target.value ? Number(event.target.value) : null })} />
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-odometer`}>Odometer KM</label>
+          <label htmlFor={`${fieldPrefix}-odometer`}>{t("modules:vehicles.odometerKm")}</label>
           <input id={`${fieldPrefix}-odometer`} className="input" type="number" min="0" max="2000000" value={form.odometer_km ?? ""} onChange={(event) => setForm({ ...form, odometer_km: event.target.value ? Number(event.target.value) : null })} />
         </div>
         {mode === "edit" && <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-status`}>Status</label>
+          <label htmlFor={`${fieldPrefix}-status`}>{t("common:labels.status")}</label>
           <select id={`${fieldPrefix}-status`} className="select" value={form.status} onChange={(event) => setForm({ ...form, status: Number(event.target.value) })} required>
-            {VEHICLE_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+            {VEHICLE_STATUSES.map((status) => <option key={status.value} value={status.value}>{t(`common:${status.labelKey}`)}</option>)}
           </select>
         </div>}
       </div>
       <div className="actions dialogActions">
-        {onCancel && <button className="secondaryButton" type="button" onClick={onCancel} disabled={submitting}>Cancel</button>}
+        {onCancel && <button className="secondaryButton" type="button" onClick={onCancel} disabled={submitting}>{t("common:actions.cancel")}</button>}
         <button className="button" type="submit" disabled={submitting || loadingBrands || loadingModels}>
-          {submitting ? (mode === "edit" ? "Updating..." : "Creating...") : (mode === "edit" ? "Update Vehicle" : "Create Vehicle")}
+          {submitting ? (mode === "edit" ? t("modules:vehicles.updating") : t("modules:vehicles.creating")) : (mode === "edit" ? t("modules:vehicles.update") : t("modules:vehicles.create"))}
         </button>
       </div>
     </form>

@@ -272,12 +272,17 @@ def vehicle_timeline(db: Session, vehicle_id: int, page: int, page_size: int) ->
             id=f"inspection-created-{inspection.id}", occurred_at=inspection.created_at.isoformat(), event_type="Inspection created",
             title=f"{inspection.inspection_type} inspection created", description=inspection.notes, status=inspection.overall_status,
             actor=actor, related_record_type="Inspection", related_record_id=inspection.id, href=f"/inspections/{inspection.id}",
+            event_code="inspection_created", title_key="modules:timeline.titles.inspectionCreated",
+            params={"inspection_type": inspection.inspection_type},
         ))
         events.append(MaintenanceTimelineEvent(
             id=f"inspection-status-{inspection.id}", occurred_at=inspection.updated_at.isoformat(),
             event_type=f"Inspection {inspection.overall_status.lower()}", title=f"Inspection {inspection.overall_status}",
             description=f"{failed} checklist item(s) failed." if failed else "No failed checklist items.", status=inspection.overall_status,
             actor=actor, related_record_type="Inspection", related_record_id=inspection.id, href=f"/inspections/{inspection.id}",
+            event_code="inspection_status", title_key="modules:timeline.titles.inspectionStatus",
+            description_key="modules:timeline.descriptions.failedItems" if failed else "modules:timeline.descriptions.noFailedItems",
+            params={"status": inspection.overall_status, "failed": failed, "count": failed},
         ))
 
     orders = db.query(WorkOrder).filter(WorkOrder.vehicle_id == vehicle_id, WorkOrder.archived.is_(False)).all()
@@ -287,6 +292,7 @@ def vehicle_timeline(db: Session, vehicle_id: int, page: int, page_size: int) ->
             id=f"work-order-created-{order.id}", occurred_at=order.created_at.isoformat(), event_type="Work Order created",
             title=order.title, description=order.reported_issue or order.description, status=order.status, priority=order.priority,
             actor=order.created_by or order.requested_by, related_record_type="Work Order", related_record_id=order.id, href=f"/work-orders/{order.id}",
+            event_code="work_order_created", params={"id": order.id},
         ))
         if order.status in status_events:
             description = order.completion_notes
@@ -297,6 +303,9 @@ def vehicle_timeline(db: Session, vehicle_id: int, page: int, page_size: int) ->
                 event_type=status_events[order.status], title=order.title, description=description,
                 status=order.status, priority=order.priority, actor=order.completed_by or order.assigned_to,
                 related_record_type="Work Order", related_record_id=order.id, href=f"/work-orders/{order.id}",
+                event_code=f"work_order_{order.status.lower().replace(' ', '_')}",
+                description_key="modules:timeline.descriptions.finalCost" if order.status == "Completed" and order.total_cost else None,
+                params={"id": order.id, "cost": f"{decimal_value(order.total_cost):.2f}" if order.total_cost else None, "notes": order.completion_notes or ""},
             ))
 
     services = db.query(VehicleService).filter(VehicleService.vehicle_id == vehicle_id, VehicleService.archived.is_(False)).all()
@@ -306,6 +315,9 @@ def vehicle_timeline(db: Session, vehicle_id: int, page: int, page_size: int) ->
             id=f"service-created-{service.id}", occurred_at=created_at.isoformat(), event_type="Service created",
             title=f"{service.service_type} service", description=(f"Completed at {service.odometer_km:,} km." if service.odometer_km else service.description),
             status=service.status, actor=service.workshop, related_record_type="Service", related_record_id=service.id, href=f"/services/{service.id}",
+            event_code="service_created", title_key="modules:timeline.titles.service",
+            description_key="modules:timeline.descriptions.completedOdometer" if service.odometer_km else None,
+            params={"service_type": service.service_type, "odometer": service.odometer_km},
         ))
         if service.updated_at and abs((service.updated_at - created_at).total_seconds()) > 1:
             events.append(MaintenanceTimelineEvent(
@@ -313,6 +325,8 @@ def vehicle_timeline(db: Session, vehicle_id: int, page: int, page_size: int) ->
                 title=f"{service.service_type} service updated", description=service.description,
                 status=service.status, actor=service.workshop, related_record_type="Service", related_record_id=service.id,
                 href=f"/services/{service.id}",
+                event_code="service_updated", title_key="modules:timeline.titles.serviceUpdated",
+                params={"service_type": service.service_type},
             ))
         if service.next_service_date or service.next_service_odometer_km:
             status = current_reminder_status(service)
@@ -322,6 +336,9 @@ def vehicle_timeline(db: Session, vehicle_id: int, page: int, page_size: int) ->
                 description=(f"Due at {service.next_service_odometer_km:,} km." if service.next_service_odometer_km else None),
                 status=status.value, related_record_type="Service Reminder", related_record_id=service.id,
                 href=f"/services/reminders?reminder_id={service.id}",
+                event_code="reminder_created", title_key="modules:timeline.titles.reminderCreated",
+                description_key="modules:timeline.descriptions.dueOdometer" if service.next_service_odometer_km else None,
+                params={"service_type": service.service_type, "odometer": service.next_service_odometer_km},
             ))
             if status != ReminderStatus.upcoming:
                 status_time = service.updated_at if status in {ReminderStatus.resolved, ReminderStatus.dismissed} else service.next_service_date or service.updated_at or service.service_date
@@ -331,6 +348,9 @@ def vehicle_timeline(db: Session, vehicle_id: int, page: int, page_size: int) ->
                     description=(f"Due at {service.next_service_odometer_km:,} km." if service.next_service_odometer_km else None),
                     status=status.value, related_record_type="Service Reminder", related_record_id=service.id,
                     href=f"/services/reminders?reminder_id={service.id}",
+                    event_code="reminder_status", title_key="modules:timeline.titles.reminder",
+                    description_key="modules:timeline.descriptions.dueOdometer" if service.next_service_odometer_km else None,
+                    params={"service_type": service.service_type, "status": status.value, "odometer": service.next_service_odometer_km},
                 ))
 
     events.sort(key=lambda event: event.occurred_at, reverse=True)

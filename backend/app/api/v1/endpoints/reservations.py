@@ -70,6 +70,7 @@ def add_reservation(payload: AddReservation, db: Session = Depends(get_db), curr
         message=f"{vehicle.license_plate} for {reservation.reserved_by}",
         priority="Medium", entity_type="VehicleReservation", entity_id=reservation.id,
         deduplication_key=f"reservation:{reservation.id}:pending",
+        message_params={"id": reservation.id, "plate": vehicle.license_plate, "reserved_by": reservation.reserved_by},
     )
     db.commit()
     db.refresh(reservation)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import { VehicleForm, vehicleToPayload } from "@/components/vehicles/VehicleForm";
 import { apiGet, apiPut } from "@/lib/api";
@@ -8,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import type { Vehicle, VehiclePayload } from "@/lib/types";
 
 export default function EditVehiclePage({ params }: { params: { id: string } }) {
+  const { t } = useTranslation("modules");
   const router = useRouter();
   const { can } = useAuth();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
@@ -17,7 +19,7 @@ export default function EditVehiclePage({ params }: { params: { id: string } }) 
   useEffect(() => {
     apiGet<Vehicle>(`/vehicles/${params.id}`)
       .then(setVehicle)
-      .catch((err) => setError(err instanceof Error ? err.message : "Could not load vehicle"));
+      .catch((err) => setError(err instanceof Error ? err.message : t("vehicles.loadError")));
   }, [params.id]);
 
   async function updateVehicle(payload: VehiclePayload) {
@@ -28,22 +30,22 @@ export default function EditVehiclePage({ params }: { params: { id: string } }) 
       router.push("/vehicles");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update vehicle");
+      setError(err instanceof Error ? err.message : t("vehicles.updateError"));
     } finally {
       setSubmitting(false);
     }
   }
 
   if (!can("vehiclesWrite")) {
-    return <div className="error">You do not have permission to edit vehicles.</div>;
+    return <div className="error">{t("vehicles.accessEdit")}</div>;
   }
 
-  if (!vehicle) return error ? <div className="error">{error}</div> : <div className="card">Loading vehicle...</div>;
+  if (!vehicle) return error ? <div className="error">{error}</div> : <div className="card">{t("vehicles.loading")}</div>;
 
   return (
     <section>
-      <h1>Edit Vehicle</h1>
-      <p className="muted">Update the vehicle identification, technical, and fleet information.</p>
+      <h1>{t("vehicles.edit")}</h1>
+      <p className="muted">{t("vehicles.editDescription")}</p>
       <VehicleForm
         mode="edit"
         initialValues={vehicleToPayload(vehicle)}

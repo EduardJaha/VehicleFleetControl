@@ -302,6 +302,7 @@ def create_work_order(payload: WorkOrderCreate, db: Session = Depends(get_db), c
             title=f"Critical Work Order #{work_order.id}",
             message=work_order.title, priority="Critical", entity_type="WorkOrder",
             entity_id=work_order.id, deduplication_key=f"work-order:{work_order.id}:critical",
+            message_params={"id": work_order.id, "title": work_order.title},
         )
     db.commit()
     db.refresh(work_order)
@@ -358,6 +359,7 @@ def update_work_order_status(work_order_id: int, payload: WorkOrderStatusUpdate,
             message=work_order.title, priority=work_order.priority, entity_type="WorkOrder",
             entity_id=work_order.id,
             deduplication_key=f"work-order:{work_order.id}:{payload.status.value.lower().replace(' ', '-')}",
+            message_params={"id": work_order.id, "status": payload.status.value, "title": work_order.title},
         )
     db.commit()
     db.refresh(work_order)

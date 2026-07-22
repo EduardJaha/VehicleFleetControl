@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from typing import Callable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from sqlalchemy.orm import Session, joinedload
@@ -16,6 +16,7 @@ from app.utils.dates import format_date, parse_date
 from app.utils.domain import normalize_plate, parse_vehicle_status, reservation_status_name, status_name
 from app.services.license_plates import RegistrationCountry, registration_country_name
 from app.services.audit import record_audit
+from app.core.i18n import request_language
 
 router = APIRouter(dependencies=[Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.finance))])
 
@@ -325,23 +326,69 @@ REPORTS: dict[str, Callable[..., dict]] = {
 }
 
 
-def build_excel(report_name: str, data: dict) -> BytesIO:
+EXCEL_TEXT = {
+    "en": {
+        "kpis": "KPIs", "metric": "Metric", "value": "Value", "rows": "Rows", "no_rows": "No rows",
+        "generated": "Generated", "filters": "Filters",
+        "reports": {"fleet-summary": "Fleet Summary", "fuel-costs": "Fuel Costs", "service-costs": "Service Costs", "vehicle-costs": "Vehicle Costs", "reservations": "Reservations", "document-expiry": "Document Expiry", "work-orders": "Work Orders"},
+    },
+    "sq": {
+        "kpis": "Treguesit", "metric": "Treguesi", "value": "Vlera", "rows": "Rreshtat", "no_rows": "Nuk ka rreshta",
+        "generated": "Gjeneruar", "filters": "Filtrat",
+        "reports": {"fleet-summary": "Përmbledhja e Flotës", "fuel-costs": "Kostot e Karburantit", "service-costs": "Kostot e Servisimit", "vehicle-costs": "Kostot e Automjeteve", "reservations": "Rezervimet", "document-expiry": "Skadimi i Dokumenteve", "work-orders": "Urdhrat e Punës"},
+    },
+}
+
+EXCEL_HEADINGS_SQ = {
+    "registration_country": "Shteti i Regjistrimit", "registration_country_name": "Shteti i Regjistrimit",
+    "license_plate": "Targa", "brand": "Marka", "model": "Modeli", "status": "Statusi", "location": "Lokacioni",
+    "odometer_km": "Kilometrazhi (km)", "vehicle": "Automjeti", "date": "Data", "fuel_or_energy_type": "Lloji i Karburantit ose Energjisë",
+    "quantity": "Sasia", "unit": "Njësia", "unit_price": "Çmimi për Njësi", "total_cost": "Kostoja Totale",
+    "station_or_provider": "Stacioni ose Ofruesi", "service_type": "Lloji i Servisimit", "workshop": "Servisi",
+    "cost": "Kostoja", "description": "Përshkrimi", "driver": "Shoferi", "title": "Titulli", "priority": "Prioriteti",
+    "expected_completion_date": "Data e Pritshme e Përfundimit", "actual_completion_date": "Data Faktike e Përfundimit",
+    "reserved_by": "Rezervuar nga", "type": "Lloji", "start_date": "Data e Fillimit", "end_date": "Data e Përfundimit",
+    "notes": "Shënime", "document_type": "Lloji i Dokumentit", "issue_date": "Data e Lëshimit", "expiry_date": "Data e Skadimit",
+}
+
+EXCEL_VALUES_SQ = {
+    "Active": "Aktiv", "In Service": "Në servis", "Sold": "Shitur", "Out of Use": "Jashtë përdorimit",
+    "Open": "Hapur", "Assigned": "Caktuar", "In Progress": "Në proces", "Waiting for Parts": "Në pritje të pjesëve",
+    "Completed": "Përfunduar", "Cancelled": "Anuluar", "Pending": "Në pritje", "Approved": "Miratuar", "Rejected": "Refuzuar",
+    "Low": "I ulët", "Medium": "Mesatar", "High": "I lartë", "Critical": "Kritik", "Overdue": "Me afat të kaluar",
+    "Upcoming": "Në vazhdim", "Valid": "I vlefshëm", "General Service": "Servis i përgjithshëm", "Oil Change": "Ndërrim vaji",
+    "Tire Change/Control": "Ndërrim/Kontroll gomash", "Part Change": "Ndërrim pjese", "Maintenance": "Mirëmbajtje",
+    "Registration": "Regjistrim", "Insurance": "Sigurim", "Technical Control": "Kontroll teknik", "Albania": "Shqipëria", "Kosovo": "Kosova",
+}
+
+
+def build_excel(report_name: str, data: dict, language: str = "en") -> BytesIO:
+    text = EXCEL_TEXT.get(language, EXCEL_TEXT["en"])
     workbook = Workbook()
     summary = workbook.active
-    summary.title = "KPIs"
-    summary.append(["Metric", "Value"])
+    summary.title = text["kpis"]
+    summary.append([text["reports"].get(report_name, report_name)])
+    summary.append([text["generated"], datetime.utcnow()])
+    summary.append([])
+    summary.append([text["metric"], text["value"]])
     for key, value in data["kpis"].items():
-        summary.append([key, value])
+        summary.append([excel_heading(key, language), value])
+    active_filters = {key: value for key, value in data.get("filters", {}).items() if value not in {None, ""}}
+    if active_filters:
+        summary.append([])
+        summary.append([text["filters"]])
+        for key, value in active_filters.items():
+            summary.append([excel_heading(key, language), localize_excel_value(value, language)])
 
-    rows_sheet = workbook.create_sheet("Rows")
+    rows_sheet = workbook.create_sheet(text["rows"])
     rows = data["rows"]
     if rows:
         headers = list(rows[0].keys())
-        rows_sheet.append([excel_heading(header) for header in headers])
+        rows_sheet.append([excel_heading(header, language) for header in headers])
         for row in rows:
-            rows_sheet.append([row.get(header) for header in headers])
+            rows_sheet.append([localize_excel_value(row.get(header), language) for header in headers])
     else:
-        rows_sheet.append(["No rows"])
+        rows_sheet.append([text["no_rows"]])
 
     output = BytesIO()
     workbook.save(output)
@@ -349,7 +396,9 @@ def build_excel(report_name: str, data: dict) -> BytesIO:
     return output
 
 
-def excel_heading(value: str) -> str:
+def excel_heading(value: str, language: str = "en") -> str:
+    if language == "sq" and value in EXCEL_HEADINGS_SQ:
+        return EXCEL_HEADINGS_SQ[value]
     overrides = {
         "license_plate": "Licence Plate",
         "fuel_or_energy_type": "Fuel or Energy Type",
@@ -366,9 +415,15 @@ def excel_heading(value: str) -> str:
     )
 
 
-def excel_response(report_name: str, data: dict) -> StreamingResponse:
-    output = build_excel(report_name, data)
-    filename = f"{report_name}.xlsx"
+def localize_excel_value(value, language: str):
+    if language == "sq" and isinstance(value, str):
+        return EXCEL_VALUES_SQ.get(value, value)
+    return value
+
+
+def excel_response(report_name: str, data: dict, language: str = "en") -> StreamingResponse:
+    output = build_excel(report_name, data, language)
+    filename = f"{report_name}-{'sq' if language == 'sq' else 'en'}.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -433,6 +488,7 @@ def work_orders(from_date: str | None = None, to_date: str | None = None, licens
 
 @router.get("/{report_name}/export")
 def export_report(
+    request: Request,
     report_name: str, from_date: str | None = None, to_date: str | None = None,
     license_plate: str | None = None, vehicle_status: str | None = None,
     department: str | None = None, driver_id: int | None = None,
@@ -443,10 +499,12 @@ def export_report(
     report = REPORTS.get(report_name)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found.")
-    data = report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
+    filters = report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country)
+    data = report(db, **filters)
+    data["filters"] = filters
     record_audit(
         db, action="Report exported", entity_type="Report", entity_id=None, user=current_user,
         new_values={"report_name": report_name}, description=f"Report '{report_name}' exported.",
     )
     db.commit()
-    return excel_response(report_name, data)
+    return excel_response(report_name, data, request_language(request))

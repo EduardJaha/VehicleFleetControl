@@ -153,6 +153,11 @@ a .maintenanceKpi:hover { transform: translateY(-2px); box-shadow: 0 10px 25px r
 .dialogBody { min-height: 0; padding: 22px 24px 24px; overflow-y: auto; }
 .dialogForm { max-width: none; }
 .dialogActions { justify-content: flex-end; padding-top: 4px; }
+.languageSelector { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.languageSelector .select { min-width: 120px; padding: 7px 30px 7px 9px; }
+.languageSelector.compact span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.loginLanguage { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.appTopBar { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
 @media (max-width: 1200px) { .kpiGrid { grid-template-columns: repeat(3, minmax(160px, 1fr)); } }
 @media (max-width: 900px) { .kpiGrid { grid-template-columns: repeat(2, minmax(150px, 1fr)); } .maintenanceSections, .detailGrid { grid-template-columns: 1fr; } .linkedRecords { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .kpiGrid { grid-template-columns: 1fr; } .pagination { align-items: flex-start; flex-direction: column; } .detailList { grid-template-columns: 1fr; gap: 4px; } .entityPageHeader { align-items: stretch; flex-direction: column; } .entityPageAction { width: 100%; } .dialogOverlay { place-items: end center; padding: 12px; } .dialogPanel { max-height: calc(100vh - 24px); } .dialogHeader, .dialogBody { padding-left: 18px; padding-right: 18px; } }

@@ -58,6 +58,7 @@ export type CurrentUser = {
   full_name: string;
   role: UserRole;
   is_active: boolean;
+  preferred_language: "en" | "sq";
 };
 
 export type AuthResponse = {
@@ -403,6 +404,10 @@ export type MaintenanceTimelineEvent = {
   related_record_type: string;
   related_record_id: number;
   href: string;
+  event_code?: string | null;
+  title_key?: string | null;
+  description_key?: string | null;
+  params?: Record<string, unknown> | null;
 };
 
 export type EnergyUnit = "L" | "KWH";
@@ -479,6 +484,9 @@ export type Notification = {
   notification_type: string;
   title: string;
   message: string;
+  title_key?: string | null;
+  message_key?: string | null;
+  message_params?: Record<string, unknown> | null;
   priority: NotificationPriority;
   status: NotificationStatus;
   entity_type?: string | null;
@@ -499,6 +507,9 @@ export type AuditLog = {
   old_values?: Record<string, unknown> | null;
   new_values?: Record<string, unknown> | null;
   description?: string | null;
+  action_code?: string | null;
+  description_key?: string | null;
+  description_params?: Record<string, unknown> | null;
   ip_address?: string | null;
   created_at: string;
 };

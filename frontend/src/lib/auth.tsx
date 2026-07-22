@@ -1,17 +1,15 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost, clearAuthToken, getAuthToken, setAuthToken } from "@/lib/api";
+import { apiGet, apiPost, apiPut, clearAuthToken, getAuthToken, setAuthToken } from "@/lib/api";
+import {
+  applyLanguage,
+  getStoredLanguage,
+  LANGUAGE_CHANGE_EVENT,
+  LanguageCode,
+  userLanguageSyncKey
+} from "@/i18n/language";
 import type { AuthResponse, CurrentUser, UserRole } from "@/lib/types";
-
-export const ROLE_LABELS: Record<UserRole, string> = {
-  admin: "Admin",
-  fleet_manager: "Fleet Manager",
-  mechanic: "Mechanic",
-  driver: "Driver",
-  finance: "Finance",
-  viewer: "Viewer"
-};
 
 export const PERMISSIONS = {
   vehiclesWrite: ["admin", "fleet_manager"],
@@ -45,6 +43,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [ready, setReady] = useState(false);
 
+  async function reconcileLanguage(current: CurrentUser): Promise<CurrentUser> {
+    if (current.preferred_language !== "sq" && current.preferred_language !== "en") {
+      current = { ...current, preferred_language: "en" };
+    }
+    const local = getStoredLanguage();
+    const syncKey = userLanguageSyncKey(current.id);
+    const firstSync = typeof window !== "undefined" && !window.localStorage.getItem(syncKey);
+    if (firstSync && local === "sq" && current.preferred_language === "en") {
+      const saved = await apiPut<{ preferred_language: LanguageCode }>("/auth/me/language", { language: "sq" });
+      current = { ...current, preferred_language: saved.preferred_language };
+    }
+    if (typeof window !== "undefined") window.localStorage.setItem(syncKey, "1");
+    applyLanguage(current.preferred_language);
+    return current;
+  }
+
   useEffect(() => {
     let active = true;
     async function loadCurrentUser() {
@@ -54,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       try {
-        const current = await apiGet<CurrentUser>("/auth/me");
+        const current = await reconcileLanguage(await apiGet<CurrentUser>("/auth/me"));
         if (active) setUser(current);
       } catch {
         if (active) setUser(null);
@@ -68,11 +82,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setReady(true);
     }
 
+    function handleLanguage(event: Event) {
+      const language = (event as CustomEvent<LanguageCode>).detail;
+      setUser((current) => current ? { ...current, preferred_language: language } : current);
+    }
+
     window.addEventListener("auth:logout", handleLogout);
+    window.addEventListener(LANGUAGE_CHANGE_EVENT, handleLanguage);
     void loadCurrentUser();
     return () => {
       active = false;
       window.removeEventListener("auth:logout", handleLogout);
+      window.removeEventListener(LANGUAGE_CHANGE_EVENT, handleLanguage);
     };
   }, []);
 
@@ -82,13 +103,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async login(email: string, password: string) {
       const result = await apiPost<AuthResponse>("/auth/login", { email, password });
       setAuthToken(result.access_token);
-      setUser(result.user);
+      setUser(await reconcileLanguage(result.user));
       setReady(true);
     },
     async registerFirstAdmin(payload: { email: string; full_name: string; password: string }) {
       const result = await apiPost<AuthResponse>("/auth/register", payload);
       setAuthToken(result.access_token);
-      setUser(result.user);
+      setUser(await reconcileLanguage(result.user));
       setReady(true);
     },
     logout() {

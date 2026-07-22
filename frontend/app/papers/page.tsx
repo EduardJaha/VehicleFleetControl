@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
 import { apiDelete, apiDownloadFile, apiGet, apiPostForm } from "@/lib/api";
@@ -8,6 +9,8 @@ import { useAuth } from "@/lib/auth";
 import { DOCUMENT_TYPES } from "@/lib/constants";
 import { toApiDate, todayInputDate } from "@/lib/format";
 import type { ApiMessage, VehiclePaper } from "@/lib/types";
+import { translateType } from "@/i18n/translate";
+import { useLanguage } from "@/components/i18n/LanguageProvider";
 
 const initialForm = {
   license_plate: "",
@@ -17,6 +20,8 @@ const initialForm = {
 };
 
 export default function PapersPage() {
+  const { formatDate } = useLanguage();
+  const { t } = useTranslation(["modules", "common"]);
   const { can } = useAuth();
   const canWrite = can("papersWrite");
   const [papers, setPapers] = useState<VehiclePaper[]>([]);
@@ -35,7 +40,7 @@ export default function PapersPage() {
     try {
       setPapers(await apiGet<VehiclePaper[]>("/papers/all"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load papers");
+      setError(err instanceof Error ? err.message : t("modules:documents.loadError"));
     } finally {
       setLoading(false);
     }
@@ -64,7 +69,7 @@ export default function PapersPage() {
   async function uploadPaper(event: React.FormEvent) {
     event.preventDefault();
     if (!file) {
-      setError("Choose a document file first.");
+      setError(t("modules:documents.chooseFile"));
       return;
     }
     setError(null);
@@ -78,13 +83,13 @@ export default function PapersPage() {
       data.append("expiry_date", toApiDate(form.expiry_date));
       data.append("file", file);
       const result = await apiPostForm<ApiMessage>("/papers/upload", data);
-      setMessage(result.message ?? "Document uploaded.");
+      setMessage(t("modules:documents.uploaded"));
       setForm({ ...initialForm });
       setFile(null);
       setIsDocumentDialogOpen(false);
       await loadPapers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to upload paper");
+      setError(err instanceof Error ? err.message : t("modules:documents.uploadError"));
     } finally {
       setSubmitting(false);
     }
@@ -107,24 +112,24 @@ export default function PapersPage() {
   }
 
   async function deletePaper(paper: VehiclePaper) {
-    if (!confirm(`Archive ${paper.document_type} for ${paper.license_plate}?\n\nIt will be hidden from normal views but retained for history and audit purposes.`)) return;
+    if (!confirm(t("modules:documents.archiveConfirm", { type: translateType(paper.document_type), plate: paper.license_plate }))) return;
     setError(null);
     setMessage(null);
     try {
       const result = await apiDelete<ApiMessage>(`/papers/${paper.id}`);
-      setMessage(result.message ?? "Document archived.");
+      setMessage(t("modules:documents.archived"));
       await loadPapers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive document");
+      setError(err instanceof Error ? err.message : t("modules:documents.archiveError"));
     }
   }
 
   return (
     <section>
       <EntityPageHeader
-        title="Documents"
-        description="Manage vehicle papers, expiry dates, and uploaded document files."
-        actionLabel={canWrite ? "Add Document" : undefined}
+        title={t("modules:documents.title")}
+        description={t("modules:documents.description")}
+        actionLabel={canWrite ? t("modules:documents.add") : undefined}
         onAction={canWrite ? openDocumentDialog : undefined}
       />
       {error && !isDocumentDialogOpen && <div className="error spaced" role="alert">{error}</div>}
@@ -132,40 +137,40 @@ export default function PapersPage() {
 
       {canWrite && <CreateEntityDialog
         open={isDocumentDialogOpen}
-        title="Add Document"
-        description="Upload a vehicle document and record its issue and expiry dates."
+        title={t("modules:documents.add")}
+        description={t("modules:documents.formDescription")}
         busy={submitting}
         onClose={closeDocumentDialog}
       >
         <form onSubmit={uploadPaper} className="form dialogForm">
           {error && <div className="error" role="alert">{error}</div>}
           <div className="formGrid">
-            <div className="formRow"><label htmlFor="document-license-plate">Licence plate</label><input id="document-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder="Albania or Kosovo plate" required /></div>
-            <div className="formRow"><label htmlFor="document-type">Document type</label><select id="document-type" className="select" value={form.document_type} onChange={(e) => setForm({ ...form, document_type: e.target.value })}>{DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></div>
-            <div className="formRow"><label htmlFor="document-issue-date">Issue date</label><input id="document-issue-date" className="input" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} required /></div>
-            <div className="formRow"><label htmlFor="document-expiry-date">Expiry date</label><input id="document-expiry-date" className="input" type="date" min={form.issue_date} value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} required /></div>
-            <div className="formRow span2"><label htmlFor="document-file">Document file</label><input id="document-file" className="input" type="file" accept=".pdf,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required /><span className="muted">PDF only, maximum 10 MB. Selected: {file?.name ?? "none"}</span></div>
+            <div className="formRow"><label htmlFor="document-license-plate">{t("common:labels.licencePlate")}</label><input id="document-license-plate" className="input" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} placeholder={t("modules:drivers.platePlaceholder")} required /></div>
+            <div className="formRow"><label htmlFor="document-type">{t("modules:documents.documentType")}</label><select id="document-type" className="select" value={form.document_type} onChange={(e) => setForm({ ...form, document_type: e.target.value })}>{DOCUMENT_TYPES.map((type) => <option key={type} value={type}>{translateType(type)}</option>)}</select></div>
+            <div className="formRow"><label htmlFor="document-issue-date">{t("common:labels.issueDate")}</label><input id="document-issue-date" className="input" type="date" value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} required /></div>
+            <div className="formRow"><label htmlFor="document-expiry-date">{t("common:labels.expiryDate")}</label><input id="document-expiry-date" className="input" type="date" min={form.issue_date} value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} required /></div>
+            <div className="formRow span2"><label htmlFor="document-file">{t("modules:documents.documentFile")}</label><input id="document-file" className="input" type="file" accept=".pdf,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required /><span className="muted">{t("modules:documents.fileHelp", { name: file?.name ?? t("common:labels.none") })}</span></div>
           </div>
           <div className="actions dialogActions">
-            <button className="secondaryButton" type="button" onClick={closeDocumentDialog} disabled={submitting}>Cancel</button>
-            <button className="button" type="submit" disabled={submitting}>{submitting ? "Uploading..." : "Upload Document"}</button>
+            <button className="secondaryButton" type="button" onClick={closeDocumentDialog} disabled={submitting}>{t("common:actions.cancel")}</button>
+            <button className="button" type="submit" disabled={submitting}>{submitting ? t("modules:documents.uploading") : t("modules:documents.upload")}</button>
           </div>
         </form>
       </CreateEntityDialog>}
 
       <div className="card filtersGrid spaced">
-        <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Search plate, vehicle, document" />
-        <select className="select" value={filters.document_type} onChange={(e) => setFilters({ ...filters, document_type: e.target.value })}><option value="">All documents</option>{DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select>
-        <select className="select" value={filters.location} onChange={(e) => setFilters({ ...filters, location: e.target.value })}><option value="">All locations</option>{locations.map((location) => <option key={location}>{location}</option>)}</select>
-        <input className="input" type="date" value={filters.expiring_before} onChange={(e) => setFilters({ ...filters, expiring_before: e.target.value })} title="Expiring before" />
+        <input className="input" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder={t("modules:documents.searchPlaceholder")} />
+        <select className="select" value={filters.document_type} onChange={(e) => setFilters({ ...filters, document_type: e.target.value })}><option value="">{t("modules:documents.allDocuments")}</option>{DOCUMENT_TYPES.map((type) => <option key={type} value={type}>{translateType(type)}</option>)}</select>
+        <select className="select" value={filters.location} onChange={(e) => setFilters({ ...filters, location: e.target.value })}><option value="">{t("modules:documents.allLocations")}</option>{locations.map((location) => <option key={location}>{location}</option>)}</select>
+        <input className="input" type="date" value={filters.expiring_before} onChange={(e) => setFilters({ ...filters, expiring_before: e.target.value })} title={t("modules:documents.expiringBefore")} />
       </div>
 
-      {loading ? <div className="card">Loading documents...</div> : (
+      {loading ? <div className="card">{t("modules:documents.loading")}</div> : (
         <table className="table">
-          <thead><tr><th>Plate</th><th>Vehicle</th><th>Location</th><th>Document</th><th>Issue</th><th>Expiry</th><th>File</th>{canWrite && <th>Actions</th>}</tr></thead>
+          <thead><tr><th>{t("common:labels.licencePlate")}</th><th>{t("common:labels.vehicle")}</th><th>{t("common:labels.location")}</th><th>{t("modules:documents.document")}</th><th>{t("modules:documents.issue")}</th><th>{t("modules:documents.expiry")}</th><th>{t("common:labels.file")}</th>{canWrite && <th>{t("common:labels.actions")}</th>}</tr></thead>
           <tbody>
-            {filtered.map((p) => <tr key={p.id}><td><strong>{p.license_plate}</strong></td><td>{p.brand} {p.model}</td><td>{p.vehicle_location}</td><td>{p.document_type}</td><td>{p.issue_date}</td><td>{p.expiry_date}</td><td>{p.file_path ? <button className="linkButton" type="button" onClick={() => void apiDownloadFile(p.file_path, `${p.document_type}.pdf`)}>Download</button> : "-"}</td>{canWrite && <td><button className="dangerButton smallButton" type="button" onClick={() => void deletePaper(p)}>Archive</button></td>}</tr>)}
-            {filtered.length === 0 && <tr><td colSpan={canWrite ? 8 : 7} className="muted">No documents match your filters.</td></tr>}
+            {filtered.map((p) => <tr key={p.id}><td><strong>{p.license_plate}</strong></td><td>{p.brand} {p.model}</td><td>{p.vehicle_location}</td><td>{translateType(p.document_type)}</td><td>{formatDate(p.issue_date)}</td><td>{formatDate(p.expiry_date)}</td><td>{p.file_path ? <button className="linkButton" type="button" onClick={() => void apiDownloadFile(p.file_path, `${p.document_type}.pdf`)}>{t("common:actions.download")}</button> : "-"}</td>{canWrite && <td><button className="dangerButton smallButton" type="button" onClick={() => void deletePaper(p)}>{t("common:actions.archive")}</button></td>}</tr>)}
+            {filtered.length === 0 && <tr><td colSpan={canWrite ? 8 : 7} className="muted">{t("modules:documents.empty")}</td></tr>}
           </tbody>
         </table>
       )}

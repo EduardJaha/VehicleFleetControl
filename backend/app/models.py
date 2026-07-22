@@ -28,6 +28,7 @@ class User(Base):
     hashed_password = Column("HashedPassword", String(255), nullable=False)
     role = Column("Role", String(50), nullable=False, default="viewer")
     is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    preferred_language = Column("PreferredLanguage", String(5), nullable=False, default="en")
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -383,6 +384,9 @@ class AuditLog(Base):
     old_values = Column("OldValues", JSON, nullable=True)
     new_values = Column("NewValues", JSON, nullable=True)
     description = Column("Description", Text, nullable=True)
+    action_code = Column("ActionCode", String(100), nullable=True)
+    description_key = Column("DescriptionKey", String(255), nullable=True)
+    description_params = Column("DescriptionParams", JSON, nullable=True)
     ip_address = Column("IpAddress", String(64), nullable=True)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
 
@@ -402,6 +406,9 @@ class Notification(Base):
     notification_type = Column("NotificationType", String(100), nullable=False)
     title = Column("Title", String(255), nullable=False)
     message = Column("Message", Text, nullable=False)
+    title_key = Column("TitleKey", String(255), nullable=True)
+    message_key = Column("MessageKey", String(255), nullable=True)
+    message_params = Column("MessageParams", JSON, nullable=True)
     priority = Column("Priority", String(20), nullable=False, default="Medium")
     status = Column("Status", String(20), nullable=False, default="Unread")
     entity_type = Column("EntityType", String(100), nullable=True)

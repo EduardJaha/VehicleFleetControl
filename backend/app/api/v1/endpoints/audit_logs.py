@@ -27,6 +27,9 @@ def audit_out(row: AuditLog) -> AuditLogOut:
         old_values=row.old_values,
         new_values=row.new_values,
         description=row.description,
+        action_code=row.action_code,
+        description_key=row.description_key,
+        description_params=row.description_params,
         ip_address=row.ip_address,
         created_at=created_at.isoformat(),
     )

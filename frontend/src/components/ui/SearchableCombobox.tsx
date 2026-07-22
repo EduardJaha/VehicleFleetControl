@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export type ComboboxOption = {
   id: number;
@@ -38,6 +39,7 @@ export function SearchableCombobox({
   error,
   required = false
 }: SearchableComboboxProps) {
+  const { t } = useTranslation("modules");
   const generatedId = useId();
   const listboxId = `${generatedId}-listbox`;
   const statusId = `${generatedId}-status`;
@@ -153,7 +155,7 @@ export function SearchableCombobox({
         </div>
       )}
       <div id={statusId} className={`comboboxStatus${error ? " comboboxError" : ""}`} aria-live="polite">
-        {loading ? loadingText : error || (unavailableSelection ? "Current historical selection is inactive or unavailable." : "")}
+        {loading ? loadingText : error || (unavailableSelection ? t("shared.historicalSelectionUnavailable") : "")}
       </div>
     </div>
   );

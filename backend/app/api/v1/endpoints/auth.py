@@ -5,7 +5,17 @@ from sqlalchemy.orm import Session
 from app.core.security import create_access_token, get_current_user, hash_password, require_roles, verify_password
 from app.db.session import get_db
 from app.models import User
-from app.schemas import FirstAdminCreate, LoginRequest, TokenOut, UserCreate, UserOut, UserRole
+from app.schemas import (
+    FirstAdminCreate,
+    LanguageCode,
+    LanguagePreferenceOut,
+    LanguagePreferenceUpdate,
+    LoginRequest,
+    TokenOut,
+    UserCreate,
+    UserOut,
+    UserRole,
+)
 from app.services.audit import record_audit
 
 router = APIRouter()
@@ -18,6 +28,7 @@ def user_out(user: User) -> UserOut:
         full_name=user.full_name,
         role=UserRole(user.role),
         is_active=user.is_active,
+        preferred_language=LanguageCode(user.preferred_language or "en"),
     )
 
 
@@ -32,6 +43,7 @@ def create_user_record(db: Session, payload: UserCreate | FirstAdminCreate, role
         hashed_password=hash_password(payload.password),
         role=(role or getattr(payload, "role", UserRole.viewer)).value,
         is_active=getattr(payload, "is_active", True),
+        preferred_language=getattr(payload, "preferred_language", LanguageCode.en).value,
     )
     db.add(user)
     try:
@@ -85,6 +97,31 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return user_out(current_user)
+
+
+@router.put("/me/language", response_model=LanguagePreferenceOut)
+def update_my_language(
+    payload: LanguagePreferenceUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    old_language = current_user.preferred_language or "en"
+    current_user.preferred_language = payload.language.value
+    record_audit(
+        db,
+        action="Language preference changed",
+        action_code="user_language_changed",
+        entity_type="User",
+        entity_id=current_user.id,
+        user=current_user,
+        old_values={"preferred_language": old_language},
+        new_values={"preferred_language": payload.language.value},
+        description="User language preference changed.",
+        description_key="audit.userLanguageChanged",
+        description_params={"language": payload.language.value},
+    )
+    db.commit()
+    return LanguagePreferenceOut(preferred_language=payload.language)
 
 
 @router.post("/users", response_model=UserOut, status_code=201)

@@ -1,0 +1,18 @@
+{
+  "dashboard": "Paneli",
+  "vehicles": "Automjetet",
+  "drivers": "Shoferët",
+  "maintenance": "Mirëmbajtja",
+  "maintenanceDashboard": "Paneli i Mirëmbajtjes",
+  "workOrders": "Urdhrat e Punës",
+  "serviceHistory": "Historia e Servisimit",
+  "serviceReminders": "Përkujtuesit e Servisimit",
+  "inspections": "Inspektimet",
+  "documents": "Dokumentet",
+  "fuel": "Karburanti dhe Karikimi",
+  "accidents": "Aksidentet",
+  "reservations": "Rezervimet",
+  "reports": "Raportet",
+  "notifications": "Njoftimet",
+  "auditLogs": "Regjistri i Aktiviteteve"
+}

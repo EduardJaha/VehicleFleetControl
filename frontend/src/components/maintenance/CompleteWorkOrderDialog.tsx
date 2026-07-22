@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { apiGet, apiPostForm, maintenanceApi } from "@/lib/api";
 import { SERVICE_KM_INTERVALS, SERVICE_TYPES } from "@/lib/constants";
 import { toApiDate, todayInputDate } from "@/lib/format";
 import type { Attachment, Vehicle, WorkOrder, WorkOrderCompletionResult } from "@/lib/types";
+import { translateType } from "@/i18n/translate";
+import { useLanguage } from "@/components/i18n/LanguageProvider";
 
 type Props = {
   order: WorkOrder | null;
@@ -32,6 +35,8 @@ function initialState(order: WorkOrder | null) {
 }
 
 export function CompleteWorkOrderDialog({ order, open, onClose, onCompleted }: Props) {
+  const { t } = useTranslation(["modules", "common"]);
+  const { formatNumber } = useLanguage();
   const [form, setForm] = useState(() => initialState(order));
   const [bill, setBill] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,13 +92,13 @@ export function CompleteWorkOrderDialog({ order, open, onClose, onCompleted }: P
           data.append("file", bill);
           await apiPostForm<Attachment>("/files", data);
         } catch (uploadError) {
-          uploadWarning = uploadError instanceof Error ? `Work Order completed, but the bill upload failed: ${uploadError.message}` : "Work Order completed, but the bill upload failed.";
+          uploadWarning = t("modules:workOrders.billUploadFailed", { message: uploadError instanceof Error ? uploadError.message : t("errors:api") });
         }
       }
       await onCompleted(result, uploadWarning);
       onClose();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Could not complete Work Order.");
+      setError(submitError instanceof Error ? submitError.message : t("modules:workOrders.completeError"));
     } finally {
       setSubmitting(false);
     }
@@ -101,34 +106,34 @@ export function CompleteWorkOrderDialog({ order, open, onClose, onCompleted }: P
 
   return <CreateEntityDialog
     open={open}
-    title={order ? `Complete Work Order #${order.id}` : "Complete Work Order"}
-    description="Completion, linked Service, odometer, reminder, audit, and notification updates are committed together."
+    title={`${t("modules:workOrders.complete")}${order ? ` #${order.id}` : ""}`}
+    description={t("modules:workOrders.completionDescription")}
     busy={submitting}
     onClose={onClose}
   >
     <form className="form dialogForm" onSubmit={submit}>
       {error && <div className="error" role="alert">{error}</div>}
       <div className="formGrid">
-        <div className="formRow"><label>Completion date</label><input className="input" type="date" max={todayInputDate()} required value={form.actual_completion_date} onChange={(e) => setForm({ ...form, actual_completion_date: e.target.value })} /></div>
-        <div className="formRow"><label>Completed odometer</label><input className="input" type="number" min="0" required value={form.completed_odometer_km} onChange={(e) => setForm({ ...form, completed_odometer_km: e.target.value })} /></div>
-        <div className="formRow"><label>Workshop</label><input className="input" value={form.workshop} onChange={(e) => setForm({ ...form, workshop: e.target.value })} /></div>
-        <div className="formRow"><label>Calculated total</label><input className="input" readOnly value={total} /></div>
-        <div className="formRow"><label>Labor cost</label><input className="input" type="number" min="0" step="0.01" required value={form.labor_cost} onChange={(e) => setForm({ ...form, labor_cost: e.target.value })} /></div>
-        <div className="formRow"><label>Parts cost</label><input className="input" type="number" min="0" step="0.01" required value={form.parts_cost} onChange={(e) => setForm({ ...form, parts_cost: e.target.value })} /></div>
-        <div className="formRow span2"><label>Completion notes</label><textarea className="input textarea" value={form.completion_notes} onChange={(e) => setForm({ ...form, completion_notes: e.target.value })} /></div>
-        <label className="actions span2"><input type="checkbox" checked={form.create_service_record} onChange={(e) => setForm({ ...form, create_service_record: e.target.checked })} /> Create Service Record</label>
+        <div className="formRow"><label>{t("modules:workOrders.completionDate")}</label><input className="input" type="date" max={todayInputDate()} required value={form.actual_completion_date} onChange={(e) => setForm({ ...form, actual_completion_date: e.target.value })} /></div>
+        <div className="formRow"><label>{t("modules:workOrders.completedOdometer")}</label><input className="input" type="number" min="0" required value={form.completed_odometer_km} onChange={(e) => setForm({ ...form, completed_odometer_km: e.target.value })} /></div>
+        <div className="formRow"><label>{t("common:labels.workshop")}</label><input className="input" value={form.workshop} onChange={(e) => setForm({ ...form, workshop: e.target.value })} /></div>
+        <div className="formRow"><label>{t("modules:workOrders.calculatedTotal")}</label><input className="input" readOnly value={formatNumber(total, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /></div>
+        <div className="formRow"><label>{t("modules:workOrders.laborCost")}</label><input className="input" type="number" min="0" step="0.01" required value={form.labor_cost} onChange={(e) => setForm({ ...form, labor_cost: e.target.value })} /></div>
+        <div className="formRow"><label>{t("modules:workOrders.partsCost")}</label><input className="input" type="number" min="0" step="0.01" required value={form.parts_cost} onChange={(e) => setForm({ ...form, parts_cost: e.target.value })} /></div>
+        <div className="formRow span2"><label>{t("modules:workOrders.completionNotes")}</label><textarea className="input textarea" value={form.completion_notes} onChange={(e) => setForm({ ...form, completion_notes: e.target.value })} /></div>
+        <label className="actions span2"><input type="checkbox" checked={form.create_service_record} onChange={(e) => setForm({ ...form, create_service_record: e.target.checked })} /> {t("modules:workOrders.createService")}</label>
         {form.create_service_record && <>
-          <div className="formRow"><label>Service type</label><select className="select" value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })}>{SERVICE_TYPES.map((value) => <option key={value}>{value}</option>)}</select></div>
-          <div className="formRow"><label>Bill or invoice</label><input className="input" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => setBill(e.target.files?.[0] ?? null)} /><span className="muted">PDF up to 10 MB; JPEG, PNG, or WebP up to 8 MB.</span></div>
-          <div className="formRow span2"><label>Service description</label><textarea className="input textarea" value={form.service_description} onChange={(e) => setForm({ ...form, service_description: e.target.value })} /></div>
-          {mileageReminder && <div className="formRow"><label>Next service kilometre interval</label><select className="select" value={form.next_service_km_interval} onChange={(e) => setForm({ ...form, next_service_km_interval: e.target.value })}>{SERVICE_KM_INTERVALS.map((value) => <option key={value} value={value}>{value.toLocaleString()} km</option>)}</select></div>}
-          {dateReminder && <div className="formRow"><label>Next service date</label><input className="input" type="date" min={form.actual_completion_date} required value={form.next_service_date} onChange={(e) => setForm({ ...form, next_service_date: e.target.value })} /></div>}
+          <div className="formRow"><label>{t("modules:workOrders.serviceType")}</label><select className="select" value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })}>{SERVICE_TYPES.map((value) => <option key={value} value={value}>{translateType(value)}</option>)}</select></div>
+          <div className="formRow"><label>{t("modules:workOrders.billInvoice")}</label><input className="input" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => setBill(e.target.files?.[0] ?? null)} /><span className="muted">{t("modules:workOrders.fileHelp")}</span></div>
+          <div className="formRow span2"><label>{t("modules:workOrders.serviceDescription")}</label><textarea className="input textarea" value={form.service_description} onChange={(e) => setForm({ ...form, service_description: e.target.value })} /></div>
+          {mileageReminder && <div className="formRow"><label>{t("modules:workOrders.nextServiceInterval")}</label><select className="select" value={form.next_service_km_interval} onChange={(e) => setForm({ ...form, next_service_km_interval: e.target.value })}>{SERVICE_KM_INTERVALS.map((value) => <option key={value} value={value}>{formatNumber(value)} km</option>)}</select></div>}
+          {dateReminder && <div className="formRow"><label>{t("modules:workOrders.nextServiceDate")}</label><input className="input" type="date" min={form.actual_completion_date} required value={form.next_service_date} onChange={(e) => setForm({ ...form, next_service_date: e.target.value })} /></div>}
         </>}
-        {order?.source_reminder && <label className="actions span2"><input type="checkbox" checked={form.resolve_source_reminder} onChange={(e) => setForm({ ...form, resolve_source_reminder: e.target.checked })} /> Resolve source reminder</label>}
+        {order?.source_reminder && <label className="actions span2"><input type="checkbox" checked={form.resolve_source_reminder} onChange={(e) => setForm({ ...form, resolve_source_reminder: e.target.checked })} /> {t("modules:workOrders.resolveSourceReminder")}</label>}
       </div>
       <div className="actions dialogActions">
-        <button className="secondaryButton" type="button" disabled={submitting} onClick={onClose}>Cancel</button>
-        <button className="button" type="submit" disabled={submitting}>{submitting ? "Completing..." : "Complete Work Order"}</button>
+        <button className="secondaryButton" type="button" disabled={submitting} onClick={onClose}>{t("common:actions.cancel")}</button>
+        <button className="button" type="submit" disabled={submitting}>{submitting ? t("modules:workOrders.completing") : t("modules:workOrders.complete")}</button>
       </div>
     </form>
   </CreateEntityDialog>;

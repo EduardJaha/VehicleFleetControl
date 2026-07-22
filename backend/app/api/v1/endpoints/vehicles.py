@@ -301,6 +301,7 @@ def update_vehicle_status(license_plate: str, payload: UpdateStatus, db: Session
         title=f"{vehicle.license_plate} status changed", message=status_name(vehicle.status),
         priority="Medium", entity_type="Vehicle", entity_id=vehicle.id,
         deduplication_key=f"vehicle:{vehicle.id}:status:{vehicle.status}",
+        message_params={"plate": vehicle.license_plate, "status": status_name(vehicle.status)},
     )
     db.commit()
     db.refresh(vehicle)

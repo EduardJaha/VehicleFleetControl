@@ -130,6 +130,18 @@ async function mockApi(page: Page) {
   });
 }
 
+test("Language selector updates the login UI, HTML language, and persisted preference", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Language").selectOption("sq");
+  await expect(page.getByLabel("Gjuha")).toHaveValue("sq");
+  await expect(page.getByLabel("Email-i")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hyr" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "sq");
+  await page.reload();
+  await expect(page.getByLabel("Gjuha")).toHaveValue("sq");
+  await expect(page.locator("html")).toHaveAttribute("lang", "sq");
+});
+
 test("Admin can log in and view the notification centre", async ({ page }) => {
   await mockApi(page);
   await page.goto("/login");
@@ -148,7 +160,7 @@ test("Admin can filter and inspect redacted audit details", async ({ page }) => 
   await page.addInitScript(() => localStorage.setItem("vehicle_fleet_control_token", "test-token"));
   await page.goto("/audit-logs");
   await expect(page.getByRole("heading", { name: "Audit Logs" })).toBeVisible();
-  await expect(page.getByText("Vehicle created")).toBeVisible();
+  await expect(page.getByText("Vehicle created").first()).toBeVisible();
   await page.getByText("Inspect", { exact: true }).click();
   await expect(page.locator(".auditJson")).toContainText("01-123-AB");
   await expect(page.getByText(/hashed_password/)).toHaveCount(0);
@@ -214,7 +226,7 @@ test("Fuel form derives Electric units from the selected Vehicle and resets safe
   await dialog.getByLabel("Vehicle").click();
   await dialog.getByRole("option", { name: "AA 123 AA — Toyota Corolla — Hybrid" }).click();
   await expect(dialog.getByLabel("Fuel quantity (L)")).toHaveValue("");
-  await expect(dialog.getByLabel("Cost per liter")).toHaveValue("");
+  await expect(dialog.getByLabel("Cost per litre")).toHaveValue("");
 
   await dialog.getByLabel("Vehicle").click();
   await dialog.getByRole("option", { name: "01-555-AA — Tesla Model Y — Electric" }).click();
@@ -224,7 +236,7 @@ test("Fuel form derives Electric units from the selected Vehicle and resets safe
   await dialog.getByRole("button", { name: "Save Fuel Record" }).click();
 
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("cell", { name: "62.40 kWh" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "62.4 kWh" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "0.18/kWh" })).toBeVisible();
   await page.getByRole("button", { name: "Edit" }).click();
   await expect(page.getByLabel("Energy delivered (kWh)")).toBeVisible();

@@ -1,29 +1,29 @@
-export const VEHICLE_STATUS_LABELS: Record<number, string> = {
-  0: "Active",
-  1: "In Service",
-  2: "Sold",
-  3: "Out of Use"
+export const VEHICLE_STATUS_KEYS: Record<number, string> = {
+  0: "status.Active",
+  1: "status.In Service",
+  2: "status.Sold",
+  3: "status.Out of Use"
 };
 
 export const VEHICLE_STATUSES = [
-  { value: 0, label: "Active" },
-  { value: 1, label: "In Service" },
-  { value: 2, label: "Sold" },
-  { value: 3, label: "Out of Use" }
+  { value: 0, labelKey: "status.Active" },
+  { value: 1, labelKey: "status.In Service" },
+  { value: 2, labelKey: "status.Sold" },
+  { value: 3, labelKey: "status.Out of Use" }
 ];
 
-export const RESERVATION_STATUS_LABELS: Record<number, string> = {
-  0: "Pending",
-  1: "Approved",
-  2: "Rejected",
-  3: "Cancelled"
+export const RESERVATION_STATUS_KEYS: Record<number, string> = {
+  0: "status.Pending",
+  1: "status.Approved",
+  2: "status.Rejected",
+  3: "status.Cancelled"
 };
 
 export const RESERVATION_STATUSES = [
-  { value: 0, label: "Pending" },
-  { value: 1, label: "Approved" },
-  { value: 2, label: "Rejected" },
-  { value: 3, label: "Cancelled" }
+  { value: 0, labelKey: "status.Pending" },
+  { value: 1, labelKey: "status.Approved" },
+  { value: 2, labelKey: "status.Rejected" },
+  { value: 3, labelKey: "status.Cancelled" }
 ];
 
 export const FUEL_TYPES = ["Petrol", "Diesel", "Hybrid", "Electric", "LPG", "CNG", "Gas"];
@@ -57,11 +57,11 @@ export const WORK_ORDER_SOURCES = ["Manual", "Inspection", "Service Reminder", "
 export const SERVICE_SOURCES = ["Manual", "Work Order", "Imported"];
 export const REMINDER_STATUSES = ["Upcoming", "Due Soon", "Due", "Overdue", "Resolved", "Dismissed"];
 export const REPORTS = [
-  { value: "fleet-summary", label: "Fleet Summary" },
-  { value: "fuel-costs", label: "Fuel Costs" },
-  { value: "service-costs", label: "Service Costs" },
-  { value: "vehicle-costs", label: "Vehicle Costs" },
-  { value: "reservations", label: "Reservations" },
-  { value: "document-expiry", label: "Document Expiry" },
-  { value: "work-orders", label: "Work Orders" }
+  { value: "fleet-summary", labelKey: "reports.fleet-summary" },
+  { value: "fuel-costs", labelKey: "reports.fuel-costs" },
+  { value: "service-costs", labelKey: "reports.service-costs" },
+  { value: "vehicle-costs", labelKey: "reports.vehicle-costs" },
+  { value: "reservations", labelKey: "reports.reservations" },
+  { value: "document-expiry", labelKey: "reports.document-expiry" },
+  { value: "work-orders", labelKey: "reports.work-orders" }
 ];

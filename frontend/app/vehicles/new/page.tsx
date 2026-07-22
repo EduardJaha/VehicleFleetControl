@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import { VehicleForm } from "@/components/vehicles/VehicleForm";
 import { apiPost } from "@/lib/api";
@@ -8,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import type { Vehicle, VehiclePayload } from "@/lib/types";
 
 export default function NewVehiclePage() {
+  const { t } = useTranslation("modules");
   const router = useRouter();
   const { can } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -21,20 +23,20 @@ export default function NewVehiclePage() {
       router.push("/vehicles");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create vehicle");
+      setError(err instanceof Error ? err.message : t("vehicles.createError"));
     } finally {
       setSubmitting(false);
     }
   }
 
   if (!can("vehiclesWrite")) {
-    return <div className="error">You do not have permission to create vehicles.</div>;
+    return <div className="error">{t("vehicles.accessCreate")}</div>;
   }
 
   return (
     <section>
-      <h1>Add Vehicle</h1>
-      <p className="muted">Enter the vehicle identification, technical, and fleet information.</p>
+      <h1>{t("vehicles.add")}</h1>
+      <p className="muted">{t("vehicles.formDescription")}</p>
       <VehicleForm
         error={error}
         submitting={submitting}

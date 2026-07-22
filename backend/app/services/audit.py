@@ -2,6 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any
+import re
 
 from sqlalchemy import inspect as sqlalchemy_inspect
 from sqlalchemy.orm import Session
@@ -67,8 +68,12 @@ def record_audit(
     old_values: dict[str, Any] | None = None,
     new_values: dict[str, Any] | None = None,
     description: str | None = None,
+    action_code: str | None = None,
+    description_key: str | None = None,
+    description_params: dict[str, Any] | None = None,
     ip_address: str | None = None,
 ) -> AuditLog:
+    stable_action = action_code or re.sub(r"[^a-z0-9]+", "_", action.lower()).strip("_")
     log = AuditLog(
         user_id=user.id if user else None,
         username=user.email if user else "System",
@@ -78,6 +83,12 @@ def record_audit(
         old_values=redact(old_values),
         new_values=redact(new_values),
         description=description,
+        action_code=stable_action,
+        description_key=description_key or f"modules:auditDescriptions.{stable_action}",
+        description_params=redact(description_params) or {
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+        },
         ip_address=ip_address,
     )
     db.add(log)

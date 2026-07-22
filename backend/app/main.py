@@ -1,12 +1,16 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 import app.models  # noqa: F401 ensures SQLAlchemy model registration
+from app.core.errors import http_exception_handler, request_validation_exception_handler
 
 settings = get_settings()
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
 
 app.add_middleware(
     CORSMiddleware,

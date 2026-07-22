@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 type CreateEntityDialogProps = {
   open: boolean;
@@ -21,6 +22,7 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 export function CreateEntityDialog({ open, title, description, busy = false, onClose, children }: CreateEntityDialogProps) {
+  const { t } = useTranslation("modules");
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -102,7 +104,7 @@ export function CreateEntityDialog({ open, title, description, busy = false, onC
           <button
             className="dialogCloseButton"
             type="button"
-            aria-label={`Close ${title}`}
+            aria-label={t("shared.closeDialog", { title })}
             onClick={onClose}
             disabled={busy}
           >

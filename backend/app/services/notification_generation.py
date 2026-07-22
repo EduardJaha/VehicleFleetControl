@@ -32,6 +32,9 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
             priority="Critical" if overdue else "High" if status == ReminderStatus.due else "Medium",
             entity_type="VehicleService", entity_id=reminder.id,
             deduplication_key=f"{prefix}{status.value.lower().replace(' ', '-')}",
+            title_key="modules:notificationContent.service_reminder.title",
+            message_key="modules:notificationContent.service_reminder.message",
+            message_params={"service_type": reminder.service_type, "status": status.value, "plate": reminder.vehicle.license_plate},
         )
 
     for paper in db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle)).filter(VehiclePaper.archived.is_(False)).all():
@@ -48,6 +51,9 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
             priority="Critical" if expired else "High",
             entity_type="VehiclePaper", entity_id=paper.id,
             deduplication_key=f"document:{paper.id}:{'expired' if expired else 'expires-30-days'}",
+            title_key="modules:notificationContent.document_expiry.title",
+            message_key="modules:notificationContent.document_expiry.message",
+            message_params={"document_type": paper.document_type, "status": "Overdue" if expired else "Due Soon", "plate": paper.vehicle.license_plate, "date": paper.expiry_date.date().isoformat()},
         )
 
     for driver in db.query(Driver).filter(Driver.archived.is_(False)).all():
@@ -64,6 +70,9 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
             priority="Critical" if expired else "High",
             entity_type="Driver", entity_id=driver.id,
             deduplication_key=f"driver-license:{driver.id}:{'expired' if expired else 'expires-30-days'}",
+            title_key="modules:notificationContent.driver_licence.title",
+            message_key="modules:notificationContent.driver_licence.message",
+            message_params={"name": driver.full_name, "status": "Overdue" if expired else "Due Soon", "date": driver.license_expiry_date.date().isoformat()},
         )
 
     active_orders = db.query(WorkOrder).filter(
@@ -79,6 +88,9 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
             priority="Critical" if order.priority == "Critical" else "High",
             entity_type="WorkOrder", entity_id=order.id,
             deduplication_key=f"work-order:{order.id}:overdue",
+            title_key="modules:notificationContent.work_order_overdue.title",
+            message_key="modules:notificationContent.work_order_overdue.message",
+            message_params={"id": order.id, "title": order.title},
         )
     for order in db.query(WorkOrder).filter(~WorkOrder.id.in_(active_order_ids or {-1})).all():
         resolve_by_prefix(db, f"work-order:{order.id}:overdue")
@@ -94,6 +106,9 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
                 message=f"{reservation.vehicle.license_plate} for {reservation.reserved_by}",
                 priority="Medium", entity_type="VehicleReservation", entity_id=reservation.id,
                 deduplication_key=f"reservation:{reservation.id}:pending",
+                title_key="modules:notificationContent.reservation_pending.title",
+                message_key="modules:notificationContent.reservation.message",
+                message_params={"id": reservation.id, "plate": reservation.vehicle.license_plate, "reserved_by": reservation.reserved_by},
             )
         if reservation.status == 1 and now <= reservation.start_date <= now + timedelta(hours=24):
             notify_roles(
@@ -102,6 +117,9 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
                 message=f"{reservation.vehicle.license_plate} for {reservation.reserved_by}",
                 priority="Medium", entity_type="VehicleReservation", entity_id=reservation.id,
                 deduplication_key=f"reservation:{reservation.id}:starts-24-hours",
+                title_key="modules:notificationContent.reservation_starting.title",
+                message_key="modules:notificationContent.reservation.message",
+                message_params={"id": reservation.id, "plate": reservation.vehicle.license_plate, "reserved_by": reservation.reserved_by},
             )
         if reservation.status == 1 and reservation.end_date < now:
             notify_roles(
@@ -110,6 +128,9 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
                 message=f"{reservation.vehicle.license_plate} should have been returned.",
                 priority="High", entity_type="VehicleReservation", entity_id=reservation.id,
                 deduplication_key=f"reservation:{reservation.id}:overdue-return",
+                title_key="modules:notificationContent.reservation_overdue.title",
+                message_key="modules:notificationContent.reservation_return.message",
+                message_params={"id": reservation.id, "plate": reservation.vehicle.license_plate},
             )
 
     created = sum(1 for item in db.new if isinstance(item, Notification))

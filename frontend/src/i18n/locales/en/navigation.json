@@ -1,0 +1,18 @@
+{
+  "dashboard": "Dashboard",
+  "vehicles": "Vehicles",
+  "drivers": "Drivers",
+  "maintenance": "Maintenance",
+  "maintenanceDashboard": "Maintenance Dashboard",
+  "workOrders": "Work Orders",
+  "serviceHistory": "Service History",
+  "serviceReminders": "Service Reminders",
+  "inspections": "Inspections",
+  "documents": "Documents",
+  "fuel": "Fuel and Charging",
+  "accidents": "Accidents",
+  "reservations": "Reservations",
+  "reports": "Reports",
+  "notifications": "Notifications",
+  "auditLogs": "Audit Logs"
+}

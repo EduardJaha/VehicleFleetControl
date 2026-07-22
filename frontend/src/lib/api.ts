@@ -4,6 +4,8 @@ import type {
   VehicleServiceOverview, WorkOrder, WorkOrderCompletionPayload, WorkOrderCompletionResult,
   RegistrationCountryOption
 } from "@/lib/types";
+import i18n from "@/i18n";
+import { getActiveLanguage } from "@/i18n/language";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
@@ -27,7 +29,10 @@ export function clearAuthToken(): void {
 
 function authHeaders(): HeadersInit {
   const token = getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return {
+    "Accept-Language": getActiveLanguage(),
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
 }
 
 function validationIssueMessage(issue: unknown): string | null {
@@ -40,10 +45,59 @@ function validationIssueMessage(issue: unknown): string | null {
   return typeof field === "string" ? `${field.replaceAll("_", " ")}: ${message}` : message;
 }
 
+function translateErrorCode(code: string, params?: Record<string, unknown>): string | null {
+  const key = `errors:${code}`;
+  return i18n.exists(key) ? i18n.t(key, params ?? {}) : null;
+}
+
+function translateFieldName(field: string): string {
+  const normalized = field.split(".").at(-1) ?? field;
+  const key = `errors:fields.${normalized}`;
+  return i18n.exists(key) ? i18n.t(key) : normalized.replaceAll("_", " ");
+}
+
 function apiErrorMessage(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;
-  const record = body as { detail?: unknown; message?: unknown };
+  const record = body as {
+    code?: unknown;
+    detail?: unknown;
+    message?: unknown;
+    params?: unknown;
+    field_errors?: unknown;
+  };
+  const params = record.params && typeof record.params === "object"
+    ? record.params as Record<string, unknown>
+    : undefined;
+  if (typeof record.code === "string") {
+    const translated = translateErrorCode(record.code, params);
+    if (Array.isArray(record.field_errors)) {
+      const fields = record.field_errors.map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const issue = item as { field?: unknown; code?: unknown; params?: unknown };
+        if (typeof issue.code !== "string") return null;
+        const issueParams = issue.params && typeof issue.params === "object"
+          ? issue.params as Record<string, unknown>
+          : {};
+        return translateErrorCode(issue.code, {
+          field: typeof issue.field === "string" ? translateFieldName(issue.field) : "",
+          ...issueParams
+        });
+      }).filter((message): message is string => Boolean(message));
+      if (fields.length) return fields.join(" ");
+    }
+    if (translated) return translated;
+  }
   if (typeof record.detail === "string") return record.detail;
+  if (record.detail && typeof record.detail === "object") {
+    const detail = record.detail as { code?: unknown; message?: unknown; params?: unknown };
+    if (typeof detail.code === "string") {
+      const detailParams = detail.params && typeof detail.params === "object"
+        ? detail.params as Record<string, unknown>
+        : {};
+      return translateErrorCode(detail.code, detailParams)
+        ?? (typeof detail.message === "string" ? detail.message : null);
+    }
+  }
   if (Array.isArray(record.detail)) {
     const messages = record.detail.map(validationIssueMessage).filter((message): message is string => Boolean(message));
     if (messages.length > 0) return messages.join(" ");
@@ -56,7 +110,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
     if (response.status === 401 && typeof window !== "undefined") {
       clearAuthToken();
     }
-    let message = `API error ${response.status}`;
+    let message = i18n.t("errors:api");
     try {
       const body: unknown = await response.json();
       message = apiErrorMessage(body) ?? message;

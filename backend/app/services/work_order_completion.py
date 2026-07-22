@@ -213,6 +213,7 @@ def complete_work_order_transaction(
         entity_type="WorkOrder",
         entity_id=work_order.id,
         deduplication_key=f"work-order:{work_order.id}:completed",
+        message_params={"id": work_order.id, "title": work_order.title, "plate": work_order.vehicle.license_plate},
     )
     db.flush()
     return work_order, service, reminder_resolved, next_reminder_created

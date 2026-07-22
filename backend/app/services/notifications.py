@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -6,6 +7,11 @@ from sqlalchemy.orm import Session
 from app.models import Notification, User
 
 ACTIVE_STATUSES = {"Unread", "Read"}
+
+
+def notification_key(notification_type: str, part: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", notification_type.lower()).strip("_")
+    return f"modules:notificationContent.{slug}.{part}"
 
 
 def notify_user(
@@ -19,6 +25,9 @@ def notify_user(
     entity_type: str | None,
     entity_id: int | None,
     deduplication_key: str,
+    title_key: str | None = None,
+    message_key: str | None = None,
+    message_params: dict | None = None,
 ) -> Notification:
     existing = db.query(Notification).filter(
         Notification.deduplication_key == deduplication_key,
@@ -27,6 +36,9 @@ def notify_user(
         existing.notification_type = notification_type
         existing.title = title
         existing.message = message
+        existing.title_key = title_key or notification_key(notification_type, "title")
+        existing.message_key = message_key or notification_key(notification_type, "message")
+        existing.message_params = message_params or {}
         existing.priority = priority
         existing.entity_type = entity_type
         existing.entity_id = entity_id
@@ -42,6 +54,9 @@ def notify_user(
         notification_type=notification_type,
         title=title,
         message=message,
+        title_key=title_key or notification_key(notification_type, "title"),
+        message_key=message_key or notification_key(notification_type, "message"),
+        message_params=message_params or {},
         priority=priority,
         entity_type=entity_type,
         entity_id=entity_id,
@@ -62,6 +77,9 @@ def notify_roles(
     entity_type: str | None,
     entity_id: int | None,
     deduplication_key: str,
+    title_key: str | None = None,
+    message_key: str | None = None,
+    message_params: dict | None = None,
 ) -> list[Notification]:
     users = db.query(User).filter(User.is_active.is_(True), User.role.in_(roles)).all()
     return [
@@ -75,6 +93,9 @@ def notify_roles(
             entity_type=entity_type,
             entity_id=entity_id,
             deduplication_key=f"{deduplication_key}:user:{user.id}",
+            title_key=title_key,
+            message_key=message_key,
+            message_params=message_params,
         )
         for user in users
     ]

@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { apiDownload, apiGet, buildQuery, vehicleRegistrationApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { REPORTS, VEHICLE_STATUSES } from "@/lib/constants";
 import { toApiDate } from "@/lib/format";
 import type { RegistrationCountryCode, RegistrationCountryOption, ReportData } from "@/lib/types";
+import { useLanguage } from "@/components/i18n/LanguageProvider";
 
 type ReportFilters = {
   from_date: string;
@@ -31,13 +33,15 @@ function humanize(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatValue(value: unknown) {
-  if (value === null || value === undefined || value === "") return "-";
-  if (typeof value === "number") return Number.isInteger(value) ? value.toString() : value.toFixed(2);
-  return String(value);
-}
-
 export default function ReportsPage() {
+  const { t } = useTranslation(["modules", "common"]);
+  const { formatNumber } = useLanguage();
+  const formatValue = (value: unknown) => {
+    if (value === null || value === undefined || value === "") return "-";
+    if (typeof value === "number") return formatNumber(value, Number.isInteger(value) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return String(value);
+  };
+  const translateHeader = (value: string) => t(`modules:reports.columns.${value}`, { defaultValue: humanize(value) });
   const { can } = useAuth();
   const canReadReports = can("reportsRead");
   const [selectedReport, setSelectedReport] = useState("fleet-summary");
@@ -72,7 +76,7 @@ export default function ReportsPage() {
       setSummary(summaryData);
       setReport(reportData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load reports");
+      setError(err instanceof Error ? err.message : t("modules:reports.loadError"));
     } finally {
       setLoading(false);
     }
@@ -89,14 +93,14 @@ export default function ReportsPage() {
     setMessage(null);
     try {
       await apiDownload(`/reports/${reportName}/export${query}`, `${reportName}.xlsx`);
-      setMessage("Excel export downloaded.");
+      setMessage(t("modules:reports.exportDownloaded"));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to export report");
+      setError(err instanceof Error ? err.message : t("modules:reports.exportError"));
     }
   }
 
   if (!canReadReports) {
-    return <div className="error">You do not have permission to view reports.</div>;
+    return <div className="error">{t("modules:reports.accessDenied")}</div>;
   }
 
   const headers = report?.rows[0] ? Object.keys(report.rows[0]) : [];
@@ -105,8 +109,8 @@ export default function ReportsPage() {
     <section>
       <div className="header">
         <div>
-          <h1>Reports</h1>
-          <p className="muted">Review fleet KPIs, cost reports, expiry reports, reservations, work orders, and export Excel files.</p>
+          <h1>{t("modules:reports.title")}</h1>
+          <p className="muted">{t("modules:reports.description")}</p>
         </div>
       </div>
 
@@ -116,7 +120,7 @@ export default function ReportsPage() {
       <div className="grid cols-3 spaced">
         {(summary ? Object.entries(summary.kpis).slice(0, 6) : []).map(([key, value]) => (
           <div className="card" key={key}>
-            <div className="muted">{humanize(key)}</div>
+            <div className="muted">{translateHeader(key)}</div>
             <h2>{formatValue(value)}</h2>
           </div>
         ))}
@@ -124,56 +128,56 @@ export default function ReportsPage() {
 
       <div className="card filtersGrid spaced">
         <select className="select" value={selectedReport} onChange={(event) => setSelectedReport(event.target.value)}>
-          {REPORTS.map((reportOption) => <option key={reportOption.value} value={reportOption.value}>{reportOption.label}</option>)}
+          {REPORTS.map((reportOption) => <option key={reportOption.value} value={reportOption.value}>{t(`modules:${reportOption.labelKey}`)}</option>)}
         </select>
         <input className="input" type="date" value={filters.from_date} onChange={(event) => setFilters({ ...filters, from_date: event.target.value })} />
         <input className="input" type="date" value={filters.to_date} onChange={(event) => setFilters({ ...filters, to_date: event.target.value })} />
-        <input className="input" value={filters.license_plate} onChange={(event) => setFilters({ ...filters, license_plate: event.target.value })} placeholder="Plate" />
+        <input className="input" value={filters.license_plate} onChange={(event) => setFilters({ ...filters, license_plate: event.target.value })} placeholder={t("modules:reports.platePlaceholder")} />
         <select className="select" value={filters.registration_country} onChange={(event) => setFilters({ ...filters, registration_country: event.target.value as RegistrationCountryCode | "" })}>
-          <option value="">All countries</option>
-          {countries.map((country) => <option key={country.code} value={country.code}>{country.name}</option>)}
+          <option value="">{t("modules:reports.allCountries")}</option>
+          {countries.map((country) => <option key={country.code} value={country.code}>{t(`common:countries.${country.code}`)}</option>)}
         </select>
         <select className="select" value={filters.vehicle_status} onChange={(event) => setFilters({ ...filters, vehicle_status: event.target.value })}>
-          <option value="">All vehicle statuses</option>
-          {VEHICLE_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+          <option value="">{t("modules:reports.allVehicleStatuses")}</option>
+          {VEHICLE_STATUSES.map((status) => <option key={status.value} value={status.value}>{t(`common:${status.labelKey}`)}</option>)}
         </select>
-        <input className="input" value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })} placeholder="Department" />
-        <input className="input" type="number" value={filters.driver_id} onChange={(event) => setFilters({ ...filters, driver_id: event.target.value })} placeholder="Driver ID" />
-        <button className="button" type="button" onClick={() => void loadReports()}>Apply filters</button>
+        <input className="input" value={filters.department} onChange={(event) => setFilters({ ...filters, department: event.target.value })} placeholder={t("common:labels.department")} />
+        <input className="input" type="number" value={filters.driver_id} onChange={(event) => setFilters({ ...filters, driver_id: event.target.value })} placeholder={t("modules:reports.driverId")} />
+        <button className="button" type="button" onClick={() => void loadReports()}>{t("common:actions.applyFilters")}</button>
       </div>
 
       <div className="actions spaced">
         {REPORTS.map((reportOption) => (
           <button key={reportOption.value} className={reportOption.value === selectedReport ? "button smallButton" : "secondaryButton smallButton"} type="button" onClick={() => void exportReport(reportOption.value)}>
-            Export {reportOption.label}
+            {t("common:actions.export")} {t(`modules:${reportOption.labelKey}`)}
           </button>
         ))}
       </div>
 
-      {loading ? <div className="card">Loading report...</div> : (
+      {loading ? <div className="card">{t("modules:reports.loading")}</div> : (
         <div>
           <div className="header">
-            <h2>{REPORTS.find((item) => item.value === selectedReport)?.label}</h2>
-            <button className="button" type="button" onClick={() => void exportReport(selectedReport)}>Export selected</button>
+            <h2>{t(`modules:${REPORTS.find((item) => item.value === selectedReport)?.labelKey ?? "reports.fleet-summary"}`)}</h2>
+            <button className="button" type="button" onClick={() => void exportReport(selectedReport)}>{t("modules:reports.exportSelected")}</button>
           </div>
           <div className="grid cols-3 spaced">
             {report && Object.entries(report.kpis).map(([key, value]) => (
               <div className="card" key={key}>
-                <div className="muted">{humanize(key)}</div>
+                <div className="muted">{translateHeader(key)}</div>
                 <h2>{formatValue(value)}</h2>
               </div>
             ))}
           </div>
 
           <table className="table">
-            <thead><tr>{headers.map((header) => <th key={header}>{humanize(header)}</th>)}</tr></thead>
+            <thead><tr>{headers.map((header) => <th key={header}>{translateHeader(header)}</th>)}</tr></thead>
             <tbody>
               {report?.rows.map((row, index) => (
                 <tr key={index}>
                   {headers.map((header) => <td key={header}>{formatValue(row[header])}</td>)}
                 </tr>
               ))}
-              {(!report || report.rows.length === 0) && <tr><td className="muted">No rows match your filters.</td></tr>}
+              {(!report || report.rows.length === 0) && <tr><td className="muted">{t("modules:reports.empty")}</td></tr>}
             </tbody>
           </table>
         </div>

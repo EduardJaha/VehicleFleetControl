@@ -3,20 +3,24 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { AuthProvider, ROLE_LABELS, useAuth } from "@/lib/auth";
+import { useTranslation } from "react-i18next";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import { MAINTENANCE_LINKS } from "@/components/maintenance/Maintenance";
 import { apiGet } from "@/lib/api";
 import type { Notification, PageResult } from "@/lib/types";
+import { LanguageSelector } from "@/components/i18n/LanguageSelector";
+import { useLanguage } from "@/components/i18n/LanguageProvider";
+import { translateNotification, translateStatus } from "@/i18n/translate";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/vehicles", label: "Vehicles" },
-  { href: "/drivers", label: "Drivers" },
-  { href: "/reports", label: "Reports" },
-  { href: "/papers", label: "Documents" },
-  { href: "/fuel", label: "Fuel" },
-  { href: "/accidents", label: "Accidents" },
-  { href: "/reservations", label: "Reservations" }
+  { href: "/dashboard", labelKey: "dashboard" },
+  { href: "/vehicles", labelKey: "vehicles" },
+  { href: "/drivers", labelKey: "drivers" },
+  { href: "/reports", labelKey: "reports" },
+  { href: "/papers", labelKey: "documents" },
+  { href: "/fuel", labelKey: "fuel" },
+  { href: "/accidents", labelKey: "accidents" },
+  { href: "/reservations", labelKey: "reservations" }
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -31,6 +35,8 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, ready, logout } = useAuth();
+  const { t } = useTranslation(["common", "navigation", "modules"]);
+  const { formatDateTime } = useLanguage();
   const isLoginPage = pathname === "/login";
   const maintenanceActive = pathname === "/maintenance" || pathname.startsWith("/work-orders") || pathname.startsWith("/services") || pathname.startsWith("/inspections");
   const [unreadCount, setUnreadCount] = useState(0);
@@ -71,7 +77,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   if (!ready || !user) {
     return (
       <div className="authLoading">
-        <div className="card">Loading session...</div>
+        <div className="card">{t("common:states.loadingSession")}</div>
       </div>
     );
   }
@@ -79,37 +85,38 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand">Vehicle Fleet Control</div>
+        <div className="brand">{t("common:appName")}</div>
         <nav>
-          {navItems.slice(0, 3).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{item.label}</Link>)}
+          {navItems.slice(0, 3).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
           <details className="navGroup" open={maintenanceActive}>
-            <summary className={maintenanceActive ? "navLink active" : "navLink"}>Maintenance</summary>
+            <summary className={maintenanceActive ? "navLink active" : "navLink"}>{t("navigation:maintenance")}</summary>
             <div className="navSubmenu">
               {MAINTENANCE_LINKS.filter((item) => item.roles.includes(user.role)).map((item) => (
-                <Link key={item.href} href={item.href} className={pathname === item.href || (item.href !== "/maintenance" && pathname.startsWith(`${item.href}/`)) ? "navLink navSubLink active" : "navLink navSubLink"}>{item.label}</Link>
+                <Link key={item.href} href={item.href} className={pathname === item.href || (item.href !== "/maintenance" && pathname.startsWith(`${item.href}/`)) ? "navLink navSubLink active" : "navLink navSubLink"}>{t(`navigation:${item.labelKey}`)}</Link>
               ))}
             </div>
           </details>
-          {navItems.slice(3).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{item.label}</Link>)}
-          <Link href="/notifications" className={pathname === "/notifications" ? "navLink active" : "navLink"}>Notifications</Link>
-          {user.role === "admin" && <Link href="/audit-logs" className={pathname === "/audit-logs" ? "navLink active" : "navLink"}>Audit Logs</Link>}
+          {navItems.slice(3).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
+          <Link href="/notifications" className={pathname === "/notifications" ? "navLink active" : "navLink"}>{t("navigation:notifications")}</Link>
+          {user.role === "admin" && <Link href="/audit-logs" className={pathname === "/audit-logs" ? "navLink active" : "navLink"}>{t("navigation:auditLogs")}</Link>}
         </nav>
         <div className="userPanel">
           <div className="userName">{user.full_name}</div>
-          <div className="userRole">{ROLE_LABELS[user.role]}</div>
-          <button className="logoutButton" type="button" onClick={logout}>Logout</button>
+          <div className="userRole">{t(`common:roles.${user.role}`)}</div>
+          <button className="logoutButton" type="button" onClick={logout}>{t("common:actions.logout")}</button>
         </div>
       </aside>
       <main className="content">
         <div className="appTopBar">
+          <LanguageSelector compact />
           <div className="notificationBellWrap">
-            <button className="notificationBell" type="button" aria-label={`${unreadCount} unread notifications`} onClick={() => { setNotificationsOpen((value) => !value); void loadNotifications(); }}>
+            <button className="notificationBell" type="button" aria-label={t("modules:shell.unreadNotifications", { count: unreadCount })} onClick={() => { setNotificationsOpen((value) => !value); void loadNotifications(); }}>
               <span aria-hidden="true">🔔</span>{unreadCount > 0 && <span className="notificationCount">{unreadCount > 99 ? "99+" : unreadCount}</span>}
             </button>
             {notificationsOpen && <div className="notificationPopover">
-              <div className="recordTitle"><strong>Recent notifications</strong><Link className="link" href="/notifications" onClick={() => setNotificationsOpen(false)}>View all</Link></div>
-              {recentNotifications.length === 0 ? <p className="muted">No notifications.</p> : recentNotifications.map((notification) => <Link key={notification.id} href="/notifications" className="notificationPreview" onClick={() => setNotificationsOpen(false)}>
-                <strong>{notification.title}</strong><span className="muted">{notification.priority} · {new Date(notification.created_at).toLocaleString()}</span>
+              <div className="recordTitle"><strong>{t("modules:shell.recentNotifications")}</strong><Link className="link" href="/notifications" onClick={() => setNotificationsOpen(false)}>{t("common:actions.viewAll")}</Link></div>
+              {recentNotifications.length === 0 ? <p className="muted">{t("modules:shell.noNotifications")}</p> : recentNotifications.map((notification) => <Link key={notification.id} href="/notifications" className="notificationPreview" onClick={() => setNotificationsOpen(false)}>
+                <strong>{translateNotification(notification.title_key, notification.message_params, notification.title)}</strong><span className="muted">{translateStatus(notification.priority)} · {formatDateTime(notification.created_at)}</span>
               </Link>)}
             </div>}
           </div>

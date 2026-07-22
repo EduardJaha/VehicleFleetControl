@@ -235,6 +235,7 @@ def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), 
             title=f"Inspection #{inspection.id} failed", message=f"Vehicle #{inspection.vehicle_id} requires attention.",
             priority="High", entity_type="Inspection", entity_id=inspection.id,
             deduplication_key=f"inspection:{inspection.id}:failed",
+            message_params={"id": inspection.id, "vehicle_id": inspection.vehicle_id},
         )
     db.commit()
     db.refresh(inspection)

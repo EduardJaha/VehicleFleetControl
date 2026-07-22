@@ -682,3 +682,40 @@ This project is currently private/internal. Add a license file if the repository
 ## Project Status
 
 VehicleFleetControl is under active development. The current version provides the core structure and main fleet management functionality for vehicles, services, fuel, documents, accidents, and reservations.
+
+---
+
+## English and Albanian localization
+
+The application uses `i18next` and `react-i18next` with the stable language codes `en` and `sq`. Translation dictionaries live under:
+
+```text
+frontend/src/i18n/locales/{en,sq}/
+```
+
+They are divided into `common`, `navigation`, `modules`, and `errors` namespaces. Add every new semantic key to both languages and keep canonical API/database enum values in English; translate them only at presentation boundaries.
+
+The active language is stored in `vehicleFleetControl.language` in local storage. For authenticated users it is also saved in `Users.PreferredLanguage` through:
+
+```text
+PUT /api/v1/auth/me/language
+{"language": "sq"}
+```
+
+The frontend sends `Accept-Language` with every API and file-export request. Backend errors return stable codes and localized messages. New notifications, audit entries, and timeline events store translation keys plus language-neutral parameters; historical free-text records continue to display through their fallback fields.
+
+Run localization checks from `frontend/`:
+
+```bash
+npm run i18n:check
+npm run i18n:scan
+```
+
+`i18n:check` fails when EN/SQ dictionary keys diverge. `i18n:scan` reports high-confidence hardcoded UI-string candidates for review.
+
+Apply the bilingual schema migration before running the updated application:
+
+```bash
+cd backend
+alembic upgrade head
+```

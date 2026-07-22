@@ -32,6 +32,11 @@ class UserRole(str, Enum):
     viewer = "viewer"
 
 
+class LanguageCode(str, Enum):
+    en = "en"
+    sq = "sq"
+
+
 class EnergyUnit(str, Enum):
     liter = "L"
     kilowatt_hour = "KWH"
@@ -111,6 +116,7 @@ class UserBase(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     role: UserRole = UserRole.viewer
     is_active: bool = True
+    preferred_language: LanguageCode = LanguageCode.en
 
     @field_validator("email")
     @classmethod
@@ -168,6 +174,14 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class LanguagePreferenceUpdate(BaseModel):
+    language: LanguageCode
+
+
+class LanguagePreferenceOut(BaseModel):
+    preferred_language: LanguageCode
 
 
 class DriverBase(BaseModel):
@@ -751,6 +765,10 @@ class MaintenanceTimelineEvent(BaseModel):
     related_record_type: str
     related_record_id: int
     href: str
+    event_code: str | None = None
+    title_key: str | None = None
+    description_key: str | None = None
+    params: dict | None = None
 
 
 class MaintenanceTimelinePage(BaseModel):
@@ -882,6 +900,9 @@ class AuditLogOut(BaseModel):
     old_values: dict | None = None
     new_values: dict | None = None
     description: str | None = None
+    action_code: str | None = None
+    description_key: str | None = None
+    description_params: dict | None = None
     ip_address: str | None = None
     created_at: str
 
@@ -913,6 +934,9 @@ class NotificationOut(BaseModel):
     notification_type: str
     title: str
     message: str
+    title_key: str | None = None
+    message_key: str | None = None
+    message_params: dict | None = None
     priority: NotificationPriority
     status: NotificationStatus
     entity_type: str | None = None

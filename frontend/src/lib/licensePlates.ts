@@ -1,4 +1,5 @@
 import type { RegistrationCountryCode } from "@/lib/types";
+import i18n from "@/i18n";
 
 export function normalizePlateInput(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
@@ -29,17 +30,17 @@ export function validateLicensePlateInput(
   if (country === "AL") {
     return /^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(normalized)
       ? null
-      : "Albania licence plates must use the format AA 123 AA.";
+      : i18n.t("modules:vehicles.albaniaPlateFormat");
   }
   if (!/^[0-9]{5}[A-Z]{2}$/.test(normalized)) {
-    return "Kosovo licence plates must use the format 01-123-AB.";
+    return i18n.t("modules:vehicles.kosovoPlateFormat");
   }
   const region = Number(normalized.slice(0, 2));
-  if (region < 1 || region > 7) return "Kosovo region code must be between 01 and 07.";
+  if (region < 1 || region > 7) return i18n.t("modules:vehicles.kosovoRegionFormat");
   const number = Number(normalized.slice(2, 5));
-  if (number < 101 || number > 999) return "Kosovo plate number must be between 101 and 999.";
+  if (number < 101 || number > 999) return i18n.t("modules:vehicles.kosovoNumberFormat");
   if (/[TRVWXY]/.test(normalized.slice(5))) {
-    return "The selected Kosovo plate contains a letter that is not allowed for an ordinary plate.";
+    return i18n.t("modules:vehicles.kosovoLetterFormat");
   }
   return null;
 }

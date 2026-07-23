@@ -48,6 +48,14 @@ class DriverStatus(str, Enum):
     left_company = "Left Company"
 
 
+class VehicleAssignmentStatus(str, Enum):
+    scheduled = "Scheduled"
+    active = "Active"
+    completed = "Completed"
+    cancelled = "Cancelled"
+    overdue = "Overdue"
+
+
 class InspectionType(str, Enum):
     daily = "Daily"
     weekly = "Weekly"
@@ -241,6 +249,87 @@ class DriverOut(DriverBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class VehicleAssignmentBase(BaseModel):
+    vehicle_id: int = Field(gt=0)
+    driver_id: int = Field(gt=0)
+    reservation_id: int | None = Field(default=None, gt=0)
+    start_datetime: str
+    start_odometer_km: int = Field(ge=0)
+    start_energy_level: int | None = Field(default=None, ge=0, le=100)
+    purpose: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+    @field_validator("purpose", "notes")
+    @classmethod
+    def normalize_assignment_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class VehicleAssignmentCreate(VehicleAssignmentBase):
+    pass
+
+
+class VehicleAssignmentUpdate(VehicleAssignmentBase):
+    pass
+
+
+class VehicleAssignmentStart(BaseModel):
+    start_datetime: str | None = None
+    start_odometer_km: int | None = Field(default=None, ge=0)
+    start_energy_level: int | None = Field(default=None, ge=0, le=100)
+    notes: str | None = None
+
+    @field_validator("notes")
+    @classmethod
+    def normalize_notes(cls, value: str | None) -> str | None:
+        return VehicleAssignmentBase.normalize_assignment_text(value)
+
+
+class VehicleAssignmentComplete(BaseModel):
+    end_datetime: str
+    end_odometer_km: int = Field(ge=0)
+    end_energy_level: int | None = Field(default=None, ge=0, le=100)
+    return_notes: str | None = None
+
+    @field_validator("return_notes")
+    @classmethod
+    def normalize_return_notes(cls, value: str | None) -> str | None:
+        return VehicleAssignmentBase.normalize_assignment_text(value)
+
+
+class VehicleAssignmentOut(VehicleAssignmentBase):
+    id: int
+    vehicle_license_plate: str
+    vehicle_name: str
+    driver_name: str
+    assigned_by_user_id: int | None = None
+    assigned_by_name: str | None = None
+    ended_by_user_id: int | None = None
+    ended_by_name: str | None = None
+    end_datetime: str | None = None
+    end_odometer_km: int | None = None
+    end_energy_level: int | None = None
+    return_notes: str | None = None
+    status: VehicleAssignmentStatus
+    created_at: str
+    updated_at: str
+    archived: bool = False
+    archived_at: str | None = None
+    archived_by: int | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VehicleAssignmentPage(BaseModel):
+    items: list[VehicleAssignmentOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
 class InspectionItemBase(BaseModel):
     item_name: str = Field(min_length=1, max_length=150)
     status: InspectionItemStatus = InspectionItemStatus.not_checked
@@ -308,6 +397,7 @@ class InspectionOut(BaseModel):
     vehicle_name: str
     driver_id: int | None = None
     driver_name: str | None = None
+    vehicle_assignment_id: int | None = None
     inspection_type: InspectionType
     inspection_date: str
     overall_status: InspectionOverallStatus
@@ -803,6 +893,7 @@ class FuelUpdate(BaseModel):
 class FuelRecordOut(BaseModel):
     id: int
     vehicle_id: int
+    vehicle_assignment_id: int | None = None
     license_plate: str
     brand: str
     model: str
@@ -854,6 +945,7 @@ class VehiclePaperListOut(BaseModel):
 
 class AccidentOut(BaseModel):
     id: int
+    vehicle_assignment_id: int | None = None
     accident_date: str
     location: str | None = None
     description: str | None = None
@@ -879,6 +971,8 @@ class ReservationStatusUpdate(BaseModel):
 
 class VehicleReservationListOut(BaseModel):
     id: int
+    vehicle_id: int
+    vehicle_assignment_id: int | None = None
     license_plate: str
     reserved_by: str
     reservation_type: str

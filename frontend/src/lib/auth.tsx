@@ -14,6 +14,7 @@ import type { AuthResponse, CurrentUser, UserRole } from "@/lib/types";
 export const PERMISSIONS = {
   vehiclesWrite: ["admin", "fleet_manager"],
   driversWrite: ["admin", "fleet_manager"],
+  vehicleAssignmentsWrite: ["admin", "fleet_manager"],
   inspectionsCreate: ["admin", "fleet_manager", "mechanic", "driver"],
   inspectionsWrite: ["admin", "fleet_manager", "mechanic"],
   workOrdersWrite: ["admin", "fleet_manager", "mechanic"],

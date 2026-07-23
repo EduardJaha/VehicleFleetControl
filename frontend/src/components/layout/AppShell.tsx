@@ -16,6 +16,7 @@ const navItems = [
   { href: "/dashboard", labelKey: "dashboard" },
   { href: "/vehicles", labelKey: "vehicles" },
   { href: "/drivers", labelKey: "drivers" },
+  { href: "/vehicle-assignments", labelKey: "vehicleAssignments" },
   { href: "/reports", labelKey: "reports" },
   { href: "/papers", labelKey: "documents" },
   { href: "/fuel", labelKey: "fuel" },

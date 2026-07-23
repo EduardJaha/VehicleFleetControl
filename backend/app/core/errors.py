@@ -10,6 +10,7 @@ from app.core.i18n import request_language, translate
 
 RESOURCE_CODES = (
     ("/notifications", "notification_not_found"),
+    ("/vehicle-assignments", "vehicle_assignment_not_found"),
     ("/work-orders", "work_order_not_found"),
     ("/inspections", "inspection_not_found"),
     ("/reservations", "reservation_not_found"),

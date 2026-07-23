@@ -112,6 +112,62 @@ export type DriverPayload = Omit<Driver, "id" | "assigned_vehicle_id" | "created
   assigned_vehicle_id?: number | null;
 };
 
+export type VehicleAssignmentStatus = "Scheduled" | "Active" | "Completed" | "Cancelled" | "Overdue";
+
+export type VehicleAssignment = {
+  id: number;
+  vehicle_id: number;
+  driver_id: number;
+  reservation_id?: number | null;
+  vehicle_license_plate: string;
+  vehicle_name: string;
+  driver_name: string;
+  assigned_by_user_id?: number | null;
+  assigned_by_name?: string | null;
+  ended_by_user_id?: number | null;
+  ended_by_name?: string | null;
+  start_datetime: string;
+  end_datetime?: string | null;
+  start_odometer_km: number;
+  end_odometer_km?: number | null;
+  start_energy_level?: number | null;
+  end_energy_level?: number | null;
+  purpose?: string | null;
+  notes?: string | null;
+  return_notes?: string | null;
+  status: VehicleAssignmentStatus;
+  created_at: string;
+  updated_at: string;
+  archived: boolean;
+  archived_at?: string | null;
+  archived_by?: number | null;
+};
+
+export type VehicleAssignmentPayload = {
+  vehicle_id: number;
+  driver_id: number;
+  reservation_id?: number | null;
+  start_datetime: string;
+  start_odometer_km: number;
+  start_energy_level?: number | null;
+  purpose?: string | null;
+  notes?: string | null;
+};
+
+export type VehicleAssignmentStartPayload = {
+  start_datetime?: string | null;
+  start_odometer_km?: number | null;
+  start_energy_level?: number | null;
+  notes?: string | null;
+};
+
+export type VehicleAssignmentCompletePayload = {
+  end_datetime: string;
+  end_odometer_km: number;
+  end_energy_level?: number | null;
+  return_notes?: string | null;
+};
+
 export type InspectionType = "Daily" | "Weekly" | "Before Trip" | "After Trip" | "Return Inspection";
 export type InspectionItemStatus = "Pass" | "Fail" | "Not Checked";
 export type InspectionOverallStatus = "Passed" | "Failed" | "Needs Review";
@@ -126,6 +182,7 @@ export type InspectionItem = {
 export type Inspection = {
   id: number;
   vehicle_id: number;
+  vehicle_assignment_id?: number | null;
   license_plate: string;
   vehicle_name: string;
   driver_id?: number | null;
@@ -415,6 +472,7 @@ export type EnergyUnit = "L" | "KWH";
 export type FuelRecord = {
   id: number;
   vehicle_id: number;
+  vehicle_assignment_id?: number | null;
   license_plate: string;
   brand: string;
   model: string;
@@ -447,6 +505,7 @@ export type VehiclePaper = {
 
 export type Accident = {
   id: number;
+  vehicle_assignment_id?: number | null;
   accident_date: string;
   location?: string | null;
   description?: string | null;
@@ -459,6 +518,8 @@ export type Accident = {
 
 export type Reservation = {
   id: number;
+  vehicle_id: number;
+  vehicle_assignment_id?: number | null;
   license_plate: string;
   reserved_by: string;
   reservation_type: string;

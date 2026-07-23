@@ -17,6 +17,7 @@ function relatedHref(notification: Notification): string | null {
     VehicleService: `/services/${id}`,
     Inspection: `/inspections/${id}`,
     Vehicle: `/vehicles/${id}`,
+    VehicleAssignment: "/vehicle-assignments",
     VehiclePaper: "/papers",
     Driver: "/drivers",
     VehicleReservation: "/reservations"

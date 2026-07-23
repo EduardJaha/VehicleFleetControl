@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
-from app.models import User, Vehicle, VehicleBrand, VehicleModel
+from app.models import User, Vehicle, VehicleAssignment, VehicleBrand, VehicleModel
 from app.schemas import RegistrationCountry, UserRole, VehicleCreate, VehicleOut, VehicleUpdate, UpdateLocation, UpdateStatus
 from app.schemas import MaintenanceTimelinePage, VehicleMaintenanceSummaryOut
 from app.api.v1.endpoints.maintenance import vehicle_summary, vehicle_timeline
@@ -18,6 +18,7 @@ from app.services.license_plates import (
     normalize_license_plate,
     registration_country_name,
 )
+from app.services.vehicle_assignments import ACTIVE_ASSIGNMENT_STATUSES
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -324,6 +325,13 @@ def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), current_user:
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
+    active_assignment = db.query(VehicleAssignment).filter(
+        VehicleAssignment.vehicle_id == vehicle.id,
+        VehicleAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+        VehicleAssignment.archived.is_(False),
+    ).first()
+    if active_assignment:
+        raise HTTPException(status_code=409, detail="Complete or cancel the active Vehicle Assignment before archiving this Vehicle.")
     vehicle.archived = True
     vehicle.archived_at = datetime.utcnow()
     vehicle.archived_by = current_user.id

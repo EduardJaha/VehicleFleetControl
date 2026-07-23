@@ -141,6 +141,10 @@ a .maintenanceKpi:hover { transform: translateY(-2px); box-shadow: 0 10px 25px r
 .vehicleTabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0; }
 .vehicleTab { border: 1px solid var(--border); background: white; padding: 9px 12px; border-radius: 8px; cursor: pointer; font-weight: 700; }
 .vehicleTab.active { color: var(--accent); border-color: #84adff; background: #eef4ff; }
+.assignmentSection { margin-top: 24px; }
+.assignmentSection h2 { margin: 0 0 12px; font-size: 20px; }
+.assignmentTable { min-width: 1280px; }
+.assignmentNotes { max-width: 240px; margin-top: 5px; white-space: normal; }
 .dialogOverlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; overflow-y: auto; background: rgba(15, 23, 42, .58); }
 .dialogPanel { width: min(860px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; overflow: hidden; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 70px rgba(15, 23, 42, .28); outline: none; }
 .dialogHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 22px 24px 18px; border-bottom: 1px solid var(--border); }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
@@ -8,7 +9,7 @@ import { apiDelete, apiGet, apiPost, apiPut, buildQuery } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DRIVER_STATUSES } from "@/lib/constants";
 import { toApiDate, toInputDate, todayInputDate } from "@/lib/format";
-import type { ApiMessage, Driver, DriverPayload, DriverStatus } from "@/lib/types";
+import type { ApiMessage, CurrentUser, Driver, DriverPayload, DriverStatus, Vehicle } from "@/lib/types";
 import { translateStatus } from "@/i18n/translate";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
@@ -93,6 +94,9 @@ export default function DriversPage() {
   const { can } = useAuth();
   const canWrite = can("driversWrite");
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [users, setUsers] = useState<CurrentUser[]>([]);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -122,6 +126,15 @@ export default function DriversPage() {
 
   useEffect(() => {
     void loadDrivers();
+    if (canWrite) {
+      void Promise.all([
+        apiGet<Vehicle[]>("/vehicles"),
+        apiGet<CurrentUser[]>("/auth/users")
+      ]).then(([vehicleRows, userRows]) => {
+        setVehicles(vehicleRows);
+        setUsers(userRows);
+      }).catch(() => setReferenceError(t("modules:drivers.referenceLoadError")));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -219,8 +232,21 @@ export default function DriversPage() {
             <div className="formRow"><label htmlFor="driver-license-number">{t("modules:drivers.licenceNumber")}</label><input id="driver-license-number" className="input" value={form.license_number} onChange={(event) => setForm({ ...form, license_number: event.target.value })} required /></div>
             <div className="formRow"><label htmlFor="driver-license-category">{t("modules:drivers.licenceCategory")}</label><input id="driver-license-category" className="input" value={form.license_category} onChange={(event) => setForm({ ...form, license_category: event.target.value })} required /></div>
             <div className="formRow"><label htmlFor="driver-license-expiry">{t("modules:drivers.licenceExpiry")}</label><input id="driver-license-expiry" className="input" type="date" value={form.license_expiry_date} onChange={(event) => setForm({ ...form, license_expiry_date: event.target.value })} required /></div>
-            <div className="formRow"><label htmlFor="driver-assigned-plate">{t("modules:drivers.assignedPlate")}</label><input id="driver-assigned-plate" className="input" value={form.assigned_license_plate} onChange={(event) => setForm({ ...form, assigned_license_plate: event.target.value })} placeholder={t("modules:drivers.platePlaceholder")} /></div>
-            <div className="formRow"><label htmlFor="driver-user-id">{t("modules:drivers.userIdOptional")}</label><input id="driver-user-id" className="input" type="number" value={form.user_id} onChange={(event) => setForm({ ...form, user_id: event.target.value })} /></div>
+            <div className="formRow">
+              <label htmlFor="driver-assigned-plate">{t("modules:drivers.assignedVehicleOptional")}</label>
+              <select id="driver-assigned-plate" className="select" value={form.assigned_license_plate} onChange={(event) => setForm({ ...form, assigned_license_plate: event.target.value })}>
+                <option value="">{t("modules:drivers.noAssignedVehicle")}</option>
+                {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.license_plate}>{vehicle.license_plate} · {vehicle.brand} {vehicle.model}</option>)}
+              </select>
+            </div>
+            <div className="formRow">
+              <label htmlFor="driver-user-id">{t("modules:drivers.linkedAccountOptional")}</label>
+              <select id="driver-user-id" className="select" value={form.user_id} onChange={(event) => setForm({ ...form, user_id: event.target.value })}>
+                <option value="">{t("modules:drivers.noLinkedAccount")}</option>
+                {users.map((user) => <option key={user.id} value={user.id}>{user.full_name} · {user.email} · {t(`common:roles.${user.role}`)}</option>)}
+              </select>
+              <span className={referenceError ? "comboboxStatus comboboxError" : "comboboxStatus"}>{referenceError ?? t("modules:drivers.linkedAccountHelp")}</span>
+            </div>
             <div className="formRow span2"><label htmlFor="driver-notes">{t("common:labels.notes")}</label><textarea id="driver-notes" className="input textarea" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></div>
           </div>
           <div className="actions dialogActions">
@@ -250,7 +276,7 @@ export default function DriversPage() {
           <tbody>
             {drivers.map((driver) => (
               <tr key={driver.id}>
-                <td><strong>{driver.full_name}</strong></td>
+                <td><Link className="link" href={`/drivers/${driver.id}`}>{driver.full_name}</Link></td>
                 <td>{driver.phone_number || driver.email ? <>{driver.phone_number || "-"}<br /><span className="muted">{driver.email || ""}</span></> : "-"}</td>
                 <td>{driver.employee_number}</td>
                 <td>{driver.department ?? "-"}</td>

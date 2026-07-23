@@ -10,6 +10,7 @@ from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate
 from app.utils.files import file_url, store_upload
 from app.services.audit import record_audit, snapshot
+from app.services.vehicle_assignments import active_assignment_at
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -27,7 +28,15 @@ async def report_accident(
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail=f"Vehicle '{license_plate}' not found.")
-    accident = VehicleAccident(vehicle_id=vehicle.id, accident_date=parse_date(accident_date, "AccidentDate"), location=location, description=description)
+    occurred_at = parse_date(accident_date, "AccidentDate")
+    active_assignment = active_assignment_at(db, vehicle_id=vehicle.id, occurred_at=occurred_at)
+    accident = VehicleAccident(
+        vehicle_id=vehicle.id,
+        vehicle_assignment_id=active_assignment.id if active_assignment else None,
+        accident_date=occurred_at,
+        location=location,
+        description=description,
+    )
     db.add(accident)
     db.flush()
     for uploaded in files or []:
@@ -66,6 +75,7 @@ def all_accidents(
     return [
         AccidentOut(
             id=a.id,
+            vehicle_assignment_id=a.vehicle_assignment_id,
             accident_date=format_date(a.accident_date) or "",
             location=a.location,
             description=a.description,
@@ -90,6 +100,7 @@ def accidents_by_plate(license_plate: str, request: Request, db: Session = Depen
     return [
         AccidentOut(
             id=a.id,
+            vehicle_assignment_id=a.vehicle_assignment_id,
             accident_date=format_date(a.accident_date) or "",
             location=a.location,
             description=a.description,

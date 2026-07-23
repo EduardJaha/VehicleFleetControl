@@ -16,6 +16,7 @@ from app.schemas import (
     UserRole,
 )
 from app.services.audit import record_audit, snapshot
+from app.services.vehicle_assignments import active_assignment_at
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.utils.files import store_upload
@@ -86,6 +87,7 @@ def fuel_record_out(record: VehicleFuel) -> FuelRecordOut:
     return FuelRecordOut(
         id=record.id,
         vehicle_id=record.vehicle_id,
+        vehicle_assignment_id=record.vehicle_assignment_id,
         license_plate=vehicle.license_plate,
         brand=vehicle.brand,
         model=vehicle.model,
@@ -262,6 +264,13 @@ async def add_fuel_record(
     sync_vehicle_odometer(vehicle, odometer_km)
     record = VehicleFuel(
         vehicle_id=vehicle.id,
+        vehicle_assignment_id=(
+            assignment.id
+            if (assignment := active_assignment_at(
+                db, vehicle_id=vehicle.id, occurred_at=parsed_date
+            ))
+            else None
+        ),
         refuel_date=parsed_date,
         quantity=quantity,
         unit=authoritative_unit.value,

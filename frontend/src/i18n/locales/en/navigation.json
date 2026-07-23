@@ -2,6 +2,7 @@
   "dashboard": "Dashboard",
   "vehicles": "Vehicles",
   "drivers": "Drivers",
+  "vehicleAssignments": "Vehicle Assignments",
   "maintenance": "Maintenance",
   "maintenanceDashboard": "Maintenance Dashboard",
   "workOrders": "Work Orders",

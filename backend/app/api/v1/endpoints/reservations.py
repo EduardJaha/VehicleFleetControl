@@ -15,8 +15,11 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def reservation_out(reservation: VehicleReservation) -> VehicleReservationListOut:
+    linked_assignment = max(reservation.assignments, key=lambda item: item.id, default=None)
     return VehicleReservationListOut(
         id=reservation.id,
+        vehicle_id=reservation.vehicle_id,
+        vehicle_assignment_id=linked_assignment.id if linked_assignment else None,
         license_plate=reservation.vehicle.license_plate,
         reserved_by=reservation.reserved_by,
         reservation_type=reservation.reservation_type,

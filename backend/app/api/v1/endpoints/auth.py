@@ -99,6 +99,17 @@ def me(current_user: User = Depends(get_current_user)):
     return user_out(current_user)
 
 
+@router.get("/users", response_model=list[UserOut])
+def list_users(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager)),
+):
+    return [
+        user_out(user)
+        for user in db.query(User).order_by(User.full_name, User.email).all()
+    ]
+
+
 @router.put("/me/language", response_model=LanguagePreferenceOut)
 def update_my_language(
     payload: LanguagePreferenceUpdate,

@@ -3,8 +3,9 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.v1.endpoints.services import current_reminder_status
-from app.models import Driver, Notification, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
+from app.models import Driver, Notification, VehicleAssignment, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
 from app.schemas import ReminderStatus
+from app.services.audit import record_audit
 from app.services.notifications import notify_roles, resolve_by_prefix
 
 RECIPIENT_ROLES = {"admin", "fleet_manager"}
@@ -94,6 +95,43 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
         )
     for order in db.query(WorkOrder).filter(~WorkOrder.id.in_(active_order_ids or {-1})).all():
         resolve_by_prefix(db, f"work-order:{order.id}:overdue")
+
+    overdue_assignments = db.query(VehicleAssignment).options(
+        joinedload(VehicleAssignment.vehicle),
+        joinedload(VehicleAssignment.driver),
+        joinedload(VehicleAssignment.reservation),
+    ).join(VehicleAssignment.reservation).filter(
+        VehicleAssignment.archived.is_(False),
+        VehicleAssignment.status == "Active",
+        VehicleReservation.end_date < now,
+    ).all()
+    for assignment in overdue_assignments:
+        assignment.status = "Overdue"
+        assignment.updated_at = now
+        record_audit(
+            db,
+            action="Vehicle Assignment overdue",
+            entity_type="VehicleAssignment",
+            entity_id=assignment.id,
+            new_values={"status": "Overdue"},
+            description=f"Assignment #{assignment.id} is overdue for return.",
+        )
+        notify_roles(
+            db,
+            roles=RECIPIENT_ROLES,
+            notification_type="Vehicle assignment overdue",
+            title=f"Assignment #{assignment.id} is overdue",
+            message=f"{assignment.vehicle.license_plate} · {assignment.driver.full_name}",
+            priority="High",
+            entity_type="VehicleAssignment",
+            entity_id=assignment.id,
+            deduplication_key=f"vehicle-assignment:{assignment.id}:overdue",
+            message_params={
+                "id": assignment.id,
+                "plate": assignment.vehicle.license_plate,
+                "driver": assignment.driver.full_name,
+            },
+        )
 
     reservations = db.query(VehicleReservation).options(joinedload(VehicleReservation.vehicle)).filter(
         VehicleReservation.archived.is_(False)

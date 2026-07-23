@@ -25,6 +25,7 @@ from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.services.audit import record_audit, snapshot
 from app.services.notifications import notify_roles
+from app.services.vehicle_assignments import active_assignment_at
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -56,6 +57,7 @@ def inspection_out(inspection: Inspection) -> InspectionOut:
         vehicle_name=f"{inspection.vehicle.brand} {inspection.vehicle.model}",
         driver_id=inspection.driver_id,
         driver_name=inspection.driver.full_name if inspection.driver else None,
+        vehicle_assignment_id=inspection.vehicle_assignment_id,
         inspection_type=InspectionType(inspection.inspection_type),
         inspection_date=format_date(inspection.inspection_date) or "",
         overall_status=InspectionOverallStatus(inspection.overall_status),
@@ -139,6 +141,13 @@ def apply_payload(inspection: Inspection, payload: InspectionCreate | Inspection
     inspection.driver_id = validate_driver(db, payload.driver_id)
     inspection.inspection_type = payload.inspection_type.value
     inspection.inspection_date = parse_date(payload.inspection_date, "InspectionDate")
+    active_assignment = active_assignment_at(
+        db,
+        vehicle_id=inspection.vehicle_id,
+        driver_id=inspection.driver_id,
+        occurred_at=inspection.inspection_date,
+    )
+    inspection.vehicle_assignment_id = active_assignment.id if active_assignment else None
     inspection.overall_status = derive_overall_status(items, payload.overall_status).value
     inspection.notes = payload.notes
     inspection.inspector = payload.inspector

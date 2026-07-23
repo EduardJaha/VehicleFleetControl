@@ -1,4 +1,6 @@
 from io import BytesIO
+import json
+from pathlib import Path
 
 from openpyxl import load_workbook
 
@@ -19,6 +21,8 @@ def test_error_codes_have_albanian_messages():
     assert infer_error_code(404, "/api/v1/vehicles/42") == "vehicle_not_found"
     assert translate("vehicle_not_found", "sq") == "Automjeti nuk u gjet."
     assert translate("validation_error", "sq") != translate("validation_error", "en")
+    assert translate("linked_user_not_found", "sq") != translate("linked_user_not_found", "en")
+    assert translate("assigned_vehicle_not_found", "sq") != translate("assigned_vehicle_not_found", "en")
 
 
 def test_notification_keys_are_stable_and_language_neutral():
@@ -39,3 +43,13 @@ def test_albanian_excel_localizes_labels_and_preserves_numbers():
     assert [cell.value for cell in sheet[1]] == ["Targa", "Statusi", "Kostoja Totale"]
     assert sheet.cell(2, 2).value == "Aktiv"
     assert isinstance(sheet.cell(2, 3).value, (int, float))
+
+
+def test_vehicle_assignment_ui_labels_exist_in_english_and_albanian():
+    locale_root = Path(__file__).resolve().parents[2] / "frontend" / "src" / "i18n" / "locales"
+    english = json.loads((locale_root / "en" / "modules.json").read_text())
+    albanian = json.loads((locale_root / "sq" / "modules.json").read_text())
+    for key in ("title", "add", "activeAssignments", "assignmentHistory", "complete", "returnNotes"):
+        assert english["vehicleAssignments"][key]
+        assert albanian["vehicleAssignments"][key]
+        assert english["vehicleAssignments"][key] != albanian["vehicleAssignments"][key]

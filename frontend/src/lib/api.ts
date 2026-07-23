@@ -1,8 +1,9 @@
 import type {
-  Inspection, MaintenanceSummary, MaintenanceTimelineEvent, PageResult, ServiceReminder,
+  ApiMessage, Inspection, MaintenanceSummary, MaintenanceTimelineEvent, PageResult, ServiceReminder,
   VehicleBrand, VehicleMaintenanceSummary, VehicleModel, VehicleServiceDetail,
   VehicleServiceOverview, WorkOrder, WorkOrderCompletionPayload, WorkOrderCompletionResult,
-  RegistrationCountryOption
+  RegistrationCountryOption, VehicleAssignment, VehicleAssignmentCompletePayload,
+  VehicleAssignmentPayload, VehicleAssignmentStartPayload
 } from "@/lib/types";
 import i18n from "@/i18n";
 import { getActiveLanguage } from "@/i18n/language";
@@ -299,4 +300,24 @@ export const maintenanceApi = {
     apiGet<VehicleMaintenanceSummary>(`/vehicles/${vehicleId}/maintenance-summary`),
   getVehicleTimeline: (vehicleId: number | string, page = 1, pageSize = 20) =>
     apiGet<PageResult<MaintenanceTimelineEvent>>(`/vehicles/${vehicleId}/maintenance-timeline${buildQuery({ page, page_size: pageSize })}`)
+};
+
+export const vehicleAssignmentsApi = {
+  list: (params: Record<string, string | number | boolean | null | undefined>) =>
+    apiGet<PageResult<VehicleAssignment>>(`/vehicle-assignments${buildQuery(params)}`),
+  get: (id: number | string) => apiGet<VehicleAssignment>(`/vehicle-assignments/${id}`),
+  create: (payload: VehicleAssignmentPayload) =>
+    apiPost<VehicleAssignment>("/vehicle-assignments", payload),
+  update: (id: number | string, payload: VehicleAssignmentPayload) =>
+    apiPut<VehicleAssignment>(`/vehicle-assignments/${id}`, payload),
+  start: (id: number | string, payload: VehicleAssignmentStartPayload) =>
+    apiPost<VehicleAssignment>(`/vehicle-assignments/${id}/start`, payload),
+  complete: (id: number | string, payload: VehicleAssignmentCompletePayload) =>
+    apiPost<VehicleAssignment>(`/vehicle-assignments/${id}/complete`, payload),
+  cancel: (id: number | string) =>
+    apiPost<VehicleAssignment>(`/vehicle-assignments/${id}/cancel`, {}),
+  archive: (id: number | string) =>
+    apiDelete<ApiMessage>(`/vehicle-assignments/${id}`),
+  restore: (id: number | string) =>
+    apiPost<VehicleAssignment>(`/vehicle-assignments/${id}/restore`, {})
 };

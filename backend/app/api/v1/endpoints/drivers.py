@@ -6,12 +6,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.security import get_current_user, require_roles
+from app.core.errors import localized_http_exception
 from app.db.session import get_db
-from app.models import Driver, User, Vehicle
+from app.models import Driver, User, Vehicle, VehicleAssignment
 from app.schemas import DriverCreate, DriverOut, DriverStatus, DriverUpdate, UserRole
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate
 from app.services.audit import record_audit, snapshot
+from app.services.vehicle_assignments import (
+    ACTIVE_ASSIGNMENT_STATUSES,
+    ensure_no_active_conflicts,
+)
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -44,19 +49,23 @@ def resolve_vehicle_id(db: Session, assigned_vehicle_id: int | None, assigned_li
     if assigned_vehicle_id is not None:
         vehicle = db.get(Vehicle, assigned_vehicle_id)
         if not vehicle:
-            raise HTTPException(status_code=404, detail="Assigned vehicle not found.")
+            raise localized_http_exception(404, "assigned_vehicle_not_found")
+        if vehicle.archived:
+            raise HTTPException(status_code=400, detail="Archived Vehicles cannot receive new assignments.")
         return vehicle.id
     if assigned_license_plate:
         vehicle = find_vehicle_by_plate(db, assigned_license_plate)
         if not vehicle:
-            raise HTTPException(status_code=404, detail=f"Assigned vehicle '{assigned_license_plate}' not found.")
+            raise localized_http_exception(404, "assigned_vehicle_not_found")
+        if vehicle.archived:
+            raise HTTPException(status_code=400, detail="Archived Vehicles cannot receive new assignments.")
         return vehicle.id
     return None
 
 
 def apply_driver_payload(driver: Driver, payload: DriverCreate | DriverUpdate, db: Session) -> None:
     if payload.user_id is not None and not db.get(User, payload.user_id):
-        raise HTTPException(status_code=404, detail="Linked user not found.")
+        raise localized_http_exception(404, "linked_user_not_found")
     driver.full_name = payload.full_name.strip()
     driver.phone_number = payload.phone_number
     driver.email = payload.email
@@ -69,6 +78,72 @@ def apply_driver_payload(driver: Driver, payload: DriverCreate | DriverUpdate, d
     driver.user_id = payload.user_id
     driver.status = payload.status.value
     driver.notes = payload.notes
+
+
+def sync_compatibility_assignment(
+    db: Session,
+    *,
+    driver: Driver,
+    old_vehicle_id: int | None,
+    new_vehicle_id: int | None,
+    current_user: User,
+) -> None:
+    if old_vehicle_id == new_vehicle_id:
+        return
+    now = datetime.utcnow()
+    active = db.query(VehicleAssignment).filter(
+        VehicleAssignment.driver_id == driver.id,
+        VehicleAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+        VehicleAssignment.archived.is_(False),
+    ).with_for_update().first()
+    if active:
+        old_vehicle = db.get(Vehicle, active.vehicle_id)
+        end_odometer = max(
+            active.start_odometer_km,
+            old_vehicle.odometer_km if old_vehicle and old_vehicle.odometer_km is not None else active.start_odometer_km,
+        )
+        active.status = "Completed"
+        active.end_datetime = now
+        active.end_odometer_km = end_odometer
+        active.ended_by_user_id = current_user.id
+        active.return_notes = "Ended from the compatible Driver current Vehicle field."
+        active.updated_at = now
+        record_audit(
+            db,
+            action="Vehicle Assignment completed",
+            entity_type="VehicleAssignment",
+            entity_id=active.id,
+            user=current_user,
+            new_values=snapshot(active),
+            description=f"Assignment #{active.id} ended from the Driver profile.",
+        )
+    if new_vehicle_id is None:
+        return
+    vehicle = db.get(Vehicle, new_vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Assigned vehicle not found.")
+    ensure_no_active_conflicts(db, vehicle=vehicle, driver=driver)
+    assignment = VehicleAssignment(
+        vehicle_id=vehicle.id,
+        driver_id=driver.id,
+        assigned_by_user_id=current_user.id,
+        start_datetime=now,
+        start_odometer_km=vehicle.odometer_km or 0,
+        purpose="Driver profile assignment",
+        notes="Created from the compatible Driver current Vehicle field.",
+        status="Active",
+    )
+    db.add(assignment)
+    db.flush()
+    record_audit(
+        db,
+        action="Vehicle Assignment started",
+        entity_type="VehicleAssignment",
+        entity_id=assignment.id,
+        user=current_user,
+        new_values=snapshot(assignment),
+        description=f"Assignment #{assignment.id} created from the Driver profile.",
+    )
 
 
 @router.get("", response_model=list[DriverOut])
@@ -117,6 +192,13 @@ def create_driver(payload: DriverCreate, db: Session = Depends(get_db), current_
     db.add(driver)
     try:
         db.flush()
+        sync_compatibility_assignment(
+            db,
+            driver=driver,
+            old_vehicle_id=None,
+            new_vehicle_id=driver.assigned_vehicle_id,
+            current_user=current_user,
+        )
         record_audit(
             db, action="Driver created", entity_type="Driver", entity_id=driver.id,
             user=current_user, new_values=snapshot(driver),
@@ -146,6 +228,13 @@ def update_driver(driver_id: int, payload: DriverUpdate, db: Session = Depends(g
     old_values = snapshot(driver)
     old_assignment = driver.assigned_vehicle_id
     apply_driver_payload(driver, payload, db)
+    sync_compatibility_assignment(
+        db,
+        driver=driver,
+        old_vehicle_id=old_assignment,
+        new_vehicle_id=driver.assigned_vehicle_id,
+        current_user=current_user,
+    )
     driver.updated_at = datetime.utcnow()
     record_audit(
         db, action="Driver updated", entity_type="Driver", entity_id=driver.id,
@@ -175,6 +264,13 @@ def delete_driver(driver_id: int, db: Session = Depends(get_db), current_user: U
     driver = db.get(Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found.")
+    active_assignment = db.query(VehicleAssignment).filter(
+        VehicleAssignment.driver_id == driver.id,
+        VehicleAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+        VehicleAssignment.archived.is_(False),
+    ).first()
+    if active_assignment:
+        raise HTTPException(status_code=409, detail="Complete or cancel the active Vehicle Assignment before archiving this Driver.")
     driver.archived = True
     driver.archived_at = datetime.utcnow()
     driver.archived_by = current_user.id

@@ -101,7 +101,7 @@ def test_migration_preserves_values_and_marks_electric_rows_for_review(
             assert audit["EntityId"] == 12
             assert connection.execute(sa.text(
                 'SELECT version_num FROM alembic_version'
-                )).scalar_one() == "20260723_0007"
+                )).scalar_one() == "20260724_0009"
 
         with pytest.raises(RuntimeError, match="Cannot downgrade.*KWH"):
             command.downgrade(config, "20260718_0004")

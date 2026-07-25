@@ -111,6 +111,8 @@ def update_status(reservation_id: int, payload: ReservationStatusUpdate, db: Ses
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")
+    if reservation.status == 4:
+        raise HTTPException(status_code=409, detail="A completed Reservation cannot be reopened.")
     old_status = reservation.status
     reservation.status = parse_reservation_status(payload.status)
     action = {
@@ -130,6 +132,8 @@ def approve(reservation_id: int, db: Session = Depends(get_db), current_user: Us
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")
+    if reservation.status == 4:
+        raise HTTPException(status_code=409, detail="A completed Reservation cannot be reopened.")
     reservation.status = 1
     record_audit(
         db, action="Reservation approved", entity_type="VehicleReservation", entity_id=reservation.id,
@@ -144,6 +148,8 @@ def reject(reservation_id: int, db: Session = Depends(get_db), current_user: Use
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")
+    if reservation.status == 4:
+        raise HTTPException(status_code=409, detail="A completed Reservation cannot be reopened.")
     reservation.status = 2
     record_audit(
         db, action="Reservation rejected", entity_type="VehicleReservation", entity_id=reservation.id,

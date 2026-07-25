@@ -119,13 +119,15 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
         notify_roles(
             db,
             roles=RECIPIENT_ROLES,
-            notification_type="Vehicle assignment overdue",
+            notification_type="Vehicle return overdue",
             title=f"Assignment #{assignment.id} is overdue",
             message=f"{assignment.vehicle.license_plate} · {assignment.driver.full_name}",
             priority="High",
             entity_type="VehicleAssignment",
             entity_id=assignment.id,
-            deduplication_key=f"vehicle-assignment:{assignment.id}:overdue",
+            deduplication_key=f"vehicle-usage:{assignment.id}:return-overdue",
+            title_key="modules:notificationContent.vehicle_return_overdue.title",
+            message_key="modules:notificationContent.vehicle_return_overdue.message",
             message_params={
                 "id": assignment.id,
                 "plate": assignment.vehicle.license_plate,

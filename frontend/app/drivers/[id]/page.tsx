@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AssignmentHistoryTable } from "@/components/assignments/AssignmentHistoryTable";
 import { apiGet, vehicleAssignmentsApi } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { translateStatus } from "@/i18n/translate";
 import type { Driver, VehicleAssignment } from "@/lib/types";
@@ -14,9 +15,11 @@ type Tab = "overview" | "assignments";
 export default function DriverDetailsPage({ params }: { params: { id: string } }) {
   const { t } = useTranslation(["modules", "common"]);
   const { formatDate } = useLanguage();
+  const { can } = useAuth();
   const driverId = Number(params.id);
   const [driver, setDriver] = useState<Driver | null>(null);
   const [assignments, setAssignments] = useState<VehicleAssignment[]>([]);
+  const activeAssignment = assignments.find((assignment) => assignment.status === "Active" || assignment.status === "Overdue");
   const [tab, setTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +51,11 @@ export default function DriverDetailsPage({ params }: { params: { id: string } }
           <h1>{driver.full_name}</h1>
           <p className="muted">{driver.employee_number} · {driver.department ?? "—"} · {translateStatus(driver.status)}</p>
         </div>
-        <Link className="secondaryButton" href="/drivers">{t("modules:vehicleAssignments.backToDrivers")}</Link>
+        <div className="actions">
+          <Link className="secondaryButton" href="/drivers">{t("modules:vehicleAssignments.backToDrivers")}</Link>
+          {can("vehicleAssignmentsWrite") && !activeAssignment && driver.status === "Active" && <Link className="button" href={`/vehicle-assignments?checkout=1&driver_id=${driver.id}`}>{t("modules:vehicleAssignments.checkOutVehicle")}</Link>}
+          {can("vehicleAssignmentsWrite") && activeAssignment && <Link className="button" href={`/vehicle-assignments?return_id=${activeAssignment.id}`}>{t("modules:vehicleAssignments.returnVehicle")}</Link>}
+        </div>
       </div>
       <nav className="vehicleTabs" aria-label={t("modules:vehicleAssignments.driverDetails")}>
         <button className={tab === "overview" ? "vehicleTab active" : "vehicleTab"} type="button" onClick={() => setTab("overview")}>{t("common:labels.details")}</button>

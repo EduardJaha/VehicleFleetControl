@@ -129,6 +129,7 @@ class Vehicle(Base):
     inspections = relationship("Inspection", back_populates="vehicle", cascade="all, delete-orphan")
     work_orders = relationship("WorkOrder", back_populates="vehicle", cascade="all, delete-orphan")
     assignments = relationship("VehicleAssignment", back_populates="vehicle")
+    condition_records = relationship("VehicleConditionRecord", back_populates="vehicle")
 
 
 class Driver(Base):
@@ -163,6 +164,7 @@ class Driver(Base):
     inspections = relationship("Inspection", back_populates="driver")
     work_orders = relationship("WorkOrder", back_populates="driver")
     assignments = relationship("VehicleAssignment", back_populates="driver")
+    condition_records = relationship("VehicleConditionRecord", back_populates="driver")
 
 
 class VehicleAssignment(Base):
@@ -194,6 +196,7 @@ class VehicleAssignment(Base):
         Index("ix_vehicle_assignments_reservation_id", "ReservationId"),
         Index("ix_vehicle_assignments_start_datetime", "StartDatetime"),
         Index("ix_vehicle_assignments_status", "Status"),
+        Index("ix_vehicle_assignments_archived", "Archived"),
         Index(
             "uq_vehicle_assignments_active_vehicle",
             "VehicleId",
@@ -210,7 +213,7 @@ class VehicleAssignment(Base):
         ),
     )
 
-    id = Column("Id", Integer, primary_key=True, index=True)
+    id = Column("Id", Integer, primary_key=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="RESTRICT"), nullable=False)
     driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="RESTRICT"), nullable=False)
     reservation_id = Column(
@@ -238,12 +241,15 @@ class VehicleAssignment(Base):
     start_energy_level = Column("StartEnergyLevel", Integer, nullable=True)
     end_energy_level = Column("EndEnergyLevel", Integer, nullable=True)
     purpose = Column("Purpose", String(255), nullable=True)
+    destination = Column("Destination", String(255), nullable=True)
+    documents_handed_over = Column("DocumentsHandedOver", JSON, nullable=True)
+    vehicle_status_before_checkout = Column("VehicleStatusBeforeCheckout", Integer, nullable=True)
     notes = Column("Notes", Text, nullable=True)
     return_notes = Column("ReturnNotes", Text, nullable=True)
     status = Column("Status", String(50), nullable=False, default="Scheduled")
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False)
     archived_at = Column("ArchivedAt", DateTime, nullable=True)
     archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
@@ -255,10 +261,62 @@ class VehicleAssignment(Base):
     accidents = relationship("VehicleAccident", back_populates="vehicle_assignment")
     fuel_records = relationship("VehicleFuel", back_populates="vehicle_assignment")
     inspections = relationship("Inspection", back_populates="vehicle_assignment")
+    condition_records = relationship(
+        "VehicleConditionRecord",
+        back_populates="vehicle_assignment",
+        cascade="all, delete-orphan",
+        order_by="VehicleConditionRecord.recorded_at",
+    )
+
+
+class VehicleConditionRecord(Base):
+    __tablename__ = "VehicleConditionRecords"
+    __table_args__ = (
+        CheckConstraint(
+            '"RecordType" IN (\'Checkout\', \'Return\')',
+            name="ck_vehicle_condition_records_type",
+        ),
+        CheckConstraint('"OdometerKm" >= 0', name="ck_vehicle_condition_records_odometer"),
+        CheckConstraint(
+            '"EnergyLevel" IS NULL OR ("EnergyLevel" >= 0 AND "EnergyLevel" <= 100)',
+            name="ck_vehicle_condition_records_energy",
+        ),
+        UniqueConstraint("VehicleAssignmentId", "RecordType", name="uq_vehicle_condition_assignment_type"),
+        Index("ix_vehicle_condition_records_assignment_id", "VehicleAssignmentId"),
+        Index("ix_vehicle_condition_records_vehicle_id", "VehicleId"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    vehicle_assignment_id = Column(
+        "VehicleAssignmentId",
+        Integer,
+        ForeignKey("VehicleAssignments.Id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="RESTRICT"), nullable=False)
+    driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="RESTRICT"), nullable=False)
+    record_type = Column("RecordType", String(20), nullable=False)
+    recorded_at = Column("RecordedAt", DateTime, nullable=False)
+    odometer_km = Column("OdometerKm", Integer, nullable=False)
+    energy_level = Column("EnergyLevel", Integer, nullable=True)
+    vehicle_condition = Column("VehicleCondition", String(50), nullable=False)
+    damage_description = Column("DamageDescription", Text, nullable=True)
+    driver_comments = Column("DriverComments", Text, nullable=True)
+    return_inspection_required = Column("ReturnInspectionRequired", Boolean, nullable=False, default=False)
+    recorded_by_user_id = Column("RecordedByUserId", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    vehicle_assignment = relationship("VehicleAssignment", back_populates="condition_records")
+    vehicle = relationship("Vehicle", back_populates="condition_records")
+    driver = relationship("Driver", back_populates="condition_records")
+    recorded_by_user = relationship("User", foreign_keys=[recorded_by_user_id])
 
 
 class Inspection(Base):
     __tablename__ = "Inspections"
+    __table_args__ = (
+        Index("ix_inspections_vehicle_assignment_id", "VehicleAssignmentId"),
+    )
 
     id = Column("Id", Integer, primary_key=True, index=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
@@ -268,7 +326,6 @@ class Inspection(Base):
         Integer,
         ForeignKey("VehicleAssignments.Id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     inspection_type = Column("InspectionType", String(50), nullable=False)
     inspection_date = Column("InspectionDate", DateTime, nullable=False)
@@ -410,6 +467,7 @@ class VehicleFuel(Base):
         CheckConstraint('"UnitCost" >= 0', name="ck_vehicle_fuels_unit_cost_nonnegative"),
         CheckConstraint('"EnergyUnit" IN (\'L\', \'KWH\')', name="ck_vehicle_fuels_energy_unit"),
         Index("ix_vehicle_fuels_energy_unit", "EnergyUnit"),
+        Index("ix_vehiclefuels_vehicle_assignment_id", "VehicleAssignmentId"),
     )
 
     id = Column("Id", Integer, primary_key=True, index=True)
@@ -419,7 +477,6 @@ class VehicleFuel(Base):
         Integer,
         ForeignKey("VehicleAssignments.Id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     refuel_date = Column("RefuelDate", DateTime, nullable=False)
     quantity = Column("Quantity", Numeric(12, 3), nullable=False)
@@ -446,6 +503,9 @@ class VehicleFuel(Base):
 
 class VehicleAccident(Base):
     __tablename__ = "VehicleAccidents"
+    __table_args__ = (
+        Index("ix_vehicleaccidents_vehicle_assignment_id", "VehicleAssignmentId"),
+    )
 
     id = Column("Id", Integer, primary_key=True, index=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
@@ -454,7 +514,6 @@ class VehicleAccident(Base):
         Integer,
         ForeignKey("VehicleAssignments.Id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     accident_date = Column("AccidentDate", DateTime, nullable=False)
     location = Column("Location", String, nullable=False)

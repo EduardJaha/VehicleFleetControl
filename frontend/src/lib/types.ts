@@ -133,6 +133,8 @@ export type VehicleAssignment = {
   start_energy_level?: number | null;
   end_energy_level?: number | null;
   purpose?: string | null;
+  destination?: string | null;
+  documents_handed_over: string[];
   notes?: string | null;
   return_notes?: string | null;
   status: VehicleAssignmentStatus;
@@ -141,6 +143,7 @@ export type VehicleAssignment = {
   archived: boolean;
   archived_at?: string | null;
   archived_by?: number | null;
+  conditions: VehicleConditionRecord[];
 };
 
 export type VehicleAssignmentPayload = {
@@ -151,6 +154,8 @@ export type VehicleAssignmentPayload = {
   start_odometer_km: number;
   start_energy_level?: number | null;
   purpose?: string | null;
+  destination?: string | null;
+  documents_handed_over?: string[];
   notes?: string | null;
 };
 
@@ -166,6 +171,65 @@ export type VehicleAssignmentCompletePayload = {
   end_odometer_km: number;
   end_energy_level?: number | null;
   return_notes?: string | null;
+};
+
+export type VehicleConditionType = "Checkout" | "Return";
+
+export type VehicleConditionRecord = {
+  id: number;
+  vehicle_assignment_id: number;
+  vehicle_id: number;
+  driver_id: number;
+  record_type: VehicleConditionType;
+  recorded_at: string;
+  odometer_km: number;
+  energy_level?: number | null;
+  vehicle_condition: string;
+  damage_description?: string | null;
+  driver_comments?: string | null;
+  return_inspection_required: boolean;
+  attachment_count: number;
+};
+
+export type VehicleCheckoutPayload = {
+  assignment_id?: number | null;
+  vehicle_id: number;
+  driver_id: number;
+  reservation_id?: number | null;
+  checkout_datetime: string;
+  starting_odometer_km: number;
+  energy_level?: number | null;
+  vehicle_condition: string;
+  existing_damage?: string | null;
+  documents_handed_over: string[];
+  purpose?: string | null;
+  destination?: string | null;
+  notes?: string | null;
+};
+
+export type VehicleReturnPayload = {
+  return_datetime: string;
+  ending_odometer_km: number;
+  energy_level?: number | null;
+  vehicle_condition: string;
+  new_damage?: string | null;
+  driver_comments?: string | null;
+  return_inspection_required: boolean;
+  create_accident: boolean;
+  create_work_order: boolean;
+};
+
+export type VehicleCheckoutResult = {
+  assignment: VehicleAssignment;
+  condition_record: VehicleConditionRecord;
+};
+
+export type VehicleReturnResult = {
+  assignment: VehicleAssignment;
+  condition_record: VehicleConditionRecord;
+  inspection_id?: number | null;
+  accident_id?: number | null;
+  work_order_id?: number | null;
 };
 
 export type InspectionType = "Daily" | "Weekly" | "Before Trip" | "After Trip" | "Return Inspection";
@@ -325,6 +389,22 @@ export type DashboardSummary = {
   status_summary: Array<{ status: number; count: number }>;
   location_summary: Array<{ location: string; count: number }>;
   reservation_status_summary: Array<{ status: string; count: number }>;
+  active_usage: DashboardActiveUsage[];
+  active_usage_count: number;
+  overdue_return_count: number;
+};
+
+export type DashboardActiveUsage = {
+  assignment_id: number;
+  vehicle_id: number;
+  driver_id: number;
+  license_plate: string;
+  vehicle_name: string;
+  driver_name: string;
+  checkout_datetime: string;
+  expected_return_datetime?: string | null;
+  destination?: string | null;
+  overdue: boolean;
 };
 
 export type ServiceReminder = {

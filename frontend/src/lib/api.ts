@@ -1,9 +1,10 @@
 import type {
-  ApiMessage, Inspection, MaintenanceSummary, MaintenanceTimelineEvent, PageResult, ServiceReminder,
+  ApiMessage, Attachment, Inspection, MaintenanceSummary, MaintenanceTimelineEvent, PageResult, ServiceReminder,
   VehicleBrand, VehicleMaintenanceSummary, VehicleModel, VehicleServiceDetail,
   VehicleServiceOverview, WorkOrder, WorkOrderCompletionPayload, WorkOrderCompletionResult,
   RegistrationCountryOption, VehicleAssignment, VehicleAssignmentCompletePayload,
-  VehicleAssignmentPayload, VehicleAssignmentStartPayload
+  VehicleAssignmentPayload, VehicleAssignmentStartPayload, VehicleCheckoutPayload,
+  VehicleCheckoutResult, VehicleConditionRecord, VehicleReturnPayload, VehicleReturnResult
 } from "@/lib/types";
 import i18n from "@/i18n";
 import { getActiveLanguage } from "@/i18n/language";
@@ -281,6 +282,13 @@ export function apiDownloadFile(path: string, fallbackFilename: string): Promise
   return apiDownload(`/files/legacy/download${buildQuery({ path })}`, fallbackFilename);
 }
 
+export const filesApi = {
+  list: (entityType: string, entityId: number | string) =>
+    apiGet<Attachment[]>(`/files${buildQuery({ entity_type: entityType, entity_id: entityId })}`),
+  download: (file: Attachment) =>
+    apiDownload(`/files/${file.id}/download`, file.original_filename)
+};
+
 export const maintenanceApi = {
   getSummary: () => apiGet<MaintenanceSummary>("/maintenance/summary"),
   getWorkOrders: (params: Record<string, string | number | boolean | null | undefined>) =>
@@ -314,6 +322,12 @@ export const vehicleAssignmentsApi = {
     apiPost<VehicleAssignment>(`/vehicle-assignments/${id}/start`, payload),
   complete: (id: number | string, payload: VehicleAssignmentCompletePayload) =>
     apiPost<VehicleAssignment>(`/vehicle-assignments/${id}/complete`, payload),
+  checkout: (payload: VehicleCheckoutPayload) =>
+    apiPost<VehicleCheckoutResult>("/vehicle-assignments/check-out", payload),
+  returnVehicle: (id: number | string, payload: VehicleReturnPayload) =>
+    apiPost<VehicleReturnResult>(`/vehicle-assignments/${id}/return`, payload),
+  conditions: (id: number | string) =>
+    apiGet<VehicleConditionRecord[]>(`/vehicle-assignments/${id}/conditions`),
   cancel: (id: number | string) =>
     apiPost<VehicleAssignment>(`/vehicle-assignments/${id}/cancel`, {}),
   archive: (id: number | string) =>

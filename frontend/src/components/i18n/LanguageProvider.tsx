@@ -29,9 +29,14 @@ function asDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null;
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   const canonical = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value);
+  const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const timezoneExplicit = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value);
+  const apiDateTimeWithoutTimezone = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) && !timezoneExplicit;
   const date = canonical
     ? new Date(Number(canonical[3]), Number(canonical[2]) - 1, Number(canonical[1]))
-    : new Date(value);
+    : isoDate
+      ? new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]))
+      : new Date(apiDateTimeWithoutTimezone ? `${value}Z` : value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

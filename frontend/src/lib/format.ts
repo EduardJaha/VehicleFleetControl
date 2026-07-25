@@ -19,5 +19,6 @@ export function toInputDate(value: string): string {
 }
 
 export function todayInputDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 }

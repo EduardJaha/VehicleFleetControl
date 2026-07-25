@@ -14,6 +14,7 @@ class VehicleStatus(IntEnum):
     in_service = 1
     sold = 2
     out_of_use = 3
+    assigned = 4
 
 
 class VehicleReservationStatus(IntEnum):
@@ -21,6 +22,7 @@ class VehicleReservationStatus(IntEnum):
     approved = 1
     rejected = 2
     cancelled = 3
+    completed = 4
 
 
 class UserRole(str, Enum):
@@ -54,6 +56,11 @@ class VehicleAssignmentStatus(str, Enum):
     completed = "Completed"
     cancelled = "Cancelled"
     overdue = "Overdue"
+
+
+class VehicleConditionType(str, Enum):
+    checkout = "Checkout"
+    return_ = "Return"
 
 
 class InspectionType(str, Enum):
@@ -257,9 +264,11 @@ class VehicleAssignmentBase(BaseModel):
     start_odometer_km: int = Field(ge=0)
     start_energy_level: int | None = Field(default=None, ge=0, le=100)
     purpose: str | None = Field(default=None, max_length=255)
+    destination: str | None = Field(default=None, max_length=255)
+    documents_handed_over: list[str] = []
     notes: str | None = None
 
-    @field_validator("purpose", "notes")
+    @field_validator("purpose", "destination", "notes")
     @classmethod
     def normalize_assignment_text(cls, value: str | None) -> str | None:
         if value is None:
@@ -300,6 +309,81 @@ class VehicleAssignmentComplete(BaseModel):
         return VehicleAssignmentBase.normalize_assignment_text(value)
 
 
+class VehicleCheckoutCreate(BaseModel):
+    assignment_id: int | None = Field(default=None, gt=0)
+    vehicle_id: int = Field(gt=0)
+    driver_id: int = Field(gt=0)
+    reservation_id: int | None = Field(default=None, gt=0)
+    checkout_datetime: str
+    starting_odometer_km: int = Field(ge=0)
+    energy_level: int | None = Field(default=None, ge=0, le=100)
+    vehicle_condition: str = Field(min_length=1, max_length=50)
+    existing_damage: str | None = None
+    documents_handed_over: list[str] = []
+    purpose: str | None = Field(default=None, max_length=255)
+    destination: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+
+    @field_validator("vehicle_condition")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("existing_damage", "purpose", "destination", "notes")
+    @classmethod
+    def normalize_checkout_text(cls, value: str | None) -> str | None:
+        return VehicleAssignmentBase.normalize_assignment_text(value)
+
+    @field_validator("documents_handed_over")
+    @classmethod
+    def normalize_documents(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(value.strip() for value in values if value.strip()))
+
+
+class VehicleReturnCreate(BaseModel):
+    return_datetime: str
+    ending_odometer_km: int = Field(ge=0)
+    energy_level: int | None = Field(default=None, ge=0, le=100)
+    vehicle_condition: str = Field(min_length=1, max_length=50)
+    new_damage: str | None = None
+    driver_comments: str | None = None
+    return_inspection_required: bool = False
+    create_accident: bool = False
+    create_work_order: bool = False
+
+    @field_validator("vehicle_condition")
+    @classmethod
+    def normalize_return_condition(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("new_damage", "driver_comments")
+    @classmethod
+    def normalize_return_text(cls, value: str | None) -> str | None:
+        return VehicleAssignmentBase.normalize_assignment_text(value)
+
+    @model_validator(mode="after")
+    def damage_actions_require_damage(self):
+        if (self.create_accident or self.create_work_order) and not self.new_damage:
+            raise ValueError("New damage is required when creating an Accident or Work Order.")
+        return self
+
+
+class VehicleConditionRecordOut(BaseModel):
+    id: int
+    vehicle_assignment_id: int
+    vehicle_id: int
+    driver_id: int
+    record_type: VehicleConditionType
+    recorded_at: str
+    odometer_km: int
+    energy_level: int | None = None
+    vehicle_condition: str
+    damage_description: str | None = None
+    driver_comments: str | None = None
+    return_inspection_required: bool
+    attachment_count: int = 0
+
+
 class VehicleAssignmentOut(VehicleAssignmentBase):
     id: int
     vehicle_license_plate: str
@@ -319,7 +403,21 @@ class VehicleAssignmentOut(VehicleAssignmentBase):
     archived: bool = False
     archived_at: str | None = None
     archived_by: int | None = None
+    conditions: list[VehicleConditionRecordOut] = []
     model_config = ConfigDict(from_attributes=True)
+
+
+class VehicleCheckoutResult(BaseModel):
+    assignment: VehicleAssignmentOut
+    condition_record: VehicleConditionRecordOut
+
+
+class VehicleReturnResult(BaseModel):
+    assignment: VehicleAssignmentOut
+    condition_record: VehicleConditionRecordOut
+    inspection_id: int | None = None
+    accident_id: int | None = None
+    work_order_id: int | None = None
 
 
 class VehicleAssignmentPage(BaseModel):
@@ -1078,8 +1176,24 @@ class DashboardReservationStatusItem(BaseModel):
     count: int
 
 
+class DashboardActiveUsageItem(BaseModel):
+    assignment_id: int
+    vehicle_id: int
+    driver_id: int
+    license_plate: str
+    vehicle_name: str
+    driver_name: str
+    checkout_datetime: str
+    expected_return_datetime: str | None = None
+    destination: str | None = None
+    overdue: bool = False
+
+
 class DashboardSummaryOut(BaseModel):
     total_vehicles: int
     status_summary: list[DashboardStatusItem]
     location_summary: list[DashboardLocationItem]
     reservation_status_summary: list[DashboardReservationStatusItem] = []
+    active_usage: list[DashboardActiveUsageItem] = []
+    active_usage_count: int = 0
+    overdue_return_count: int = 0

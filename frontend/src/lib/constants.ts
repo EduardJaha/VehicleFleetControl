@@ -2,7 +2,8 @@ export const VEHICLE_STATUS_KEYS: Record<number, string> = {
   0: "status.Active",
   1: "status.In Service",
   2: "status.Sold",
-  3: "status.Out of Use"
+  3: "status.Out of Use",
+  4: "status.Assigned"
 };
 
 export const VEHICLE_STATUSES = [
@@ -16,14 +17,16 @@ export const RESERVATION_STATUS_KEYS: Record<number, string> = {
   0: "status.Pending",
   1: "status.Approved",
   2: "status.Rejected",
-  3: "status.Cancelled"
+  3: "status.Cancelled",
+  4: "status.Completed"
 };
 
 export const RESERVATION_STATUSES = [
   { value: 0, labelKey: "status.Pending" },
   { value: 1, labelKey: "status.Approved" },
   { value: 2, labelKey: "status.Rejected" },
-  { value: 3, labelKey: "status.Cancelled" }
+  { value: 3, labelKey: "status.Cancelled" },
+  { value: 4, labelKey: "status.Completed" }
 ];
 
 export const FUEL_TYPES = ["Petrol", "Diesel", "Hybrid", "Electric", "LPG", "CNG", "Gas"];

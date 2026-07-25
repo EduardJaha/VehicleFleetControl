@@ -6,7 +6,7 @@ import { AssignmentHistoryTable } from "@/components/assignments/AssignmentHisto
 import { Pagination } from "@/components/maintenance/Maintenance";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
-import { apiGet, vehicleAssignmentsApi } from "@/lib/api";
+import { apiGet, apiPostForm, vehicleAssignmentsApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type {
   Driver,
@@ -14,9 +14,9 @@ import type {
   Reservation,
   Vehicle,
   VehicleAssignment,
-  VehicleAssignmentCompletePayload,
   VehicleAssignmentPayload,
-  VehicleAssignmentStartPayload,
+  VehicleCheckoutPayload,
+  VehicleReturnPayload,
   VehicleAssignmentStatus
 } from "@/lib/types";
 
@@ -25,6 +25,10 @@ const ASSIGNMENT_STATUSES: VehicleAssignmentStatus[] = ["Scheduled", "Active", "
 function localDateTime(value = new Date()): string {
   const adjusted = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return adjusted.toISOString().slice(0, 16);
+}
+
+function apiDateTime(value: string): Date {
+  return new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`);
 }
 
 type AssignmentForm = {
@@ -54,7 +58,7 @@ function assignmentToForm(assignment: VehicleAssignment): AssignmentForm {
     vehicle_id: String(assignment.vehicle_id),
     driver_id: String(assignment.driver_id),
     reservation_id: assignment.reservation_id ? String(assignment.reservation_id) : "",
-    start_datetime: localDateTime(new Date(assignment.start_datetime)),
+    start_datetime: localDateTime(apiDateTime(assignment.start_datetime)),
     start_odometer_km: String(assignment.start_odometer_km),
     start_energy_level: assignment.start_energy_level == null ? "" : String(assignment.start_energy_level),
     purpose: assignment.purpose ?? "",
@@ -100,10 +104,20 @@ export default function VehicleAssignmentsPage() {
   const [assignmentFormState, setAssignmentFormState] = useState<AssignmentForm>(emptyAssignmentForm);
   const [editing, setEditing] = useState<VehicleAssignment | null>(null);
   const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
-  const [starting, setStarting] = useState<VehicleAssignment | null>(null);
-  const [startForm, setStartForm] = useState({ start_datetime: localDateTime(), start_odometer_km: "", start_energy_level: "", notes: "" });
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
+  const [startForm, setStartForm] = useState({
+    assignment_id: "", vehicle_id: "", driver_id: "", reservation_id: "", start_datetime: localDateTime(),
+    start_odometer_km: "", start_energy_level: "", vehicle_condition: "Good",
+    existing_damage: "", documents_handed_over: "", purpose: "", destination: "", notes: ""
+  });
+  const [checkoutPhotos, setCheckoutPhotos] = useState<File[]>([]);
   const [completing, setCompleting] = useState<VehicleAssignment | null>(null);
-  const [completeForm, setCompleteForm] = useState({ end_datetime: localDateTime(), end_odometer_km: "", end_energy_level: "", return_notes: "" });
+  const [completeForm, setCompleteForm] = useState({
+    end_datetime: localDateTime(), end_odometer_km: "", end_energy_level: "",
+    vehicle_condition: "Good", new_damage: "", driver_comments: "",
+    return_inspection_required: false, create_accident: false, create_work_order: false
+  });
+  const [returnPhotos, setReturnPhotos] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const loadAssignments = useCallback(async (page = 1, currentFilters = filters) => {
@@ -146,6 +160,48 @@ export default function VehicleAssignmentsPage() {
       setVehicles(vehicleRows);
       setDrivers(driverRows);
       setReservations(reservationRows);
+      const query = new URLSearchParams(window.location.search);
+      if (query.get("checkout") === "1") {
+        const vehicleId = query.get("vehicle_id") ?? "";
+        const driverId = query.get("driver_id") ?? "";
+        const reservationId = query.get("reservation_id") ?? "";
+        const assignmentId = query.get("assignment_id") ?? "";
+        const reservation = reservationRows.find((row) => row.id === Number(reservationId));
+        const resolvedVehicleId = vehicleId || (reservation ? String(reservation.vehicle_id) : "");
+        const vehicle = vehicleRows.find((row) => row.id === Number(resolvedVehicleId));
+        setStartForm((current) => ({
+          ...current,
+          assignment_id: assignmentId,
+          vehicle_id: resolvedVehicleId,
+          driver_id: driverId,
+          reservation_id: reservationId,
+          start_odometer_km: vehicle?.odometer_km == null ? "" : String(vehicle.odometer_km),
+          purpose: reservation?.reservation_type ?? ""
+        }));
+        setCheckoutDialogOpen(true);
+        if (assignmentId) {
+          void vehicleAssignmentsApi.get(assignmentId)
+            .then(openStart)
+            .catch((err) => setError(err instanceof Error ? err.message : t("modules:vehicleAssignments.loadError")));
+        }
+      }
+      const returnId = query.get("return_id");
+      if (returnId) {
+        void vehicleAssignmentsApi.get(returnId).then((assignment) => {
+          setCompleting(assignment);
+          setCompleteForm({
+            end_datetime: localDateTime(),
+            end_odometer_km: String(Math.max(assignment.start_odometer_km, vehicleRows.find((row) => row.id === assignment.vehicle_id)?.odometer_km ?? 0)),
+            end_energy_level: "",
+            vehicle_condition: query.get("damage") === "1" ? "Damaged" : "Good",
+            new_damage: "",
+            driver_comments: "",
+            return_inspection_required: query.get("inspection") === "1" || query.get("damage") === "1",
+            create_accident: false,
+            create_work_order: query.get("damage") === "1"
+          });
+        }).catch((err) => setError(err instanceof Error ? err.message : t("modules:vehicleAssignments.loadError")));
+      }
     }).catch((err) => setError(err instanceof Error ? err.message : t("modules:vehicleAssignments.loadError")));
     void loadAssignments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -211,31 +267,78 @@ export default function VehicleAssignmentsPage() {
   }
 
   function openStart(assignment: VehicleAssignment) {
-    setStarting(assignment);
     setStartForm({
+      assignment_id: String(assignment.id),
+      vehicle_id: String(assignment.vehicle_id),
+      driver_id: String(assignment.driver_id),
+      reservation_id: assignment.reservation_id ? String(assignment.reservation_id) : "",
       start_datetime: localDateTime(),
       start_odometer_km: String(assignment.start_odometer_km),
       start_energy_level: assignment.start_energy_level == null ? "" : String(assignment.start_energy_level),
+      vehicle_condition: "Good",
+      existing_damage: "",
+      documents_handed_over: assignment.documents_handed_over.join(", "),
+      purpose: assignment.purpose ?? "",
+      destination: assignment.destination ?? "",
       notes: assignment.notes ?? ""
     });
+    setCheckoutPhotos([]);
+    setCheckoutDialogOpen(true);
     setError(null);
+  }
+
+  function openManualCheckout() {
+    setStartForm({
+      assignment_id: "", vehicle_id: "", driver_id: "", reservation_id: "", start_datetime: localDateTime(),
+      start_odometer_km: "", start_energy_level: "", vehicle_condition: "Good",
+      existing_damage: "", documents_handed_over: "", purpose: "", destination: "", notes: ""
+    });
+    setCheckoutPhotos([]);
+    setError(null);
+    setCheckoutDialogOpen(true);
+  }
+
+  async function uploadConditionFiles(conditionRecordId: number, files: File[]) {
+    for (const file of files) {
+      const formData = new FormData();
+      formData.set("entity_type", "VehicleConditionRecord");
+      formData.set("entity_id", String(conditionRecordId));
+      formData.set("category", "image");
+      formData.set("file", file);
+      await apiPostForm(`/files`, formData);
+    }
   }
 
   async function startAssignment(event: React.FormEvent) {
     event.preventDefault();
-    if (!starting) return;
     setSubmitting(true);
     setError(null);
-    const payload: VehicleAssignmentStartPayload = {
-      start_datetime: new Date(startForm.start_datetime).toISOString(),
-      start_odometer_km: Number(startForm.start_odometer_km),
-      start_energy_level: startForm.start_energy_level ? Number(startForm.start_energy_level) : null,
+    const payload: VehicleCheckoutPayload = {
+      assignment_id: startForm.assignment_id ? Number(startForm.assignment_id) : null,
+      vehicle_id: Number(startForm.vehicle_id),
+      driver_id: Number(startForm.driver_id),
+      reservation_id: startForm.reservation_id ? Number(startForm.reservation_id) : null,
+      checkout_datetime: new Date(startForm.start_datetime).toISOString(),
+      starting_odometer_km: Number(startForm.start_odometer_km),
+      energy_level: startForm.start_energy_level ? Number(startForm.start_energy_level) : null,
+      vehicle_condition: startForm.vehicle_condition,
+      existing_damage: startForm.existing_damage || null,
+      documents_handed_over: startForm.documents_handed_over.split(",").map((item) => item.trim()).filter(Boolean),
+      purpose: startForm.purpose || null,
+      destination: startForm.destination || null,
       notes: startForm.notes || null
     };
     try {
-      const result = await vehicleAssignmentsApi.start(starting.id, payload);
-      setMessage(t("modules:vehicleAssignments.started", { id: result.id }));
-      setStarting(null);
+      const result = await vehicleAssignmentsApi.checkout(payload);
+      try {
+        await uploadConditionFiles(result.condition_record.id, checkoutPhotos);
+      } catch (uploadError) {
+        setError(t("modules:vehicleAssignments.uploadWarning", {
+          message: uploadError instanceof Error ? uploadError.message : t("modules:vehicleAssignments.actionError")
+        }));
+      }
+      setMessage(t("modules:vehicleAssignments.checkedOut", { id: result.assignment.id }));
+      setCheckoutDialogOpen(false);
       await loadAssignments(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("modules:vehicleAssignments.actionError"));
@@ -250,9 +353,25 @@ export default function VehicleAssignmentsPage() {
       end_datetime: localDateTime(),
       end_odometer_km: String(Math.max(assignment.start_odometer_km, vehicles.find((vehicle) => vehicle.id === assignment.vehicle_id)?.odometer_km ?? 0)),
       end_energy_level: "",
-      return_notes: ""
+      vehicle_condition: "Good",
+      new_damage: "",
+      driver_comments: "",
+      return_inspection_required: false,
+      create_accident: false,
+      create_work_order: false
     });
+    setReturnPhotos([]);
     setError(null);
+  }
+
+  function openDamageReturn(assignment: VehicleAssignment) {
+    openComplete(assignment);
+    setCompleteForm((current) => ({
+      ...current,
+      vehicle_condition: "Damaged",
+      return_inspection_required: true,
+      create_work_order: true
+    }));
   }
 
   async function completeAssignment(event: React.FormEvent) {
@@ -260,15 +379,27 @@ export default function VehicleAssignmentsPage() {
     if (!completing) return;
     setSubmitting(true);
     setError(null);
-    const payload: VehicleAssignmentCompletePayload = {
-      end_datetime: new Date(completeForm.end_datetime).toISOString(),
-      end_odometer_km: Number(completeForm.end_odometer_km),
-      end_energy_level: completeForm.end_energy_level ? Number(completeForm.end_energy_level) : null,
-      return_notes: completeForm.return_notes || null
+    const payload: VehicleReturnPayload = {
+      return_datetime: new Date(completeForm.end_datetime).toISOString(),
+      ending_odometer_km: Number(completeForm.end_odometer_km),
+      energy_level: completeForm.end_energy_level ? Number(completeForm.end_energy_level) : null,
+      vehicle_condition: completeForm.vehicle_condition,
+      new_damage: completeForm.new_damage || null,
+      driver_comments: completeForm.driver_comments || null,
+      return_inspection_required: completeForm.return_inspection_required,
+      create_accident: completeForm.create_accident,
+      create_work_order: completeForm.create_work_order
     };
     try {
-      const result = await vehicleAssignmentsApi.complete(completing.id, payload);
-      setMessage(t("modules:vehicleAssignments.completed", { id: result.id }));
+      const result = await vehicleAssignmentsApi.returnVehicle(completing.id, payload);
+      try {
+        await uploadConditionFiles(result.condition_record.id, returnPhotos);
+      } catch (uploadError) {
+        setError(t("modules:vehicleAssignments.uploadWarning", {
+          message: uploadError instanceof Error ? uploadError.message : t("modules:vehicleAssignments.actionError")
+        }));
+      }
+      setMessage(t("modules:vehicleAssignments.returned", { id: result.assignment.id }));
       setCompleting(null);
       await loadAssignments(1);
     } catch (err) {
@@ -322,11 +453,14 @@ export default function VehicleAssignmentsPage() {
         {assignment.status === "Scheduled" && (
           <>
             <button className="secondaryButton smallButton" type="button" onClick={() => openEdit(assignment)}>{t("common:actions.edit")}</button>
-            <button className="button smallButton" type="button" onClick={() => openStart(assignment)}>{t("modules:vehicleAssignments.start")}</button>
+            <button className="button smallButton" type="button" onClick={() => openStart(assignment)}>{t("modules:vehicleAssignments.checkOutVehicle")}</button>
           </>
         )}
         {(assignment.status === "Active" || assignment.status === "Overdue") && (
-          <button className="button smallButton" type="button" onClick={() => openComplete(assignment)}>{t("modules:vehicleAssignments.complete")}</button>
+          <>
+            <button className="button smallButton" type="button" onClick={() => openComplete(assignment)}>{t("modules:vehicleAssignments.returnVehicle")}</button>
+            <button className="secondaryButton smallButton" type="button" onClick={() => openDamageReturn(assignment)}>{t("modules:vehicleAssignments.reportDamage")}</button>
+          </>
         )}
         {["Scheduled", "Active", "Overdue"].includes(assignment.status) && (
           <button className="dangerButton smallButton" type="button" onClick={() => void cancelAssignment(assignment)}>{t("common:actions.cancel")}</button>
@@ -346,8 +480,15 @@ export default function VehicleAssignmentsPage() {
         actionLabel={canWrite ? t("modules:vehicleAssignments.add") : undefined}
         onAction={canWrite ? openCreate : undefined}
       />
+      {canWrite && (
+        <div className="actions spaced">
+          <button className="button" type="button" onClick={openManualCheckout}>
+            {t("modules:vehicleAssignments.checkOutVehicle")}
+          </button>
+        </div>
+      )}
 
-      {error && !assignmentDialogOpen && !starting && !completing && <div className="error spaced" role="alert">{error}</div>}
+      {error && !assignmentDialogOpen && !checkoutDialogOpen && !completing && <div className="error spaced" role="alert">{error}</div>}
       {message && <div className="success spaced" role="status">{message}</div>}
 
       <CreateEntityDialog
@@ -395,29 +536,66 @@ export default function VehicleAssignmentsPage() {
         </form>
       </CreateEntityDialog>
 
-      <CreateEntityDialog open={Boolean(starting)} title={t("modules:vehicleAssignments.start")} description={t("modules:vehicleAssignments.startDescription")} busy={submitting} onClose={() => setStarting(null)}>
+      <CreateEntityDialog open={checkoutDialogOpen} title={t("modules:vehicleAssignments.checkOutVehicle")} description={t("modules:vehicleAssignments.checkoutDescription")} busy={submitting} onClose={() => setCheckoutDialogOpen(false)}>
         <form className="form dialogForm" onSubmit={startAssignment}>
           {error && <div className="error">{error}</div>}
           <div className="formGrid">
+            <div className="formRow">
+              <label htmlFor="checkout-vehicle">{t("common:labels.vehicle")}</label>
+              <select id="checkout-vehicle" className="select" required disabled={Boolean(startForm.assignment_id)} value={startForm.vehicle_id} onChange={(event) => {
+                const vehicleId = event.target.value;
+                const vehicle = vehicles.find((row) => row.id === Number(vehicleId));
+                setStartForm({ ...startForm, vehicle_id: vehicleId, reservation_id: "", start_odometer_km: vehicle?.odometer_km == null ? "" : String(vehicle.odometer_km) });
+              }}>
+                <option value="">{t("modules:vehicleAssignments.selectVehicle")}</option>
+                {vehicles.filter((vehicle) => vehicle.status === 0 || vehicle.id === Number(startForm.vehicle_id)).map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.license_plate} · {vehicle.brand} {vehicle.model}</option>)}
+              </select>
+            </div>
+            <div className="formRow">
+              <label htmlFor="checkout-driver">{t("common:labels.driver")}</label>
+              <select id="checkout-driver" className="select" required disabled={Boolean(startForm.assignment_id)} value={startForm.driver_id} onChange={(event) => setStartForm({ ...startForm, driver_id: event.target.value })}>
+                <option value="">{t("modules:vehicleAssignments.selectDriver")}</option>
+                {drivers.filter((driver) => driver.status === "Active").map((driver) => <option key={driver.id} value={driver.id}>{driver.full_name} · {driver.employee_number}</option>)}
+              </select>
+            </div>
+            <div className="formRow">
+              <label htmlFor="checkout-reservation">{t("modules:vehicleAssignments.reservationOptional")}</label>
+              <select id="checkout-reservation" className="select" disabled={Boolean(startForm.assignment_id)} value={startForm.reservation_id} onChange={(event) => setStartForm({ ...startForm, reservation_id: event.target.value })}>
+                <option value="">{t("modules:vehicleAssignments.noReservation")}</option>
+                {reservations.filter((reservation) => reservation.status === 1 && (!startForm.vehicle_id || reservation.vehicle_id === Number(startForm.vehicle_id))).map((reservation) => <option key={reservation.id} value={reservation.id}>#{reservation.id} · {reservation.reserved_by}</option>)}
+              </select>
+            </div>
             <div className="formRow"><label htmlFor="start-date-time">{t("modules:vehicleAssignments.startDateTime")}</label><input id="start-date-time" className="input" type="datetime-local" required value={startForm.start_datetime} onChange={(event) => setStartForm({ ...startForm, start_datetime: event.target.value })} /></div>
             <div className="formRow"><label htmlFor="start-odometer">{t("modules:vehicleAssignments.startOdometer")}</label><input id="start-odometer" className="input" type="number" min="0" required value={startForm.start_odometer_km} onChange={(event) => setStartForm({ ...startForm, start_odometer_km: event.target.value })} /></div>
             <div className="formRow"><label htmlFor="start-energy">{t("modules:vehicleAssignments.startEnergy")}</label><input id="start-energy" className="input" type="number" min="0" max="100" value={startForm.start_energy_level} onChange={(event) => setStartForm({ ...startForm, start_energy_level: event.target.value })} /></div>
+            <div className="formRow"><label htmlFor="checkout-condition">{t("modules:vehicleAssignments.vehicleCondition")}</label><select id="checkout-condition" className="select" value={startForm.vehicle_condition} onChange={(event) => setStartForm({ ...startForm, vehicle_condition: event.target.value })}><option value="Good">{t("modules:vehicleAssignments.good")}</option><option value="Fair">{t("modules:vehicleAssignments.fair")}</option><option value="Damaged">{t("modules:vehicleAssignments.damaged")}</option></select></div>
+            <div className="formRow span2"><label htmlFor="existing-damage">{t("modules:vehicleAssignments.existingDamage")}</label><textarea id="existing-damage" className="input textarea" value={startForm.existing_damage} onChange={(event) => setStartForm({ ...startForm, existing_damage: event.target.value })} /></div>
+            <div className="formRow"><label htmlFor="checkout-documents">{t("modules:vehicleAssignments.documentsHandedOver")}</label><input id="checkout-documents" className="input" placeholder={t("modules:vehicleAssignments.documentsPlaceholder")} value={startForm.documents_handed_over} onChange={(event) => setStartForm({ ...startForm, documents_handed_over: event.target.value })} /></div>
+            <div className="formRow"><label htmlFor="checkout-destination">{t("modules:vehicleAssignments.destination")}</label><input id="checkout-destination" className="input" value={startForm.destination} onChange={(event) => setStartForm({ ...startForm, destination: event.target.value })} /></div>
+            <div className="formRow span2"><label htmlFor="checkout-purpose">{t("modules:vehicleAssignments.purpose")}</label><input id="checkout-purpose" className="input" value={startForm.purpose} onChange={(event) => setStartForm({ ...startForm, purpose: event.target.value })} /></div>
             <div className="formRow span2"><label htmlFor="start-notes">{t("common:labels.notes")}</label><textarea id="start-notes" className="input textarea" value={startForm.notes} onChange={(event) => setStartForm({ ...startForm, notes: event.target.value })} /></div>
+            <div className="formRow span2"><label htmlFor="checkout-photos">{t("modules:vehicleAssignments.photos")}</label><input id="checkout-photos" className="input" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => setCheckoutPhotos(Array.from(event.target.files ?? []))} /><span className="muted">{t("modules:vehicleAssignments.photoHelp")}</span></div>
           </div>
-          <div className="actions dialogActions"><button className="secondaryButton" type="button" onClick={() => setStarting(null)}>{t("common:actions.cancel")}</button><button className="button" type="submit" disabled={submitting}>{t("modules:vehicleAssignments.start")}</button></div>
+          <div className="actions dialogActions"><button className="secondaryButton" type="button" onClick={() => setCheckoutDialogOpen(false)}>{t("common:actions.cancel")}</button><button className="button" type="submit" disabled={submitting}>{t("modules:vehicleAssignments.checkOutVehicle")}</button></div>
         </form>
       </CreateEntityDialog>
 
-      <CreateEntityDialog open={Boolean(completing)} title={t("modules:vehicleAssignments.complete")} description={t("modules:vehicleAssignments.completionDescription")} busy={submitting} onClose={() => setCompleting(null)}>
+      <CreateEntityDialog open={Boolean(completing)} title={t("modules:vehicleAssignments.returnVehicle")} description={t("modules:vehicleAssignments.returnDescription")} busy={submitting} onClose={() => setCompleting(null)}>
         <form className="form dialogForm" onSubmit={completeAssignment}>
           {error && <div className="error">{error}</div>}
           <div className="formGrid">
             <div className="formRow"><label htmlFor="complete-date-time">{t("modules:vehicleAssignments.endDateTime")}</label><input id="complete-date-time" className="input" type="datetime-local" required value={completeForm.end_datetime} onChange={(event) => setCompleteForm({ ...completeForm, end_datetime: event.target.value })} /></div>
             <div className="formRow"><label htmlFor="complete-odometer">{t("modules:vehicleAssignments.endOdometer")}</label><input id="complete-odometer" className="input" type="number" min={completing?.start_odometer_km ?? 0} required value={completeForm.end_odometer_km} onChange={(event) => setCompleteForm({ ...completeForm, end_odometer_km: event.target.value })} /></div>
             <div className="formRow"><label htmlFor="complete-energy">{t("modules:vehicleAssignments.endEnergy")}</label><input id="complete-energy" className="input" type="number" min="0" max="100" value={completeForm.end_energy_level} onChange={(event) => setCompleteForm({ ...completeForm, end_energy_level: event.target.value })} /></div>
-            <div className="formRow span2"><label htmlFor="return-notes">{t("modules:vehicleAssignments.returnNotes")}</label><textarea id="return-notes" className="input textarea" value={completeForm.return_notes} onChange={(event) => setCompleteForm({ ...completeForm, return_notes: event.target.value })} /></div>
+            <div className="formRow"><label htmlFor="return-condition">{t("modules:vehicleAssignments.vehicleCondition")}</label><select id="return-condition" className="select" value={completeForm.vehicle_condition} onChange={(event) => setCompleteForm({ ...completeForm, vehicle_condition: event.target.value })}><option value="Good">{t("modules:vehicleAssignments.good")}</option><option value="Fair">{t("modules:vehicleAssignments.fair")}</option><option value="Damaged">{t("modules:vehicleAssignments.damaged")}</option></select></div>
+            <div className="formRow span2"><label htmlFor="new-damage">{t("modules:vehicleAssignments.newDamage")}</label><textarea id="new-damage" className="input textarea" value={completeForm.new_damage} onChange={(event) => setCompleteForm({ ...completeForm, new_damage: event.target.value })} /></div>
+            <div className="formRow span2"><label htmlFor="driver-comments">{t("modules:vehicleAssignments.driverComments")}</label><textarea id="driver-comments" className="input textarea" value={completeForm.driver_comments} onChange={(event) => setCompleteForm({ ...completeForm, driver_comments: event.target.value })} /></div>
+            <div className="formRow span2"><label className="actions"><input type="checkbox" checked={completeForm.return_inspection_required} onChange={(event) => setCompleteForm({ ...completeForm, return_inspection_required: event.target.checked })} /> {t("modules:vehicleAssignments.returnInspectionRequired")}</label></div>
+            <div className="formRow"><label className="actions"><input type="checkbox" checked={completeForm.create_accident} disabled={!completeForm.new_damage.trim()} onChange={(event) => setCompleteForm({ ...completeForm, create_accident: event.target.checked })} /> {t("modules:vehicleAssignments.createAccident")}</label></div>
+            <div className="formRow"><label className="actions"><input type="checkbox" checked={completeForm.create_work_order} disabled={!completeForm.new_damage.trim()} onChange={(event) => setCompleteForm({ ...completeForm, create_work_order: event.target.checked })} /> {t("modules:vehicleAssignments.createWorkOrder")}</label></div>
+            <div className="formRow span2"><label htmlFor="return-photos">{t("modules:vehicleAssignments.photos")}</label><input id="return-photos" className="input" type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => setReturnPhotos(Array.from(event.target.files ?? []))} /><span className="muted">{t("modules:vehicleAssignments.photoHelp")}</span></div>
           </div>
-          <div className="actions dialogActions"><button className="secondaryButton" type="button" onClick={() => setCompleting(null)}>{t("common:actions.cancel")}</button><button className="button" type="submit" disabled={submitting}>{t("modules:vehicleAssignments.complete")}</button></div>
+          <div className="actions dialogActions"><button className="secondaryButton" type="button" onClick={() => setCompleting(null)}>{t("common:actions.cancel")}</button><button className="button" type="submit" disabled={submitting}>{t("modules:vehicleAssignments.returnVehicle")}</button></div>
         </form>
       </CreateEntityDialog>
 

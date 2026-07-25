@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
@@ -166,7 +167,7 @@ export default function ReservationsPage() {
         <table className="table">
           <thead><tr><th>{t("common:labels.licencePlate")}</th><th>{t("modules:reservations.reservedBy")}</th><th>{t("common:labels.type")}</th><th>{t("common:labels.startDate")}</th><th>{t("common:labels.endDate")}</th><th>{t("common:labels.status")}</th><th>{t("common:labels.notes")}</th>{canApprove && <th>{t("common:labels.actions")}</th>}</tr></thead>
           <tbody>
-            {filtered.map((r) => <tr key={r.id}><td><strong>{r.license_plate}</strong></td><td>{r.reserved_by}</td><td>{translateType(r.reservation_type)}</td><td>{formatDate(r.start_date)}</td><td>{formatDate(r.end_date)}</td><td><span className="badge">{RESERVATION_STATUS_KEYS[r.status] ? t(`common:${RESERVATION_STATUS_KEYS[r.status]}`) : r.status_name}</span></td><td>{r.notes ?? ""}</td>{canApprove && <td><div className="actions"><button className="button smallButton" type="button" disabled={r.status === 1} onClick={() => void updateReservationStatus(r.id, "approve")}>{t("common:actions.approve")}</button><button className="dangerButton smallButton" type="button" disabled={r.status === 2} onClick={() => void updateReservationStatus(r.id, "reject")}>{t("common:actions.reject")}</button></div></td>}</tr>)}
+            {filtered.map((r) => <tr key={r.id}><td><strong>{r.license_plate}</strong></td><td>{r.reserved_by}</td><td>{translateType(r.reservation_type)}</td><td>{formatDate(r.start_date)}</td><td>{formatDate(r.end_date)}</td><td><span className="badge">{RESERVATION_STATUS_KEYS[r.status] ? t(`common:${RESERVATION_STATUS_KEYS[r.status]}`) : r.status_name}</span></td><td>{r.notes ?? ""}</td>{canApprove && <td><div className="actions">{r.status === 1 && !r.vehicle_assignment_id && <Link className="button smallButton" href={`/vehicle-assignments?checkout=1&reservation_id=${r.id}`}>{t("modules:vehicleAssignments.checkOutVehicle")}</Link>}{r.vehicle_assignment_id && <Link className="secondaryButton smallButton" href={`/vehicle-assignments/${r.vehicle_assignment_id}`}>#{r.vehicle_assignment_id}</Link>}<button className="button smallButton" type="button" disabled={r.status === 1 || r.status === 4} onClick={() => void updateReservationStatus(r.id, "approve")}>{t("common:actions.approve")}</button><button className="dangerButton smallButton" type="button" disabled={r.status === 2 || r.status === 4} onClick={() => void updateReservationStatus(r.id, "reject")}>{t("common:actions.reject")}</button></div></td>}</tr>)}
             {filtered.length === 0 && <tr><td colSpan={canApprove ? 8 : 7} className="muted">{t("modules:reservations.empty")}</td></tr>}
           </tbody>
         </table>

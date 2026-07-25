@@ -36,6 +36,9 @@ export function AssignmentHistoryTable({ assignments, emptyMessage, renderAction
           {assignments.map((assignment) => (
             <tr key={assignment.id}>
               <td>
+                <Link className="link stackedLink" href={`/vehicle-assignments/${assignment.id}`}>
+                  #{assignment.id}
+                </Link>
                 <Link className="link stackedLink" href={`/vehicles/${assignment.vehicle_id}`}>
                   {assignment.vehicle_license_plate}
                 </Link>
@@ -73,6 +76,7 @@ export function AssignmentHistoryTable({ assignments, emptyMessage, renderAction
               </td>
               <td>
                 {assignment.purpose ?? "—"}
+                {assignment.destination && <div className="muted">{assignment.destination}</div>}
                 {(assignment.notes || assignment.return_notes) && (
                   <div className="muted assignmentNotes">
                     {assignment.notes ?? assignment.return_notes}

@@ -49,7 +49,26 @@ def test_vehicle_assignment_ui_labels_exist_in_english_and_albanian():
     locale_root = Path(__file__).resolve().parents[2] / "frontend" / "src" / "i18n" / "locales"
     english = json.loads((locale_root / "en" / "modules.json").read_text())
     albanian = json.loads((locale_root / "sq" / "modules.json").read_text())
-    for key in ("title", "add", "activeAssignments", "assignmentHistory", "complete", "returnNotes"):
+    for key in (
+        "title",
+        "add",
+        "activeAssignments",
+        "assignmentHistory",
+        "checkOutVehicle",
+        "returnVehicle",
+        "reportDamage",
+        "createReturnInspection",
+        "vehicleCondition",
+    ):
         assert english["vehicleAssignments"][key]
         assert albanian["vehicleAssignments"][key]
         assert english["vehicleAssignments"][key] != albanian["vehicleAssignments"][key]
+
+    for key in (
+        "check_out_completed",
+        "vehicle_return_overdue",
+        "vehicle_returned_with_new_damage",
+        "fuel_or_battery_below_return_policy",
+    ):
+        assert english["notificationContent"][key]["title"]
+        assert albanian["notificationContent"][key]["title"]

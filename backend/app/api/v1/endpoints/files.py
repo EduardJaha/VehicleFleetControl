@@ -15,6 +15,7 @@ from app.models import (
     User,
     VehicleAccident,
     VehicleFuel,
+    VehicleConditionRecord,
     VehiclePaper,
     VehicleService,
     WorkOrder,
@@ -32,7 +33,17 @@ ENTITY_MODELS = {
     "VehicleAccident": VehicleAccident,
     "Inspection": Inspection,
     "WorkOrder": WorkOrder,
+    "VehicleConditionRecord": VehicleConditionRecord,
 }
+
+
+def authorize_entity_access(current_user: User, entity_type: str, entity) -> None:
+    if entity_type == "VehicleConditionRecord" and current_user.role == UserRole.driver.value:
+        if not current_user.driver_profile or current_user.driver_profile.id != entity.driver_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Drivers can only access attachments for their own Vehicle usage.",
+            )
 
 
 def attachment_out(row: Attachment) -> AttachmentOut:
@@ -45,6 +56,26 @@ def attachment_out(row: Attachment) -> AttachmentOut:
         entity_id=row.entity_id,
         uploaded_at=row.uploaded_at.isoformat(),
     )
+
+
+@router.get("", response_model=list[AttachmentOut])
+def list_files(
+    entity_type: str,
+    entity_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    model = ENTITY_MODELS.get(entity_type.strip())
+    entity = db.get(model, entity_id) if model else None
+    if not entity or getattr(entity, "archived", False):
+        raise HTTPException(status_code=404, detail="Related record not found.")
+    authorize_entity_access(current_user, entity_type.strip(), entity)
+    rows = db.query(Attachment).filter(
+        Attachment.entity_type == entity_type.strip(),
+        Attachment.entity_id == entity_id,
+        Attachment.archived.is_(False),
+    ).order_by(Attachment.uploaded_at, Attachment.id).all()
+    return [attachment_out(row) for row in rows]
 
 
 @router.post("", response_model=AttachmentOut, status_code=201)
@@ -64,6 +95,7 @@ async def upload_file(
     entity = db.get(ENTITY_MODELS[normalized_entity], entity_id)
     if not entity or getattr(entity, "archived", False):
         raise HTTPException(status_code=404, detail="Related record not found.")
+    authorize_entity_access(current_user, normalized_entity, entity)
     stored = await store_upload(file, normalized_entity.lower(), category)
     attachment = Attachment(
         original_filename=stored.original_filename,
@@ -133,6 +165,7 @@ def download_file(
     entity = db.get(model, attachment.entity_id) if model else None
     if not entity or getattr(entity, "archived", False):
         raise HTTPException(status_code=404, detail="Related record not found.")
+    authorize_entity_access(current_user, attachment.entity_type, entity)
     path = attachment_path(attachment.storage_path)
     record_audit(
         db, action="Document downloaded", entity_type=attachment.entity_type,
@@ -170,4 +203,3 @@ def archive_file(
     )
     db.commit()
     return {"message": "File archived."}
-    ServiceBill,

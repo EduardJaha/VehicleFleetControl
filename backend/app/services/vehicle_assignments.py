@@ -4,8 +4,13 @@ from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Driver, Vehicle, VehicleAssignment, VehicleReservation
-from app.schemas import VehicleAssignmentOut, VehicleAssignmentStatus
+from app.models import Driver, Vehicle, VehicleAssignment, VehicleConditionRecord, VehicleReservation
+from app.schemas import (
+    VehicleAssignmentOut,
+    VehicleAssignmentStatus,
+    VehicleConditionRecordOut,
+    VehicleConditionType,
+)
 
 ACTIVE_ASSIGNMENT_STATUSES = ("Active", "Overdue")
 HISTORICALLY_ACTIVE_STATUSES = ("Active", "Overdue", "Completed", "Cancelled")
@@ -43,6 +48,25 @@ def assignment_query(db: Session):
         joinedload(VehicleAssignment.driver),
         joinedload(VehicleAssignment.assigned_by_user),
         joinedload(VehicleAssignment.ended_by_user),
+        joinedload(VehicleAssignment.condition_records),
+    )
+
+
+def condition_record_out(record: VehicleConditionRecord, attachment_count: int = 0) -> VehicleConditionRecordOut:
+    return VehicleConditionRecordOut(
+        id=record.id,
+        vehicle_assignment_id=record.vehicle_assignment_id,
+        vehicle_id=record.vehicle_id,
+        driver_id=record.driver_id,
+        record_type=VehicleConditionType(record.record_type),
+        recorded_at=record.recorded_at.isoformat(),
+        odometer_km=record.odometer_km,
+        energy_level=record.energy_level,
+        vehicle_condition=record.vehicle_condition,
+        damage_description=record.damage_description,
+        driver_comments=record.driver_comments,
+        return_inspection_required=record.return_inspection_required,
+        attachment_count=attachment_count,
     )
 
 
@@ -66,6 +90,8 @@ def assignment_out(assignment: VehicleAssignment) -> VehicleAssignmentOut:
         start_energy_level=assignment.start_energy_level,
         end_energy_level=assignment.end_energy_level,
         purpose=assignment.purpose,
+        destination=assignment.destination,
+        documents_handed_over=assignment.documents_handed_over or [],
         notes=assignment.notes,
         return_notes=assignment.return_notes,
         status=VehicleAssignmentStatus(assignment.status),
@@ -74,6 +100,7 @@ def assignment_out(assignment: VehicleAssignment) -> VehicleAssignmentOut:
         archived=assignment.archived,
         archived_at=assignment.archived_at.isoformat() if assignment.archived_at else None,
         archived_by=assignment.archived_by,
+        conditions=[condition_record_out(record) for record in assignment.condition_records],
     )
 
 

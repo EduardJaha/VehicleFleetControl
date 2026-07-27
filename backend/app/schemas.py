@@ -64,10 +64,13 @@ class VehicleConditionType(str, Enum):
 
 
 class InspectionType(str, Enum):
+    general = "General"
     daily = "Daily"
     weekly = "Weekly"
+    monthly = "Monthly"
     before_trip = "Before Trip"
     after_trip = "After Trip"
+    random = "Random"
     return_inspection = "Return Inspection"
 
 

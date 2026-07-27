@@ -232,7 +232,15 @@ export type VehicleReturnResult = {
   work_order_id?: number | null;
 };
 
-export type InspectionType = "Daily" | "Weekly" | "Before Trip" | "After Trip" | "Return Inspection";
+export type InspectionType =
+  | "General"
+  | "Daily"
+  | "Weekly"
+  | "Monthly"
+  | "Before Trip"
+  | "After Trip"
+  | "Random"
+  | "Return Inspection";
 export type InspectionItemStatus = "Pass" | "Fail" | "Not Checked";
 export type InspectionOverallStatus = "Passed" | "Failed" | "Needs Review";
 

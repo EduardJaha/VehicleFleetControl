@@ -36,7 +36,16 @@ export const SERVICE_KM_INTERVALS = [5000, 10000, 15000];
 export const DOCUMENT_TYPES = ["Registration", "Insurance", "Technical Control", "Ownership", "Other"];
 export const RESERVATION_TYPES = ["Business Trip", "Personal Use", "Replacement Vehicle", "Maintenance", "Other"];
 export const DRIVER_STATUSES = ["Active", "Suspended", "Left Company"];
-export const INSPECTION_TYPES = ["Daily", "Weekly", "Before Trip", "After Trip", "Return Inspection"];
+export const INSPECTION_TYPES = [
+  "General",
+  "Daily",
+  "Weekly",
+  "Monthly",
+  "Before Trip",
+  "After Trip",
+  "Random",
+  "Return Inspection"
+];
 export const INSPECTION_ITEM_STATUSES = ["Pass", "Fail", "Not Checked"];
 export const INSPECTION_OVERALL_STATUSES = ["Passed", "Failed", "Needs Review"];
 export const DEFAULT_INSPECTION_ITEMS = [

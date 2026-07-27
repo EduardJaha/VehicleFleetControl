@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
-import { apiPost, apiPut, maintenanceApi } from "@/lib/api";
+import { apiGet, apiPost, apiPut, maintenanceApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   DEFAULT_INSPECTION_ITEMS, INSPECTION_ITEM_STATUSES, INSPECTION_OVERALL_STATUSES, INSPECTION_TYPES
@@ -13,7 +13,7 @@ import {
 import { toApiDate, toInputDate, todayInputDate } from "@/lib/format";
 import type {
   Inspection, InspectionItem, InspectionItemStatus, InspectionOverallStatus,
-  InspectionPayload, InspectionType, PageResult
+  InspectionPayload, InspectionType, PageResult, Vehicle
 } from "@/lib/types";
 import {
   MaintenanceEmptyState, MaintenancePageHeader, MaintenanceStatusBadge,
@@ -22,7 +22,8 @@ import {
 import { translateChecklistItem, translateStatus, translateType } from "@/i18n/translate";
 
 type FormState = {
-  license_plate: string;
+  vehicle_id: string;
+  vehicle_label: string;
   driver_id: string;
   inspection_type: InspectionType;
   inspection_date: string;
@@ -49,13 +50,14 @@ const defaultItems = () => DEFAULT_INSPECTION_ITEMS.map((item_name) => ({
 }));
 
 const newForm = (): FormState => ({
-  license_plate: "", driver_id: "", inspection_type: "Daily",
+  vehicle_id: "", vehicle_label: "", driver_id: "", inspection_type: "Daily",
   inspection_date: todayInputDate(), overall_status: "", inspector: "", notes: "", items: defaultItems()
 });
 
 function toForm(value: Inspection): FormState {
   return {
-    license_plate: value.license_plate,
+    vehicle_id: String(value.vehicle_id),
+    vehicle_label: `${value.license_plate} — ${value.vehicle_name}`,
     driver_id: value.driver_id ? String(value.driver_id) : "",
     inspection_type: value.inspection_type,
     inspection_date: toInputDate(value.inspection_date),
@@ -68,7 +70,7 @@ function toForm(value: Inspection): FormState {
 
 function payload(form: FormState): InspectionPayload {
   return {
-    license_plate: form.license_plate,
+    vehicle_id: Number(form.vehicle_id),
     driver_id: form.driver_id ? Number(form.driver_id) : null,
     inspection_type: form.inspection_type,
     inspection_date: toApiDate(form.inspection_date),
@@ -99,6 +101,9 @@ export default function InspectionsPage() {
     has_linked_work_order: params.get("has_linked_work_order") ?? ""
   });
   const [result, setResult] = useState<PageResult<Inspection>>({ items: [], page: 1, page_size: 20, total: 0, pages: 0 });
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehiclesLoading, setVehiclesLoading] = useState(true);
+  const [vehiclesError, setVehiclesError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(newForm);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -127,7 +132,22 @@ export default function InspectionsPage() {
     }
   }, [filters, t]);
 
-  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadVehicles = useCallback(async () => {
+    setVehiclesLoading(true);
+    setVehiclesError(null);
+    try {
+      setVehicles(await apiGet<Vehicle[]>("/vehicles"));
+    } catch (err) {
+      setVehiclesError(err instanceof Error ? err.message : t("modules:inspections.vehiclesLoadError"));
+    } finally {
+      setVehiclesLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void load();
+    void loadVehicles();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateItem(index: number, patch: Partial<InspectionItem>) {
     setForm((current) => ({
@@ -185,9 +205,33 @@ export default function InspectionsPage() {
       {canCreate && (
         <form className="form card fullWidthForm spaced" onSubmit={save}>
           <h2>{editingId ? `${t("modules:inspections.edit")} #${editingId}` : t("modules:inspections.create")}</h2>
+          {vehiclesError && <div className="error">{vehiclesError}</div>}
           {formFailed > 0 && <div className="error">{t("modules:inspections.failedWarning", { count: formFailed })}</div>}
           <div className="formGrid">
-            <div className="formRow"><label>{t("common:labels.licencePlate")}</label><input className="input" required value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} /></div>
+            <div className="formRow">
+              <label>{t("common:labels.vehicle")}</label>
+              <select
+                className="select"
+                required
+                disabled={vehiclesLoading || Boolean(vehiclesError)}
+                value={form.vehicle_id}
+                onChange={(e) => setForm({ ...form, vehicle_id: e.target.value, vehicle_label: "" })}
+              >
+                <option value="">
+                  {vehiclesLoading
+                    ? t("modules:inspections.loadingVehicles")
+                    : t("modules:inspections.selectVehicle")}
+                </option>
+                {form.vehicle_id && !vehicles.some((vehicle) => String(vehicle.id) === form.vehicle_id) && (
+                  <option value={form.vehicle_id}>{form.vehicle_label}</option>
+                )}
+                {vehicles.map((vehicle) => (
+                  <option key={vehicle.id} value={vehicle.id}>
+                    {vehicle.license_plate} — {vehicle.brand} {vehicle.model}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="formRow"><label>{t("modules:reports.driverId")}</label><input className="input" type="number" value={form.driver_id} onChange={(e) => setForm({ ...form, driver_id: e.target.value })} /></div>
             <div className="formRow"><label>{t("modules:inspections.inspectionType")}</label><select className="select" value={form.inspection_type} onChange={(e) => setForm({ ...form, inspection_type: e.target.value as InspectionType })}>{INSPECTION_TYPES.map((value) => <option key={value} value={value}>{translateType(value)}</option>)}</select></div>
             <div className="formRow"><label>{t("modules:inspections.inspectionDate")}</label><input className="input" type="date" required value={form.inspection_date} onChange={(e) => setForm({ ...form, inspection_date: e.target.value })} /></div>
@@ -211,7 +255,12 @@ export default function InspectionsPage() {
             ))}</tbody>
           </MaintenanceTable>
           <div className="actions">
-            <button className="button">{editingId ? t("modules:inspections.update") : t("modules:inspections.create")}</button>
+            <button
+              className="button"
+              disabled={!form.vehicle_id || vehiclesLoading || Boolean(vehiclesError)}
+            >
+              {editingId ? t("modules:inspections.update") : t("modules:inspections.create")}
+            </button>
             {editingId && <button className="secondaryButton" type="button" onClick={() => { setEditingId(null); setForm(newForm()); }}>{t("common:actions.cancel")}</button>}
           </div>
         </form>
@@ -219,7 +268,23 @@ export default function InspectionsPage() {
 
       <div className="card filtersGrid spaced">
         <input className="input" placeholder={t("modules:inspections.searchPlaceholder")} value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} />
-        <input className="input" placeholder={t("common:labels.licencePlate")} value={filters.license_plate} onChange={(e) => setFilters({ ...filters, license_plate: e.target.value })} />
+        <select
+          className="select"
+          disabled={vehiclesLoading || Boolean(vehiclesError)}
+          value={filters.license_plate}
+          onChange={(e) => setFilters({ ...filters, license_plate: e.target.value })}
+        >
+          <option value="">
+            {vehiclesLoading
+              ? t("modules:inspections.loadingVehicles")
+              : t("modules:inspections.allVehicles")}
+          </option>
+          {vehicles.map((vehicle) => (
+            <option key={vehicle.id} value={vehicle.license_plate}>
+              {vehicle.license_plate} — {vehicle.brand} {vehicle.model}
+            </option>
+          ))}
+        </select>
         <input className="input" type="number" placeholder={t("modules:reports.driverId")} value={filters.driver_id} onChange={(e) => setFilters({ ...filters, driver_id: e.target.value })} />
         <select className="select" value={filters.inspection_type} onChange={(e) => setFilters({ ...filters, inspection_type: e.target.value })}><option value="">{t("modules:inspections.allTypes")}</option>{INSPECTION_TYPES.map((value) => <option key={value} value={value}>{translateType(value)}</option>)}</select>
         <select className="select" value={filters.overall_status} onChange={(e) => setFilters({ ...filters, overall_status: e.target.value })}><option value="">{t("modules:inspections.allStatuses")}</option>{INSPECTION_OVERALL_STATUSES.map((value) => <option key={value} value={value}>{translateStatus(value)}</option>)}</select>

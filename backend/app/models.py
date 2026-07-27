@@ -106,6 +106,7 @@ class Vehicle(Base):
     model_id = Column("ModelId", Integer, ForeignKey("VehicleModels.Id"), nullable=True)
     fuel_type = Column("FuelType", String, nullable=False)
     vehicle_location = Column("VehicleLocation", String, nullable=False)
+    vehicle_category = Column("VehicleCategory", String(100), nullable=True, index=True)
     license_plate = Column("LicensePlate", String, nullable=False, index=True)
     registration_country = Column("RegistrationCountry", String(2), nullable=False)
     license_plate_normalized = Column("LicensePlateNormalized", String(7), nullable=False)
@@ -165,6 +166,7 @@ class Driver(Base):
     work_orders = relationship("WorkOrder", back_populates="driver")
     assignments = relationship("VehicleAssignment", back_populates="driver")
     condition_records = relationship("VehicleConditionRecord", back_populates="driver")
+    documents = relationship("VehiclePaper", back_populates="driver")
 
 
 class VehicleAssignment(Base):
@@ -398,20 +400,122 @@ class WorkOrder(Base):
     linked_service = relationship("VehicleService", foreign_keys="VehicleService.work_order_id", back_populates="work_order", uselist=False)
 
 
+class DocumentRequirement(Base):
+    __tablename__ = "DocumentRequirements"
+    __table_args__ = (
+        CheckConstraint('"WarningDays" >= 0', name="ck_document_requirements_warning_days"),
+        CheckConstraint(
+            '"ValidityMonths" IS NULL OR "ValidityMonths" > 0',
+            name="ck_document_requirements_validity_months",
+        ),
+        Index("ix_document_requirements_scope", "AppliesToDriver", "AppliesToCountry", "AppliesToVehicleCategory"),
+        Index("ix_document_requirements_active", "IsActive"),
+    )
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    document_type = Column("DocumentType", String(150), nullable=False)
+    applies_to_vehicle_category = Column("AppliesToVehicleCategory", String(100), nullable=True)
+    applies_to_country = Column("AppliesToCountry", String(2), nullable=True)
+    applies_to_driver = Column("AppliesToDriver", Boolean, nullable=False, default=False)
+    required = Column("Required", Boolean, nullable=False, default=True)
+    validity_months = Column("ValidityMonths", Integer, nullable=True)
+    warning_days = Column("WarningDays", Integer, nullable=False, default=30)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    documents = relationship("VehiclePaper", back_populates="requirement")
+
+
 class VehiclePaper(Base):
     __tablename__ = "VehiclePapers"
+    __table_args__ = (
+        CheckConstraint(
+            '("VehicleId" IS NOT NULL AND "DriverId" IS NULL) OR '
+            '("VehicleId" IS NULL AND "DriverId" IS NOT NULL)',
+            name="ck_vehicle_papers_exactly_one_owner",
+        ),
+        Index("ix_vehicle_papers_driver_id", "DriverId"),
+        Index("ix_vehicle_papers_requirement_id", "RequirementId"),
+    )
 
     id = Column("Id", Integer, primary_key=True, index=True)
     document_type = Column("DocumentType", String, nullable=False)
     file_path = Column("FilePath", String, nullable=False)
-    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
+    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="RESTRICT"), nullable=True)
+    driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="RESTRICT"), nullable=True)
+    requirement_id = Column(
+        "RequirementId",
+        Integer,
+        ForeignKey("DocumentRequirements.Id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    document_number = Column("DocumentNumber", String(150), nullable=True)
+    issuing_authority = Column("IssuingAuthority", String(255), nullable=True)
+    renewal_status = Column("RenewalStatus", String(50), nullable=False, default="None")
     issue_date = Column("IssueDate", DateTime, nullable=False)
     expiry_date = Column("ExpiryDate", DateTime, nullable=False)
     archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
     archived_at = Column("ArchivedAt", DateTime, nullable=True)
     archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     vehicle = relationship("Vehicle", back_populates="papers")
+    driver = relationship("Driver", back_populates="documents")
+    requirement = relationship("DocumentRequirement", back_populates="documents")
+    versions = relationship(
+        "DocumentVersion",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentVersion.version_number.desc()",
+    )
+
+
+class DocumentVersion(Base):
+    __tablename__ = "DocumentVersions"
+    __table_args__ = (
+        UniqueConstraint("DocumentId", "VersionNumber", name="uq_document_versions_number"),
+        Index("ix_document_versions_document_id", "DocumentId"),
+        Index("ix_document_versions_expiry_date", "ExpiryDate"),
+        Index(
+            "uq_document_versions_current",
+            "DocumentId",
+            unique=True,
+            sqlite_where=text('"IsCurrent" = 1'),
+            postgresql_where=text('"IsCurrent" = true'),
+        ),
+    )
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    document_id = Column(
+        "DocumentId",
+        Integer,
+        ForeignKey("VehiclePapers.Id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_number = Column("VersionNumber", Integer, nullable=False)
+    attachment_id = Column("AttachmentId", Integer, ForeignKey("Attachments.Id", ondelete="RESTRICT"), nullable=True)
+    file_path = Column("FilePath", String(500), nullable=False)
+    document_number = Column("DocumentNumber", String(150), nullable=True)
+    issuing_authority = Column("IssuingAuthority", String(255), nullable=True)
+    issue_date = Column("IssueDate", DateTime, nullable=False)
+    expiry_date = Column("ExpiryDate", DateTime, nullable=False)
+    uploaded_by = Column("UploadedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    uploaded_at = Column("UploadedAt", DateTime, nullable=False, default=datetime.utcnow)
+    verified_by = Column("VerifiedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    verified_at = Column("VerifiedAt", DateTime, nullable=True)
+    rejection_reason = Column("RejectionReason", Text, nullable=True)
+    renewal_status = Column("RenewalStatus", String(50), nullable=False, default="None")
+    is_current = Column("IsCurrent", Boolean, nullable=False, default=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+
+    document = relationship("VehiclePaper", back_populates="versions")
+    attachment = relationship("Attachment", foreign_keys=[attachment_id])
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+    verifier = relationship("User", foreign_keys=[verified_by])
 
 
 class VehicleService(Base):

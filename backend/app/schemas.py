@@ -125,6 +125,24 @@ class ReminderStatus(str, Enum):
     dismissed = "Dismissed"
 
 
+class DocumentComplianceStatus(str, Enum):
+    missing = "Missing"
+    valid = "Valid"
+    expiring_soon = "Expiring Soon"
+    expired = "Expired"
+    renewal_in_progress = "Renewal In Progress"
+    rejected = "Rejected"
+    archived = "Archived"
+
+
+class DocumentRenewalStatus(str, Enum):
+    none = "None"
+    in_progress = "In Progress"
+    submitted = "Submitted"
+    approved = "Approved"
+    rejected = "Rejected"
+
+
 class ReminderStatusUpdate(BaseModel):
     status: ReminderStatus
 
@@ -617,6 +635,7 @@ class WorkOrderOut(WorkOrderBase):
 class VehicleFields(BaseModel):
     fuel_type: str
     vehicle_location: str
+    vehicle_category: str | None = Field(default=None, max_length=100)
     registration_country: RegistrationCountry | None = None
     license_plate: str
     year: int | None = Field(default=None, ge=1900, le=2100)
@@ -629,6 +648,14 @@ class VehicleFields(BaseModel):
     @classmethod
     def clean_plate(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("vehicle_category")
+    @classmethod
+    def clean_vehicle_category(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
 
 
 class VehicleWriteBase(VehicleFields):
@@ -1042,6 +1069,136 @@ class VehiclePaperListOut(BaseModel):
     expiry_date: str
     file_path: str
     archived: bool = False
+
+
+class DocumentRequirementBase(BaseModel):
+    document_type: str = Field(min_length=1, max_length=150)
+    applies_to_vehicle_category: str | None = Field(default=None, max_length=100)
+    applies_to_country: str | None = Field(default=None, min_length=2, max_length=2)
+    applies_to_driver: bool = False
+    required: bool = True
+    validity_months: int | None = Field(default=None, gt=0)
+    warning_days: int = Field(default=30, ge=0, le=3650)
+    is_active: bool = True
+
+    @field_validator("document_type")
+    @classmethod
+    def normalize_document_type(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("Document type is required.")
+        return text
+
+    @field_validator("applies_to_vehicle_category")
+    @classmethod
+    def normalize_category(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+    @field_validator("applies_to_country")
+    @classmethod
+    def normalize_country(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        country = value.strip().upper()
+        if country not in {"AL", "XK"}:
+            raise ValueError("Only Albania and Kosovo are currently supported.")
+        return country
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if self.applies_to_driver and (
+            self.applies_to_country is not None or self.applies_to_vehicle_category is not None
+        ):
+            raise ValueError("Driver requirements cannot use Vehicle country or category filters.")
+        return self
+
+
+class DocumentRequirementCreate(DocumentRequirementBase):
+    pass
+
+
+class DocumentRequirementUpdate(DocumentRequirementBase):
+    pass
+
+
+class DocumentRequirementOut(DocumentRequirementBase):
+    id: int
+    created_at: str
+    updated_at: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentVersionOut(BaseModel):
+    id: int
+    document_id: int
+    version_number: int
+    file_path: str
+    document_number: str | None = None
+    issuing_authority: str | None = None
+    issue_date: str
+    expiry_date: str
+    uploaded_by: int | None = None
+    uploaded_at: str
+    verified_by: int | None = None
+    verified_at: str | None = None
+    rejection_reason: str | None = None
+    renewal_status: DocumentRenewalStatus
+    is_current: bool
+    archived: bool = False
+
+
+class DocumentVerificationRequest(BaseModel):
+    approved: bool
+    rejection_reason: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_rejection_reason(self):
+        if not self.approved and not (self.rejection_reason or "").strip():
+            raise ValueError("A rejection reason is required when rejecting a Document.")
+        self.rejection_reason = (self.rejection_reason or "").strip() or None
+        return self
+
+
+class ComplianceItemOut(BaseModel):
+    requirement_id: int
+    document_id: int | None = None
+    version_id: int | None = None
+    document_type: str
+    owner_type: str
+    owner_id: int
+    owner_name: str
+    department: str | None = None
+    location: str | None = None
+    country: str | None = None
+    status: DocumentComplianceStatus
+    issue_date: str | None = None
+    expiry_date: str | None = None
+    warning_days: int
+    file_path: str | None = None
+
+
+class ComplianceRateOut(BaseModel):
+    name: str
+    compliant: int
+    required: int
+    rate: float
+
+
+class DocumentComplianceDashboardOut(BaseModel):
+    missing_required: list[ComplianceItemOut]
+    expired: list[ComplianceItemOut]
+    expiring_in_7_days: list[ComplianceItemOut]
+    expiring_in_30_days: list[ComplianceItemOut]
+    renewal_in_progress: list[ComplianceItemOut]
+    items: list[ComplianceItemOut]
+    compliance_by_vehicle: list[ComplianceRateOut]
+    compliance_by_driver: list[ComplianceRateOut]
+    compliance_by_department: list[ComplianceRateOut]
+    compliance_by_location: list[ComplianceRateOut]
+    overall_compliance_rate: float
 
 
 class AccidentOut(BaseModel):

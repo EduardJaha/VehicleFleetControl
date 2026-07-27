@@ -75,5 +75,6 @@ export const REPORTS = [
   { value: "vehicle-costs", labelKey: "reports.vehicle-costs" },
   { value: "reservations", labelKey: "reports.reservations" },
   { value: "document-expiry", labelKey: "reports.document-expiry" },
+  { value: "document-compliance", labelKey: "reports.document-compliance" },
   { value: "work-orders", labelKey: "reports.work-orders" }
 ];

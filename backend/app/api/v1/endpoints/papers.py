@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from sqlalchemy.orm import Session, joinedload
 from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
-from app.models import Attachment, User, VehiclePaper
+from app.models import Attachment, DocumentVersion, User, VehiclePaper
 from app.schemas import UserRole, VehiclePaperListOut
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate
@@ -45,11 +45,25 @@ async def upload_paper(
     attachment = Attachment(
         original_filename=stored.original_filename, stored_filename=stored.stored_filename,
         storage_path=stored.storage_path, mime_type=stored.mime_type, file_size=stored.file_size,
-        uploaded_by=current_user.id, entity_type="VehiclePaper", entity_id=paper.id,
+        uploaded_by=current_user.id, entity_type="DocumentVersion", entity_id=0,
     )
     db.add(attachment)
     db.flush()
     paper.file_path = f"/api/v1/files/{attachment.id}/download"
+    version = DocumentVersion(
+        document_id=paper.id,
+        version_number=1,
+        attachment_id=attachment.id,
+        file_path=paper.file_path,
+        issue_date=issue,
+        expiry_date=expiry,
+        uploaded_by=current_user.id,
+        renewal_status="Approved",
+        is_current=True,
+    )
+    db.add(version)
+    db.flush()
+    attachment.entity_id = version.id
     record_audit(
         db, action="Document uploaded", entity_type="VehiclePaper", entity_id=paper.id,
         user=current_user, new_values=snapshot(paper),
@@ -69,7 +83,11 @@ def all_papers(
 ):
     if include_archived and current_user.role != UserRole.admin.value:
         raise HTTPException(status_code=403, detail="Only Admin users can include archived Documents.")
-    query = db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle))
+    # This legacy endpoint remains the Vehicle Documents compatibility view;
+    # Driver Documents are exposed through the scoped compliance endpoint.
+    query = db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle)).filter(
+        VehiclePaper.vehicle_id.isnot(None)
+    )
     if not include_archived:
         query = query.filter(VehiclePaper.archived.is_(False))
     papers = query.order_by(VehiclePaper.expiry_date.asc()).all()
@@ -95,6 +113,8 @@ def delete_paper(paper_id: int, db: Session = Depends(get_db), current_user: Use
     paper = db.get(VehiclePaper, paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Document not found.")
+    if paper.vehicle_id is None:
+        raise HTTPException(status_code=404, detail="Vehicle Document not found.")
     paper.archived = True
     paper.archived_at = datetime.utcnow()
     paper.archived_by = current_user.id
@@ -116,6 +136,8 @@ def restore_paper(
     paper = db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle)).filter(VehiclePaper.id == paper_id).first()
     if not paper:
         raise HTTPException(status_code=404, detail="Document not found.")
+    if paper.vehicle_id is None:
+        raise HTTPException(status_code=404, detail="Vehicle Document not found.")
     paper.archived = False
     paper.archived_at = None
     paper.archived_by = None

@@ -64,6 +64,54 @@ def create_legacy_database(path: Path) -> sa.Engine:
     return engine
 
 
+def create_pre_consolidation_document_database(path: Path) -> sa.Engine:
+    engine = sa.create_engine(f"sqlite:///{path}")
+    with engine.begin() as connection:
+        connection.execute(sa.text(
+            'CREATE TABLE "DocumentRequirements" ('
+            '"Id" INTEGER PRIMARY KEY, "DocumentType" VARCHAR NOT NULL, '
+            '"AppliesToVehicleCategory" VARCHAR, "AppliesToCountry" VARCHAR, '
+            '"AppliesToDriver" BOOLEAN NOT NULL, "IsActive" BOOLEAN NOT NULL, '
+            '"UpdatedAt" DATETIME NOT NULL)'
+        ))
+        connection.execute(sa.text(
+            'CREATE TABLE "VehiclePapers" ('
+            '"Id" INTEGER PRIMARY KEY, "DocumentType" VARCHAR NOT NULL, '
+            '"RequirementId" INTEGER, "FilePath" VARCHAR NOT NULL, '
+            '"UpdatedAt" DATETIME NOT NULL)'
+        ))
+        connection.execute(sa.text(
+            'CREATE TABLE "DocumentVersions" ('
+            '"Id" INTEGER PRIMARY KEY, "DocumentId" INTEGER NOT NULL, '
+            '"FilePath" VARCHAR NOT NULL)'
+        ))
+        connection.execute(sa.text(
+            'CREATE TABLE "alembic_version" (version_num VARCHAR(32) NOT NULL)'
+        ))
+        connection.execute(sa.text(
+            'INSERT INTO "alembic_version" (version_num) VALUES (\'20260727_0010\')'
+        ))
+        connection.execute(sa.text(
+            'INSERT INTO "DocumentRequirements" '
+            '("Id", "DocumentType", "AppliesToCountry", "AppliesToDriver", "IsActive", "UpdatedAt") '
+            "VALUES "
+            "(1, 'Registration', NULL, 0, 1, CURRENT_TIMESTAMP), "
+            "(2, 'Kosovo registration documentation', 'XK', 0, 1, CURRENT_TIMESTAMP), "
+            "(3, 'Albania registration documentation', 'AL', 0, 1, CURRENT_TIMESTAMP)"
+        ))
+        connection.execute(sa.text(
+            'INSERT INTO "VehiclePapers" '
+            '("Id", "DocumentType", "RequirementId", "FilePath", "UpdatedAt") '
+            "VALUES (10, 'Kosovo registration documentation', 2, "
+            "'uploads/documents/registration.pdf', CURRENT_TIMESTAMP)"
+        ))
+        connection.execute(sa.text(
+            'INSERT INTO "DocumentVersions" ("Id", "DocumentId", "FilePath") '
+            "VALUES (20, 10, 'uploads/documents/registration-v1.pdf')"
+        ))
+    return engine
+
+
 def test_migration_preserves_values_and_marks_electric_rows_for_review(
     tmp_path,
     monkeypatch,
@@ -101,10 +149,53 @@ def test_migration_preserves_values_and_marks_electric_rows_for_review(
             assert audit["EntityId"] == 12
             assert connection.execute(sa.text(
                 'SELECT version_num FROM alembic_version'
-                )).scalar_one() == "20260724_0009"
+                )).scalar_one() == "20260727_0011"
 
         with pytest.raises(RuntimeError, match="Cannot downgrade.*KWH"):
             command.downgrade(config, "20260718_0004")
     finally:
-        get_settings.cache_clear()
         engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_registration_consolidation_relinks_documents_without_losing_versions(
+    tmp_path,
+    monkeypatch,
+):
+    database_path = tmp_path / "registration-consolidation.db"
+    database_url = f"sqlite:///{database_path}"
+    engine = create_pre_consolidation_document_database(database_path)
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    try:
+        command.upgrade(alembic_config(database_url), "head")
+        with engine.connect() as connection:
+            active = connection.execute(sa.text(
+                'SELECT "DocumentType" FROM "DocumentRequirements" '
+                'WHERE "IsActive" = 1 ORDER BY "Id"'
+            )).scalars().all()
+            assert active == ["Registration"]
+            paper = connection.execute(sa.text(
+                'SELECT "DocumentType", "RequirementId", "FilePath" '
+                'FROM "VehiclePapers" WHERE "Id" = 10'
+            )).mappings().one()
+            assert paper == {
+                "DocumentType": "Registration",
+                "RequirementId": 1,
+                "FilePath": "uploads/documents/registration.pdf",
+            }
+            version = connection.execute(sa.text(
+                'SELECT "Id", "DocumentId", "FilePath" '
+                'FROM "DocumentVersions" WHERE "Id" = 20'
+            )).mappings().one()
+            assert version == {
+                "Id": 20,
+                "DocumentId": 10,
+                "FilePath": "uploads/documents/registration-v1.pdf",
+            }
+            assert connection.execute(sa.text(
+                'SELECT version_num FROM alembic_version'
+            )).scalar_one() == "20260727_0011"
+    finally:
+        engine.dispose()
+        get_settings.cache_clear()

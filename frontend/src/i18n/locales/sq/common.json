@@ -134,7 +134,15 @@
     "Resolved": "Zgjidhur",
     "Dismissed": "Hequr",
     "Unread": "Palexuar",
-    "Read": "Lexuar"
+    "Read": "Lexuar",
+    "Missing": "Mungon",
+    "Valid": "I vlefshëm",
+    "Expiring Soon": "Skadon së shpejti",
+    "Expired": "I skaduar",
+    "Renewal In Progress": "Rinovim në proces",
+    "Archived": "I arkivuar",
+    "None": "Asnjë",
+    "Submitted": "Dorëzuar"
   },
   "types": {
     "Petrol": "Benzinë",

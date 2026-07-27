@@ -18,7 +18,7 @@ const navItems = [
   { href: "/drivers", labelKey: "drivers" },
   { href: "/vehicle-assignments", labelKey: "vehicleAssignments" },
   { href: "/reports", labelKey: "reports" },
-  { href: "/papers", labelKey: "documents" },
+  { href: "/compliance/documents", labelKey: "documentCompliance" },
   { href: "/fuel", labelKey: "fuel" },
   { href: "/accidents", labelKey: "accidents" },
   { href: "/reservations", labelKey: "reservations" }

@@ -23,6 +23,7 @@ export type Vehicle = {
   model: string;
   fuel_type: string;
   vehicle_location: string;
+  vehicle_category?: string | null;
   registration_country: RegistrationCountryCode | null;
   registration_country_name: string | null;
   license_plate: string;
@@ -589,6 +590,82 @@ export type VehiclePaper = {
   expiry_date: string;
   file_path: string;
   archived?: boolean;
+};
+
+export type DocumentComplianceStatus =
+  | "Missing" | "Valid" | "Expiring Soon" | "Expired"
+  | "Renewal In Progress" | "Rejected" | "Archived";
+
+export type DocumentRequirement = {
+  id: number;
+  document_type: string;
+  applies_to_vehicle_category?: string | null;
+  applies_to_country?: string | null;
+  applies_to_driver: boolean;
+  required: boolean;
+  validity_months?: number | null;
+  warning_days: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DocumentVersion = {
+  id: number;
+  document_id: number;
+  version_number: number;
+  file_path: string;
+  document_number?: string | null;
+  issuing_authority?: string | null;
+  issue_date: string;
+  expiry_date: string;
+  uploaded_by?: number | null;
+  uploaded_at: string;
+  verified_by?: number | null;
+  verified_at?: string | null;
+  rejection_reason?: string | null;
+  renewal_status: "None" | "In Progress" | "Submitted" | "Approved" | "Rejected";
+  is_current: boolean;
+  archived: boolean;
+};
+
+export type ComplianceItem = {
+  requirement_id: number;
+  document_id?: number | null;
+  version_id?: number | null;
+  document_type: string;
+  owner_type: "Vehicle" | "Driver";
+  owner_id: number;
+  owner_name: string;
+  department?: string | null;
+  location?: string | null;
+  country?: string | null;
+  status: DocumentComplianceStatus;
+  issue_date?: string | null;
+  expiry_date?: string | null;
+  warning_days: number;
+  file_path?: string | null;
+};
+
+export type ComplianceRate = {
+  name: string;
+  compliant: number;
+  required: number;
+  rate: number;
+};
+
+export type DocumentComplianceDashboard = {
+  missing_required: ComplianceItem[];
+  expired: ComplianceItem[];
+  expiring_in_7_days: ComplianceItem[];
+  expiring_in_30_days: ComplianceItem[];
+  renewal_in_progress: ComplianceItem[];
+  items: ComplianceItem[];
+  compliance_by_vehicle: ComplianceRate[];
+  compliance_by_driver: ComplianceRate[];
+  compliance_by_department: ComplianceRate[];
+  compliance_by_location: ComplianceRate[];
+  overall_compliance_rate: number;
 };
 
 export type Accident = {

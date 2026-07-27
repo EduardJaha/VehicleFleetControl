@@ -26,6 +26,7 @@ const initialVehicleForm: VehicleFormValues = {
   model_id: null,
   fuel_type: "Diesel",
   vehicle_location: "",
+  vehicle_category: null,
   registration_country: null,
   license_plate: "",
   year: null,
@@ -43,6 +44,7 @@ export function vehicleToPayload(vehicle: Vehicle): VehicleFormInitialValues {
     model_name: vehicle.model,
     fuel_type: vehicle.fuel_type,
     vehicle_location: vehicle.vehicle_location,
+    vehicle_category: vehicle.vehicle_category ?? null,
     registration_country: vehicle.registration_country,
     license_plate: vehicle.license_plate,
     year: vehicle.year ?? null,
@@ -63,6 +65,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
       model_id: initialValues.model_id,
       fuel_type: initialValues.fuel_type,
       vehicle_location: initialValues.vehicle_location,
+      vehicle_category: initialValues.vehicle_category ?? null,
       registration_country: initialValues.registration_country,
       license_plate: initialValues.license_plate,
       year: initialValues.year,
@@ -291,6 +294,10 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
         <div className="formRow">
           <label htmlFor={`${fieldPrefix}-location`}>{t("common:labels.location")}</label>
           <input id={`${fieldPrefix}-location`} className="input" value={form.vehicle_location} onChange={(event) => setForm({ ...form, vehicle_location: event.target.value })} required />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-category`}>{t("modules:vehicles.category")}</label>
+          <input id={`${fieldPrefix}-category`} className="input" value={form.vehicle_category ?? ""} onChange={(event) => setForm({ ...form, vehicle_category: event.target.value || null })} placeholder={t("modules:vehicles.categoryPlaceholder")} />
         </div>
         <div className="formRow">
           <label htmlFor={`${fieldPrefix}-year`}>{t("modules:vehicles.year")}</label>

@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models import (
     Attachment,
     AccidentFile,
+    DocumentVersion,
     Inspection,
     ServiceBill,
     User,
@@ -30,6 +31,7 @@ ENTITY_MODELS = {
     "VehicleService": VehicleService,
     "VehicleFuel": VehicleFuel,
     "VehiclePaper": VehiclePaper,
+    "DocumentVersion": DocumentVersion,
     "VehicleAccident": VehicleAccident,
     "Inspection": Inspection,
     "WorkOrder": WorkOrder,
@@ -44,6 +46,17 @@ def authorize_entity_access(current_user: User, entity_type: str, entity) -> Non
                 status_code=403,
                 detail="Drivers can only access attachments for their own Vehicle usage.",
             )
+    document = None
+    if entity_type == "VehiclePaper":
+        document = entity
+    elif entity_type == "DocumentVersion":
+        document = entity.document
+    if document is not None:
+        if document.archived:
+            raise HTTPException(status_code=404, detail="Related record not found.")
+        if current_user.role == UserRole.driver.value:
+            if not current_user.driver_profile or current_user.driver_profile.id != document.driver_id:
+                raise HTTPException(status_code=403, detail="Drivers can only access their own Documents.")
 
 
 def attachment_out(row: Attachment) -> AttachmentOut:
@@ -137,6 +150,8 @@ def download_legacy_file(
     )
     if not authorized:
         raise HTTPException(status_code=404, detail="File not found.")
+    if isinstance(authorized, VehiclePaper):
+        authorize_entity_access(current_user, "VehiclePaper", authorized)
     file_path = legacy_upload_path(path)
     mime_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
     record_audit(

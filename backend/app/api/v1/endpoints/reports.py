@@ -16,6 +16,7 @@ from app.utils.dates import format_date, parse_date
 from app.utils.domain import normalize_plate, parse_vehicle_status, reservation_status_name, status_name
 from app.services.license_plates import RegistrationCountry, registration_country_name
 from app.services.audit import record_audit
+from app.services.document_compliance import compliance_dashboard
 from app.core.i18n import request_language
 
 router = APIRouter(dependencies=[Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.finance))])
@@ -315,6 +316,39 @@ def document_expiry_report(db: Session, **filters) -> dict:
     return report_response({"document_count": len(rows), "upcoming_expiries": upcoming, "overdue_expiries": overdue}, rows)
 
 
+def document_compliance_report(db: Session, **filters) -> dict:
+    dashboard = compliance_dashboard(db)
+    rows = dashboard["items"]
+    if filters.get("registration_country"):
+        rows = [row for row in rows if row["country"] == filters["registration_country"].strip().upper()]
+    if filters.get("department"):
+        term = filters["department"].strip().casefold()
+        rows = [row for row in rows if term in (row["department"] or "").casefold()]
+    if filters.get("driver_id"):
+        rows = [
+            row for row in rows
+            if row["owner_type"] == "Driver" and row["owner_id"] == filters["driver_id"]
+        ]
+    if filters.get("license_plate"):
+        term = normalize_plate(filters["license_plate"])
+        rows = [
+            row for row in rows
+            if row["owner_type"] != "Vehicle" or term in normalize_plate(row["owner_name"])
+        ]
+    compliant = sum(1 for row in rows if row["status"] in {"Valid", "Expiring Soon"})
+    return report_response(
+        {
+            "requirement_count": len(rows),
+            "compliant_count": compliant,
+            "missing_required": sum(1 for row in rows if row["status"] == "Missing"),
+            "expired_documents": sum(1 for row in rows if row["status"] == "Expired"),
+            "renewal_in_progress": sum(1 for row in rows if row["status"] == "Renewal In Progress"),
+            "compliance_rate": round(compliant / len(rows) * 100, 2) if rows else 100.0,
+        },
+        rows,
+    )
+
+
 REPORTS: dict[str, Callable[..., dict]] = {
     "fleet-summary": fleet_summary_report,
     "fuel-costs": fuel_costs_report,
@@ -322,6 +356,7 @@ REPORTS: dict[str, Callable[..., dict]] = {
     "vehicle-costs": vehicle_costs_report,
     "reservations": reservations_report,
     "document-expiry": document_expiry_report,
+    "document-compliance": document_compliance_report,
     "work-orders": work_orders_report,
 }
 
@@ -330,12 +365,12 @@ EXCEL_TEXT = {
     "en": {
         "kpis": "KPIs", "metric": "Metric", "value": "Value", "rows": "Rows", "no_rows": "No rows",
         "generated": "Generated", "filters": "Filters",
-        "reports": {"fleet-summary": "Fleet Summary", "fuel-costs": "Fuel Costs", "service-costs": "Service Costs", "vehicle-costs": "Vehicle Costs", "reservations": "Reservations", "document-expiry": "Document Expiry", "work-orders": "Work Orders"},
+        "reports": {"fleet-summary": "Fleet Summary", "fuel-costs": "Fuel Costs", "service-costs": "Service Costs", "vehicle-costs": "Vehicle Costs", "reservations": "Reservations", "document-expiry": "Document Expiry", "document-compliance": "Document Compliance", "work-orders": "Work Orders"},
     },
     "sq": {
         "kpis": "Treguesit", "metric": "Treguesi", "value": "Vlera", "rows": "Rreshtat", "no_rows": "Nuk ka rreshta",
         "generated": "Gjeneruar", "filters": "Filtrat",
-        "reports": {"fleet-summary": "Përmbledhja e Flotës", "fuel-costs": "Kostot e Karburantit", "service-costs": "Kostot e Servisimit", "vehicle-costs": "Kostot e Automjeteve", "reservations": "Rezervimet", "document-expiry": "Skadimi i Dokumenteve", "work-orders": "Urdhrat e Punës"},
+        "reports": {"fleet-summary": "Përmbledhja e Flotës", "fuel-costs": "Kostot e Karburantit", "service-costs": "Kostot e Servisimit", "vehicle-costs": "Kostot e Automjeteve", "reservations": "Rezervimet", "document-expiry": "Skadimi i Dokumenteve", "document-compliance": "Pajtueshmëria e Dokumenteve", "work-orders": "Urdhrat e Punës"},
     },
 }
 
@@ -349,6 +384,9 @@ EXCEL_HEADINGS_SQ = {
     "expected_completion_date": "Data e Pritshme e Përfundimit", "actual_completion_date": "Data Faktike e Përfundimit",
     "reserved_by": "Rezervuar nga", "type": "Lloji", "start_date": "Data e Fillimit", "end_date": "Data e Përfundimit",
     "notes": "Shënime", "document_type": "Lloji i Dokumentit", "issue_date": "Data e Lëshimit", "expiry_date": "Data e Skadimit",
+    "owner_type": "Lloji i Pronarit", "owner_id": "ID e Pronarit", "owner_name": "Pronari",
+    "requirement_id": "ID e Kërkesës", "document_id": "ID e Dokumentit", "version_id": "ID e Versionit",
+    "warning_days": "Ditët e Paralajmërimit", "file_path": "Skedari", "country": "Shteti",
 }
 
 EXCEL_VALUES_SQ = {
@@ -359,6 +397,8 @@ EXCEL_VALUES_SQ = {
     "Upcoming": "Në vazhdim", "Valid": "I vlefshëm", "General Service": "Servis i përgjithshëm", "Oil Change": "Ndërrim vaji",
     "Tire Change/Control": "Ndërrim/Kontroll gomash", "Part Change": "Ndërrim pjese", "Maintenance": "Mirëmbajtje",
     "Registration": "Regjistrim", "Insurance": "Sigurim", "Technical Control": "Kontroll teknik", "Albania": "Shqipëria", "Kosovo": "Kosova",
+    "Missing": "Mungon", "Expiring Soon": "Skadon së shpejti", "Expired": "I skaduar",
+    "Renewal In Progress": "Rinovim në proces", "Archived": "I arkivuar", "Vehicle": "Automjet", "Driver": "Shofer",
 }
 
 
@@ -479,6 +519,11 @@ def reservations(from_date: str | None = None, to_date: str | None = None, licen
 @router.get("/document-expiry")
 def document_expiry(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
     return document_expiry_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
+
+
+@router.get("/document-compliance")
+def document_compliance(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return document_compliance_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/work-orders")

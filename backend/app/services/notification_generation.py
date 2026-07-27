@@ -6,13 +6,15 @@ from app.api.v1.endpoints.services import current_reminder_status
 from app.models import Driver, Notification, VehicleAssignment, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
 from app.schemas import ReminderStatus
 from app.services.audit import record_audit
-from app.services.notifications import notify_roles, resolve_by_prefix
+from app.services.notifications import ACTIVE_STATUSES, notify_roles, resolve_by_prefix, transition
+from app.services.document_compliance import compliance_dashboard
 
 RECIPIENT_ROLES = {"admin", "fleet_manager"}
 
 
 def generate_time_based_notifications(db: Session, now: datetime | None = None) -> int:
     now = now or datetime.utcnow()
+    notification_count_before = db.query(Notification).count()
 
     reminders = db.query(VehicleService).options(joinedload(VehicleService.vehicle)).filter(
         VehicleService.archived.is_(False),
@@ -38,24 +40,44 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
             message_params={"service_type": reminder.service_type, "status": status.value, "plate": reminder.vehicle.license_plate},
         )
 
-    for paper in db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle)).filter(VehiclePaper.archived.is_(False)).all():
-        days = (paper.expiry_date.date() - now.date()).days
-        if days > 30:
-            resolve_by_prefix(db, f"document:{paper.id}:")
+    compliance = compliance_dashboard(db, today=now.date())
+    active_compliance_keys: set[str] = set()
+    for item in compliance["items"]:
+        prefix = (
+            f"document-compliance:{item['requirement_id']}:"
+            f"{item['owner_type'].lower()}:{item['owner_id']}:"
+        )
+        if item["status"] not in {"Missing", "Expired", "Expiring Soon", "Renewal In Progress", "Rejected"}:
+            resolve_by_prefix(db, prefix)
             continue
-        expired = days < 0
+        active_compliance_keys.add(f"{prefix}alert")
+        status = item["status"]
+        expiry_message = f" Expiry date: {item['expiry_date']}." if item["expiry_date"] else ""
+        priority = "Critical" if status in {"Missing", "Expired", "Rejected"} else "High" if status == "Expiring Soon" else "Medium"
         notify_roles(
             db, roles=RECIPIENT_ROLES,
-            notification_type="Document expired" if expired else "Document expiring soon",
-            title=f"{paper.document_type} {'expired' if expired else 'expires soon'}",
-            message=f"{paper.vehicle.license_plate}: {paper.expiry_date.date().isoformat()}",
-            priority="Critical" if expired else "High",
-            entity_type="VehiclePaper", entity_id=paper.id,
-            deduplication_key=f"document:{paper.id}:{'expired' if expired else 'expires-30-days'}",
-            title_key="modules:notificationContent.document_expiry.title",
-            message_key="modules:notificationContent.document_expiry.message",
-            message_params={"document_type": paper.document_type, "status": "Overdue" if expired else "Due Soon", "plate": paper.vehicle.license_plate, "date": paper.expiry_date.date().isoformat()},
+            notification_type=f"Document compliance {status.lower()}",
+            title=f"{item['document_type']}: {status}",
+            message=f"{item['owner_name']}.{expiry_message}",
+            priority=priority,
+            entity_type="VehiclePaper" if item["document_id"] else "DocumentRequirement",
+            entity_id=item["document_id"] or item["requirement_id"],
+            deduplication_key=f"{prefix}alert",
+            title_key="modules:notificationContent.document_compliance.title",
+            message_key="modules:notificationContent.document_compliance.message",
+            message_params={
+                "document_type": item["document_type"],
+                "status": status,
+                "owner": item["owner_name"],
+                "date": item["expiry_date"] or "-",
+            },
         )
+    for notification in db.query(Notification).filter(
+        Notification.deduplication_key.like("document-compliance:%"),
+        Notification.status.in_(ACTIVE_STATUSES),
+    ).all():
+        if not any(notification.deduplication_key.startswith(key) for key in active_compliance_keys):
+            transition(notification, "Resolved")
 
     for driver in db.query(Driver).filter(Driver.archived.is_(False)).all():
         days = (driver.license_expiry_date.date() - now.date()).days
@@ -173,6 +195,5 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
                 message_params={"id": reservation.id, "plate": reservation.vehicle.license_plate},
             )
 
-    created = sum(1 for item in db.new if isinstance(item, Notification))
     db.flush()
-    return created
+    return db.query(Notification).count() - notification_count_before

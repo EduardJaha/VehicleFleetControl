@@ -134,7 +134,15 @@
     "Resolved": "Resolved",
     "Dismissed": "Dismissed",
     "Unread": "Unread",
-    "Read": "Read"
+    "Read": "Read",
+    "Missing": "Missing",
+    "Valid": "Valid",
+    "Expiring Soon": "Expiring Soon",
+    "Expired": "Expired",
+    "Renewal In Progress": "Renewal In Progress",
+    "Archived": "Archived",
+    "None": "None",
+    "Submitted": "Submitted"
   },
   "types": {
     "Petrol": "Petrol",

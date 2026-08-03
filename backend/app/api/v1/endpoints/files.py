@@ -40,6 +40,12 @@ ENTITY_MODELS = {
 
 
 def authorize_entity_access(current_user: User, entity_type: str, entity) -> None:
+    if entity_type == "VehicleAccident" and current_user.role == UserRole.driver.value:
+        if not current_user.driver_profile or current_user.driver_profile.id != entity.driver_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Drivers can only access attachments for their own Accident records.",
+            )
     if entity_type == "VehicleConditionRecord" and current_user.role == UserRole.driver.value:
         if not current_user.driver_profile or current_user.driver_profile.id != entity.driver_id:
             raise HTTPException(
@@ -122,6 +128,11 @@ async def upload_file(
     )
     db.add(attachment)
     db.flush()
+    if normalized_entity == "VehicleAccident":
+        db.add(AccidentFile(
+            vehicle_accident_id=entity_id,
+            file_path=f"/api/v1/files/{attachment.id}/download",
+        ))
     record_audit(
         db, action="Document uploaded", entity_type=normalized_entity, entity_id=entity_id,
         user=current_user,

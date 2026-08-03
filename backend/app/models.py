@@ -167,6 +167,7 @@ class Driver(Base):
     assignments = relationship("VehicleAssignment", back_populates="driver")
     condition_records = relationship("VehicleConditionRecord", back_populates="driver")
     documents = relationship("VehiclePaper", back_populates="driver")
+    accidents = relationship("VehicleAccident", back_populates="driver")
 
 
 class VehicleAssignment(Base):
@@ -361,13 +362,17 @@ class InspectionItem(Base):
 
 class WorkOrder(Base):
     __tablename__ = "WorkOrders"
-    __table_args__ = (Index("ix_work_orders_reminder_service", "ReminderServiceId"),)
+    __table_args__ = (
+        Index("ix_work_orders_reminder_service", "ReminderServiceId"),
+        Index("ix_work_orders_accident_id", "AccidentId"),
+    )
 
     id = Column("Id", Integer, primary_key=True, index=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
     driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="SET NULL"), nullable=True)
     inspection_id = Column("InspectionId", Integer, ForeignKey("Inspections.Id", ondelete="SET NULL"), nullable=True)
     reminder_service_id = Column("ReminderServiceId", Integer, ForeignKey("VehicleServices.Id"), nullable=True)
+    accident_id = Column("AccidentId", Integer, ForeignKey("VehicleAccidents.Id", ondelete="SET NULL"), nullable=True)
     source = Column("Source", String(50), nullable=False, default="Manual")
     title = Column("Title", String(150), nullable=False)
     description = Column("Description", Text, nullable=True)
@@ -398,6 +403,7 @@ class WorkOrder(Base):
     inspection = relationship("Inspection", back_populates="work_orders")
     reminder_service = relationship("VehicleService", foreign_keys=[reminder_service_id], back_populates="reminder_work_orders")
     linked_service = relationship("VehicleService", foreign_keys="VehicleService.work_order_id", back_populates="work_order", uselist=False)
+    accident = relationship("VehicleAccident", back_populates="work_orders")
 
 
 class DocumentRequirement(Base):
@@ -609,6 +615,9 @@ class VehicleAccident(Base):
     __tablename__ = "VehicleAccidents"
     __table_args__ = (
         Index("ix_vehicleaccidents_vehicle_assignment_id", "VehicleAssignmentId"),
+        Index("ix_vehicleaccidents_driver_id", "DriverId"),
+        Index("ix_vehicleaccidents_reservation_id", "ReservationId"),
+        Index("ix_vehicleaccidents_status", "Status"),
     )
 
     id = Column("Id", Integer, primary_key=True, index=True)
@@ -619,16 +628,108 @@ class VehicleAccident(Base):
         ForeignKey("VehicleAssignments.Id", ondelete="SET NULL"),
         nullable=True,
     )
+    driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="SET NULL"), nullable=True)
+    reservation_id = Column(
+        "ReservationId", Integer, ForeignKey("VehicleReservations.Id", ondelete="SET NULL"), nullable=True
+    )
     accident_date = Column("AccidentDate", DateTime, nullable=False)
     location = Column("Location", String, nullable=False)
+    severity = Column("Severity", String(50), nullable=False, default="Minor")
+    status = Column("Status", String(50), nullable=False, default="Reported")
+    police_involved = Column("PoliceInvolved", Boolean, nullable=False, default=False)
+    police_report_number = Column("PoliceReportNumber", String(150), nullable=True)
     description = Column("Description", Text, nullable=True)
+    vehicle_available_after_accident = Column("VehicleAvailableAfterAccident", Boolean, nullable=False, default=True)
+    estimated_damage_cost = Column("EstimatedDamageCost", Numeric(12, 2), nullable=True)
+    actual_damage_cost = Column("ActualDamageCost", Numeric(12, 2), nullable=True)
+    fault_determination = Column("FaultDetermination", String(100), nullable=True)
+    resolved_at = Column("ResolvedAt", DateTime, nullable=True)
+    closed_at = Column("ClosedAt", DateTime, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
     archived_at = Column("ArchivedAt", DateTime, nullable=True)
     archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
     vehicle = relationship("Vehicle", back_populates="accidents")
     vehicle_assignment = relationship("VehicleAssignment", back_populates="accidents")
+    driver = relationship("Driver", back_populates="accidents")
+    reservation = relationship("VehicleReservation", back_populates="accidents")
     files = relationship("AccidentFile", back_populates="accident", cascade="all, delete-orphan")
+    claim = relationship("AccidentClaim", back_populates="accident", cascade="all, delete-orphan", uselist=False)
+    parties = relationship("AccidentParty", back_populates="accident", cascade="all, delete-orphan")
+    injuries = relationship("AccidentInjury", back_populates="accident", cascade="all, delete-orphan")
+    work_orders = relationship("WorkOrder", back_populates="accident")
+
+
+class AccidentClaim(Base):
+    __tablename__ = "AccidentClaims"
+    __table_args__ = (
+        UniqueConstraint("AccidentId", name="uq_accident_claims_accident_id"),
+        UniqueConstraint("ClaimNumber", name="uq_accident_claims_claim_number"),
+        Index("ix_accident_claims_status", "ClaimStatus"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    accident_id = Column("AccidentId", Integer, ForeignKey("VehicleAccidents.Id", ondelete="CASCADE"), nullable=False)
+    insurance_document_id = Column(
+        "InsuranceDocumentId", Integer, ForeignKey("VehiclePapers.Id", ondelete="SET NULL"), nullable=True
+    )
+    insurance_company = Column("InsuranceCompany", String(255), nullable=False)
+    policy_number = Column("PolicyNumber", String(150), nullable=False)
+    claim_number = Column("ClaimNumber", String(150), nullable=False)
+    claim_status = Column("ClaimStatus", String(50), nullable=False, default="Open")
+    claim_opened_date = Column("ClaimOpenedDate", DateTime, nullable=False)
+    claim_closed_date = Column("ClaimClosedDate", DateTime, nullable=True)
+    settlement_amount = Column("SettlementAmount", Numeric(12, 2), nullable=True)
+    deductible = Column("Deductible", Numeric(12, 2), nullable=True)
+    adjuster_name = Column("AdjusterName", String(255), nullable=True)
+    notes = Column("Notes", Text, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    accident = relationship("VehicleAccident", back_populates="claim")
+    insurance_document = relationship("VehiclePaper")
+
+
+class AccidentParty(Base):
+    __tablename__ = "AccidentParties"
+    __table_args__ = (Index("ix_accident_parties_accident_id", "AccidentId"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    accident_id = Column("AccidentId", Integer, ForeignKey("VehicleAccidents.Id", ondelete="CASCADE"), nullable=False)
+    party_type = Column("PartyType", String(50), nullable=False)
+    name = Column("Name", String(255), nullable=False)
+    phone = Column("Phone", String(50), nullable=True)
+    email = Column("Email", String(255), nullable=True)
+    address = Column("Address", String(500), nullable=True)
+    vehicle_registration = Column("VehicleRegistration", String(100), nullable=True)
+    insurance_company = Column("InsuranceCompany", String(255), nullable=True)
+    policy_number = Column("PolicyNumber", String(150), nullable=True)
+    notes = Column("Notes", Text, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    accident = relationship("VehicleAccident", back_populates="parties")
+    injuries = relationship("AccidentInjury", back_populates="party")
+
+
+class AccidentInjury(Base):
+    __tablename__ = "AccidentInjuries"
+    __table_args__ = (Index("ix_accident_injuries_accident_id", "AccidentId"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    accident_id = Column("AccidentId", Integer, ForeignKey("VehicleAccidents.Id", ondelete="CASCADE"), nullable=False)
+    party_id = Column("PartyId", Integer, ForeignKey("AccidentParties.Id", ondelete="SET NULL"), nullable=True)
+    injured_person_name = Column("InjuredPersonName", String(255), nullable=False)
+    injury_severity = Column("InjurySeverity", String(50), nullable=False)
+    description = Column("Description", Text, nullable=True)
+    medical_treatment = Column("MedicalTreatment", Text, nullable=True)
+    hospitalized = Column("Hospitalized", Boolean, nullable=False, default=False)
+    notes = Column("Notes", Text, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    accident = relationship("VehicleAccident", back_populates="injuries")
+    party = relationship("AccidentParty", back_populates="injuries")
 
 
 class AccidentFile(Base):
@@ -658,6 +759,7 @@ class VehicleReservation(Base):
 
     vehicle = relationship("Vehicle", back_populates="reservations")
     assignments = relationship("VehicleAssignment", back_populates="reservation")
+    accidents = relationship("VehicleAccident", back_populates="reservation")
 
 
 class AuditLog(Base):

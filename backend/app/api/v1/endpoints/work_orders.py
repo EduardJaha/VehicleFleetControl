@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.security import get_current_user, require_roles
 from app.db.session import get_db
-from app.models import Driver, Inspection, User, Vehicle, VehicleService, WorkOrder
+from app.models import Driver, Inspection, User, Vehicle, VehicleAccident, VehicleService, WorkOrder
 from app.schemas import (
     LinkedInspection, LinkedService, LinkedServiceReminder, ReminderStatus, UserRole,
     WorkOrderCompletionOut, WorkOrderCompletionRequest, WorkOrderCreate, WorkOrderOut,
@@ -58,6 +58,7 @@ def validate_optional_links(
     driver_id: int | None,
     inspection_id: int | None,
     reminder_service_id: int | None,
+    accident_id: int | None = None,
     current_work_order_id: int | None = None,
 ) -> None:
     if driver_id is not None and not db.get(Driver, driver_id):
@@ -92,6 +93,12 @@ def validate_optional_links(
             duplicate = duplicate.filter(WorkOrder.id != current_work_order_id)
         if duplicate.first():
             raise HTTPException(status_code=409, detail="An open Work Order already exists for this Service Reminder.")
+    if accident_id is not None:
+        accident = db.get(VehicleAccident, accident_id)
+        if not accident or accident.archived:
+            raise HTTPException(status_code=404, detail="Accident not found.")
+        if accident.vehicle_id != vehicle_id:
+            raise HTTPException(status_code=400, detail="Accident and Work Order must belong to the same vehicle.")
 
 
 def prevent_generic_completion(status: WorkOrderStatus) -> None:
@@ -145,6 +152,7 @@ def work_order_out(work_order: WorkOrder) -> WorkOrderOut:
         driver_name=work_order.driver.full_name if work_order.driver else None,
         inspection_id=work_order.inspection_id,
         reminder_service_id=work_order.reminder_service_id,
+        accident_id=work_order.accident_id,
         source=WorkOrderSource(work_order.source or WorkOrderSource.manual.value),
         title=work_order.title,
         description=work_order.description,
@@ -192,7 +200,10 @@ def work_order_out(work_order: WorkOrder) -> WorkOrderOut:
 def apply_payload(work_order: WorkOrder, payload: WorkOrderCreate | WorkOrderUpdate, db: Session) -> None:
     prevent_generic_completion(payload.status)
     vehicle_id = resolve_vehicle_id(db, payload.vehicle_id, payload.license_plate)
-    validate_optional_links(db, vehicle_id, payload.driver_id, payload.inspection_id, payload.reminder_service_id, work_order.id)
+    validate_optional_links(
+        db, vehicle_id, payload.driver_id, payload.inspection_id,
+        payload.reminder_service_id, payload.accident_id, work_order.id,
+    )
     labor = payload.labor_cost
     parts = payload.parts_cost
     total = total_cost(labor, parts)
@@ -200,6 +211,7 @@ def apply_payload(work_order: WorkOrder, payload: WorkOrderCreate | WorkOrderUpd
     work_order.driver_id = payload.driver_id
     work_order.inspection_id = payload.inspection_id
     work_order.reminder_service_id = payload.reminder_service_id
+    work_order.accident_id = payload.accident_id
     work_order.source = payload.source.value
     work_order.title = payload.title.strip()
     work_order.description = payload.description

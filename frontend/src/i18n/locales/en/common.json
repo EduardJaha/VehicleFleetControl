@@ -79,7 +79,9 @@
     "type": "Type",
     "user": "User",
     "vehicle": "Vehicle",
-    "workshop": "Workshop"
+    "workshop": "Workshop",
+    "yes": "Yes",
+    "no": "No"
   },
   "states": {
     "loading": "Loading…",

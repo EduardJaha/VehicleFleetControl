@@ -123,10 +123,20 @@ hybrid records and advanced charging-session fields are deferred follow-up work.
 
 ### Accident Management
 
-* Report vehicle accidents
-* Upload accident files or photos
-* View accident history
-* Search and filter accident records by vehicle, location, or date
+* Report accidents against a Vehicle, Driver, Assignment, and optional Reservation
+* Assess severity, police involvement, fault, damage cost, and post-accident availability
+* Automatically move unsafe Vehicles to In Service
+* Track involved Parties and Injuries
+* Open and settle Insurance Claims, including policy, adjuster, deductible, and settlement values
+* Link Insurance Documents, Work Orders, and completed Service records
+* Use guarded Reported → Review → Claim/Repair → Resolved → Closed workflow actions
+* Store authenticated attachments while preserving all legacy Accident files
+* Review Summary, People, Insurance Claim, Repair, Attachments, and Timeline detail tabs
+* Archive and restore Accident records without deleting linked history
+
+The Accident report includes Accidents by Driver and Vehicle, Accident rate per
+100,000 km, Claim and unrecovered costs, average resolution time, and fault
+distribution, with the same filters and Excel export support as other reports.
 
 ### Reservation Management
 

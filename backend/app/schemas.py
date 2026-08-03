@@ -107,7 +107,35 @@ class WorkOrderSource(str, Enum):
     inspection = "Inspection"
     service_reminder = "Service Reminder"
     breakdown = "Breakdown"
+    accident = "Accident"
     other = "Other"
+
+
+class AccidentSeverity(str, Enum):
+    minor = "Minor"
+    moderate = "Moderate"
+    severe = "Severe"
+    critical = "Critical"
+
+
+class AccidentStatus(str, Enum):
+    reported = "Reported"
+    under_review = "Under Review"
+    claim_opened = "Claim Opened"
+    repair_approved = "Repair Approved"
+    repair_in_progress = "Repair In Progress"
+    resolved = "Resolved"
+    closed = "Closed"
+    rejected = "Rejected"
+
+
+class AccidentClaimStatus(str, Enum):
+    open = "Open"
+    under_review = "Under Review"
+    approved = "Approved"
+    settled = "Settled"
+    closed = "Closed"
+    rejected = "Rejected"
 
 
 class ServiceSource(str, Enum):
@@ -537,6 +565,7 @@ class WorkOrderBase(BaseModel):
     driver_id: int | None = None
     inspection_id: int | None = None
     reminder_service_id: int | None = None
+    accident_id: int | None = None
     source: WorkOrderSource = WorkOrderSource.manual
     title: str = Field(min_length=1, max_length=150)
     description: str | None = None
@@ -1203,15 +1232,110 @@ class DocumentComplianceDashboardOut(BaseModel):
 
 class AccidentOut(BaseModel):
     id: int
+    vehicle_id: int | None = None
+    driver_id: int | None = None
     vehicle_assignment_id: int | None = None
+    reservation_id: int | None = None
     accident_date: str
+    accident_datetime: str | None = None
     location: str | None = None
+    severity: AccidentSeverity = AccidentSeverity.minor
+    status: AccidentStatus = AccidentStatus.reported
+    police_involved: bool = False
+    police_report_number: str | None = None
     description: str | None = None
+    vehicle_available_after_accident: bool = True
+    estimated_damage_cost: Decimal | None = None
+    actual_damage_cost: Decimal | None = None
+    fault_determination: str | None = None
     license_plate: str | None = None
     brand: str | None = None
     model: str | None = None
+    driver_name: str | None = None
     files: list[str] = []
     archived: bool = False
+
+
+class AccidentCreate(BaseModel):
+    vehicle_id: int
+    driver_id: int
+    assignment_id: int | None = None
+    reservation_id: int | None = None
+    accident_datetime: str
+    location: str = Field(min_length=1, max_length=500)
+    severity: AccidentSeverity
+    status: AccidentStatus = AccidentStatus.reported
+    police_involved: bool = False
+    police_report_number: str | None = Field(default=None, max_length=150)
+    description: str | None = None
+    vehicle_available_after_accident: bool
+    estimated_damage_cost: Decimal | None = Field(default=None, ge=0)
+    actual_damage_cost: Decimal | None = Field(default=None, ge=0)
+    fault_determination: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_police_report(self):
+        if self.police_report_number and not self.police_involved:
+            raise ValueError("police_involved must be true when a police report number is provided.")
+        return self
+
+
+class AccidentUpdate(BaseModel):
+    location: str | None = Field(default=None, min_length=1, max_length=500)
+    severity: AccidentSeverity | None = None
+    police_involved: bool | None = None
+    police_report_number: str | None = Field(default=None, max_length=150)
+    description: str | None = None
+    vehicle_available_after_accident: bool | None = None
+    estimated_damage_cost: Decimal | None = Field(default=None, ge=0)
+    actual_damage_cost: Decimal | None = Field(default=None, ge=0)
+    fault_determination: str | None = Field(default=None, max_length=100)
+
+
+class AccidentClaimPayload(BaseModel):
+    insurance_company: str = Field(min_length=1, max_length=255)
+    policy_number: str = Field(min_length=1, max_length=150)
+    claim_number: str = Field(min_length=1, max_length=150)
+    claim_status: AccidentClaimStatus = AccidentClaimStatus.open
+    claim_opened_date: str
+    claim_closed_date: str | None = None
+    settlement_amount: Decimal | None = Field(default=None, ge=0)
+    deductible: Decimal | None = Field(default=None, ge=0)
+    adjuster_name: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+    insurance_document_id: int | None = None
+
+
+class AccidentPartyPayload(BaseModel):
+    party_type: str = Field(min_length=1, max_length=50)
+    name: str = Field(min_length=1, max_length=255)
+    phone: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=255)
+    address: str | None = Field(default=None, max_length=500)
+    vehicle_registration: str | None = Field(default=None, max_length=100)
+    insurance_company: str | None = Field(default=None, max_length=255)
+    policy_number: str | None = Field(default=None, max_length=150)
+    notes: str | None = None
+
+
+class AccidentInjuryPayload(BaseModel):
+    party_id: int | None = None
+    injured_person_name: str = Field(min_length=1, max_length=255)
+    injury_severity: str = Field(min_length=1, max_length=50)
+    description: str | None = None
+    medical_treatment: str | None = None
+    hospitalized: bool = False
+    notes: str | None = None
+
+
+class AccidentWorkOrderPayload(BaseModel):
+    title: str = Field(default="Accident damage repair", min_length=1, max_length=150)
+    description: str | None = None
+    priority: WorkOrderPriority = WorkOrderPriority.high
+    assigned_to: str | None = Field(default=None, max_length=150)
+    workshop: str | None = Field(default=None, max_length=150)
+    expected_completion_date: str | None = None
+    estimated_damage_cost: Decimal | None = Field(default=None, ge=0)
 
 
 class AddReservation(BaseModel):

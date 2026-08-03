@@ -149,7 +149,7 @@ def test_migration_preserves_values_and_marks_electric_rows_for_review(
             assert audit["EntityId"] == 12
             assert connection.execute(sa.text(
                 'SELECT version_num FROM alembic_version'
-                )).scalar_one() == "20260727_0011"
+                )).scalar_one() == "20260727_0012"
 
         with pytest.raises(RuntimeError, match="Cannot downgrade.*KWH"):
             command.downgrade(config, "20260718_0004")
@@ -195,7 +195,70 @@ def test_registration_consolidation_relinks_documents_without_losing_versions(
             }
             assert connection.execute(sa.text(
                 'SELECT version_num FROM alembic_version'
-            )).scalar_one() == "20260727_0011"
+            )).scalar_one() == "20260727_0012"
+    finally:
+        engine.dispose()
+        get_settings.cache_clear()
+
+
+def test_accident_workflow_migration_preserves_legacy_accidents_and_files(tmp_path, monkeypatch):
+    database_path = tmp_path / "legacy-accidents.db"
+    database_url = f"sqlite:///{database_path}"
+    engine = sa.create_engine(database_url)
+    with engine.begin() as connection:
+        for statement in (
+            'CREATE TABLE "Users" ("Id" INTEGER PRIMARY KEY)',
+            'CREATE TABLE "Vehicles" ("Id" INTEGER PRIMARY KEY)',
+            'CREATE TABLE "Drivers" ("Id" INTEGER PRIMARY KEY)',
+            'CREATE TABLE "VehicleAssignments" ("Id" INTEGER PRIMARY KEY)',
+            'CREATE TABLE "VehicleReservations" ("Id" INTEGER PRIMARY KEY)',
+            'CREATE TABLE "VehiclePapers" ("Id" INTEGER PRIMARY KEY)',
+            'CREATE TABLE "WorkOrders" ("Id" INTEGER PRIMARY KEY)',
+            'CREATE TABLE "VehicleAccidents" ('
+            '"Id" INTEGER PRIMARY KEY, "VehicleId" INTEGER NOT NULL, '
+            '"VehicleAssignmentId" INTEGER, "AccidentDate" DATETIME NOT NULL, '
+            '"Location" VARCHAR NOT NULL, "Description" TEXT, '
+            '"Archived" BOOLEAN NOT NULL DEFAULT 0, "ArchivedAt" DATETIME, "ArchivedBy" INTEGER, '
+            'FOREIGN KEY("VehicleId") REFERENCES "Vehicles"("Id"), '
+            'FOREIGN KEY("VehicleAssignmentId") REFERENCES "VehicleAssignments"("Id"), '
+            'FOREIGN KEY("ArchivedBy") REFERENCES "Users"("Id"))',
+            'CREATE TABLE "AccidentFiles" ('
+            '"Id" INTEGER PRIMARY KEY, "VehicleAccidentId" INTEGER NOT NULL, "FilePath" VARCHAR NOT NULL, '
+            'FOREIGN KEY("VehicleAccidentId") REFERENCES "VehicleAccidents"("Id"))',
+            'CREATE INDEX "ix_vehicleaccidents_vehicle_assignment_id" '
+            'ON "VehicleAccidents" ("VehicleAssignmentId")',
+            'CREATE TABLE "alembic_version" (version_num VARCHAR(32) NOT NULL)',
+            'INSERT INTO "alembic_version" (version_num) VALUES (\'20260727_0011\')',
+            'INSERT INTO "Vehicles" ("Id") VALUES (7)',
+            'INSERT INTO "VehicleAccidents" '
+            '("Id", "VehicleId", "AccidentDate", "Location", "Description", "Archived") '
+            "VALUES (42, 7, '2026-07-01 08:30:00', 'Legacy road', 'Preserve me', 0)",
+            'INSERT INTO "AccidentFiles" ("Id", "VehicleAccidentId", "FilePath") '
+            "VALUES (91, 42, 'uploads/accidents/legacy.jpg')",
+        ):
+            connection.execute(sa.text(statement))
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    get_settings.cache_clear()
+    try:
+        command.upgrade(alembic_config(database_url), "head")
+        with engine.connect() as connection:
+            accident = connection.execute(sa.text(
+                'SELECT "Id", "VehicleId", "AccidentDate", "Location", "Description", '
+                '"Severity", "Status", "VehicleAvailableAfterAccident" '
+                'FROM "VehicleAccidents" WHERE "Id" = 42'
+            )).mappings().one()
+            assert accident["Description"] == "Preserve me"
+            assert accident["Severity"] == "Minor"
+            assert accident["Status"] == "Reported"
+            assert accident["VehicleAvailableAfterAccident"]
+            file_row = connection.execute(sa.text(
+                'SELECT "Id", "VehicleAccidentId", "FilePath" FROM "AccidentFiles" WHERE "Id" = 91'
+            )).mappings().one()
+            assert file_row["VehicleAccidentId"] == 42
+            assert file_row["FilePath"] == "uploads/accidents/legacy.jpg"
+            assert connection.execute(sa.text(
+                'SELECT version_num FROM alembic_version'
+            )).scalar_one() == "20260727_0012"
     finally:
         engine.dispose()
         get_settings.cache_clear()

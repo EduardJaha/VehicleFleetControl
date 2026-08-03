@@ -65,7 +65,7 @@ export const DEFAULT_INSPECTION_ITEMS = [
 ];
 export const WORK_ORDER_STATUSES = ["Open", "Assigned", "In Progress", "Waiting for Parts", "Completed", "Cancelled"];
 export const WORK_ORDER_PRIORITIES = ["Low", "Medium", "High", "Critical"];
-export const WORK_ORDER_SOURCES = ["Manual", "Inspection", "Service Reminder", "Breakdown", "Other"];
+export const WORK_ORDER_SOURCES = ["Manual", "Inspection", "Service Reminder", "Breakdown", "Accident", "Other"];
 export const SERVICE_SOURCES = ["Manual", "Work Order", "Imported"];
 export const REMINDER_STATUSES = ["Upcoming", "Due Soon", "Due", "Overdue", "Resolved", "Dismissed"];
 export const REPORTS = [
@@ -76,5 +76,6 @@ export const REPORTS = [
   { value: "reservations", labelKey: "reports.reservations" },
   { value: "document-expiry", labelKey: "reports.document-expiry" },
   { value: "document-compliance", labelKey: "reports.document-compliance" },
-  { value: "work-orders", labelKey: "reports.work-orders" }
+  { value: "work-orders", labelKey: "reports.work-orders" },
+  { value: "accidents", labelKey: "reports.accidents" }
 ];

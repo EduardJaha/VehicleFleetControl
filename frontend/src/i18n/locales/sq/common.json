@@ -79,7 +79,9 @@
     "type": "Lloji",
     "user": "Përdoruesi",
     "vehicle": "Automjeti",
-    "workshop": "Servisi"
+    "workshop": "Servisi",
+    "yes": "Po",
+    "no": "Jo"
   },
   "states": {
     "loading": "Duke u ngarkuar…",

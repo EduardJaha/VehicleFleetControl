@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.security import require_roles
 from app.db.session import get_db
-from app.models import Driver, User, Vehicle, VehicleFuel, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
+from app.models import (
+    Driver, User, Vehicle, VehicleAccident, VehicleAssignment, VehicleFuel,
+    VehiclePaper, VehicleReservation, VehicleService, WorkOrder,
+)
 from app.schemas import EnergyUnit, UserRole
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import normalize_plate, parse_vehicle_status, reservation_status_name, status_name
@@ -349,6 +352,102 @@ def document_compliance_report(db: Session, **filters) -> dict:
     )
 
 
+def accidents_report(db: Session, **filters) -> dict:
+    from_date = date_or_none(filters.get("from_date"), "from_date")
+    to_date = date_or_none(filters.get("to_date"), "to_date")
+    vehicles = filtered_vehicles(
+        db, filters.get("license_plate"), filters.get("vehicle_status"),
+        filters.get("department"), filters.get("driver_id"), filters.get("registration_country"),
+    )
+    vehicle_ids = {vehicle.id for vehicle in vehicles}
+    query = db.query(VehicleAccident).options(
+        joinedload(VehicleAccident.vehicle),
+        joinedload(VehicleAccident.driver),
+        joinedload(VehicleAccident.claim),
+    ).filter(VehicleAccident.archived.is_(False))
+    accidents = [
+        row for row in query.order_by(VehicleAccident.accident_date.desc()).all()
+        if row.vehicle_id in vehicle_ids and in_date_range(row.accident_date, from_date, to_date)
+    ]
+
+    assignment_query = db.query(VehicleAssignment).filter(
+        VehicleAssignment.archived.is_(False),
+        VehicleAssignment.vehicle_id.in_(vehicle_ids or {-1}),
+        VehicleAssignment.end_odometer_km.is_not(None),
+    )
+    if from_date:
+        assignment_query = assignment_query.filter(VehicleAssignment.start_datetime >= from_date)
+    if to_date:
+        assignment_query = assignment_query.filter(VehicleAssignment.start_datetime <= to_date)
+    distance = sum(
+        max(0, (row.end_odometer_km or row.start_odometer_km) - row.start_odometer_km)
+        for row in assignment_query.all()
+    )
+
+    actual_cost = sum((money(row.actual_damage_cost) for row in accidents), Decimal("0"))
+    claim_cost = sum(
+        (money(row.claim.settlement_amount) for row in accidents if row.claim), Decimal("0")
+    )
+    unrecovered = sum(
+        (
+            max(Decimal("0"), money(row.actual_damage_cost) - money(row.claim.settlement_amount if row.claim else None))
+            for row in accidents
+        ),
+        Decimal("0"),
+    )
+    resolved = [
+        (row.resolved_at - row.accident_date).total_seconds() / 86400
+        for row in accidents if row.resolved_at
+    ]
+    fault_counts: dict[str, int] = {}
+    driver_counts: dict[str, int] = {}
+    vehicle_counts: dict[str, int] = {}
+    rows = []
+    for row in accidents:
+        fault = row.fault_determination or "Undetermined"
+        driver = row.driver.full_name if row.driver else "Unassigned"
+        plate = row.vehicle.license_plate
+        fault_counts[fault] = fault_counts.get(fault, 0) + 1
+        driver_counts[driver] = driver_counts.get(driver, 0) + 1
+        vehicle_counts[plate] = vehicle_counts.get(plate, 0) + 1
+        settlement = money(row.claim.settlement_amount if row.claim else None)
+        damage = money(row.actual_damage_cost)
+        rows.append({
+            "accident_id": row.id,
+            "date": format_date(row.accident_date),
+            "driver": driver,
+            "license_plate": plate,
+            "vehicle": f"{row.vehicle.brand} {row.vehicle.model}",
+            "severity": row.severity,
+            "status": row.status,
+            "fault_determination": fault,
+            "actual_damage_cost": float(damage),
+            "claim_cost": float(settlement),
+            "unrecovered_cost": float(max(Decimal("0"), damage - settlement)),
+            "resolution_days": (
+                round((row.resolved_at - row.accident_date).total_seconds() / 86400, 2)
+                if row.resolved_at else None
+            ),
+        })
+    data = report_response(
+        {
+            "total_accidents": len(accidents),
+            "distance_km": distance,
+            "accident_rate_per_100000_km": round(len(accidents) / distance * 100000, 2) if distance else 0,
+            "actual_damage_cost": float(actual_cost),
+            "claim_cost": float(claim_cost),
+            "unrecovered_cost": float(unrecovered),
+            "average_resolution_days": round(sum(resolved) / len(resolved), 2) if resolved else 0,
+            "fault_distribution": ", ".join(f"{name}: {count}" for name, count in sorted(fault_counts.items())),
+        },
+        rows,
+    )
+    data["by_driver"] = [{"driver": name, "accidents": count} for name, count in sorted(driver_counts.items())]
+    data["by_vehicle"] = [{"license_plate": name, "accidents": count} for name, count in sorted(vehicle_counts.items())]
+    data["fault_distribution"] = [{"fault": name, "accidents": count} for name, count in sorted(fault_counts.items())]
+    return data
+
+
 REPORTS: dict[str, Callable[..., dict]] = {
     "fleet-summary": fleet_summary_report,
     "fuel-costs": fuel_costs_report,
@@ -358,6 +457,7 @@ REPORTS: dict[str, Callable[..., dict]] = {
     "document-expiry": document_expiry_report,
     "document-compliance": document_compliance_report,
     "work-orders": work_orders_report,
+    "accidents": accidents_report,
 }
 
 
@@ -365,12 +465,12 @@ EXCEL_TEXT = {
     "en": {
         "kpis": "KPIs", "metric": "Metric", "value": "Value", "rows": "Rows", "no_rows": "No rows",
         "generated": "Generated", "filters": "Filters",
-        "reports": {"fleet-summary": "Fleet Summary", "fuel-costs": "Fuel Costs", "service-costs": "Service Costs", "vehicle-costs": "Vehicle Costs", "reservations": "Reservations", "document-expiry": "Document Expiry", "document-compliance": "Document Compliance", "work-orders": "Work Orders"},
+        "reports": {"fleet-summary": "Fleet Summary", "fuel-costs": "Fuel Costs", "service-costs": "Service Costs", "vehicle-costs": "Vehicle Costs", "reservations": "Reservations", "document-expiry": "Document Expiry", "document-compliance": "Document Compliance", "work-orders": "Work Orders", "accidents": "Accident and Claim Costs"},
     },
     "sq": {
         "kpis": "Treguesit", "metric": "Treguesi", "value": "Vlera", "rows": "Rreshtat", "no_rows": "Nuk ka rreshta",
         "generated": "Gjeneruar", "filters": "Filtrat",
-        "reports": {"fleet-summary": "Përmbledhja e Flotës", "fuel-costs": "Kostot e Karburantit", "service-costs": "Kostot e Servisimit", "vehicle-costs": "Kostot e Automjeteve", "reservations": "Rezervimet", "document-expiry": "Skadimi i Dokumenteve", "document-compliance": "Pajtueshmëria e Dokumenteve", "work-orders": "Urdhrat e Punës"},
+        "reports": {"fleet-summary": "Përmbledhja e Flotës", "fuel-costs": "Kostot e Karburantit", "service-costs": "Kostot e Servisimit", "vehicle-costs": "Kostot e Automjeteve", "reservations": "Rezervimet", "document-expiry": "Skadimi i Dokumenteve", "document-compliance": "Pajtueshmëria e Dokumenteve", "work-orders": "Urdhrat e Punës", "accidents": "Kostot e Aksidenteve dhe Dëmeve"},
     },
 }
 
@@ -529,6 +629,11 @@ def document_compliance(from_date: str | None = None, to_date: str | None = None
 @router.get("/work-orders")
 def work_orders(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
     return work_orders_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
+
+
+@router.get("/accidents")
+def accidents(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return accidents_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/{report_name}/export")

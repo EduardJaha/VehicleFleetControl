@@ -670,15 +670,59 @@ export type DocumentComplianceDashboard = {
 
 export type Accident = {
   id: number;
+  vehicle_id?: number | null;
+  driver_id?: number | null;
   vehicle_assignment_id?: number | null;
+  reservation_id?: number | null;
   accident_date: string;
+  accident_datetime?: string | null;
   location?: string | null;
+  severity?: "Minor" | "Moderate" | "Severe" | "Critical";
+  status?: "Reported" | "Under Review" | "Claim Opened" | "Repair Approved" | "Repair In Progress" | "Resolved" | "Closed" | "Rejected";
+  police_involved?: boolean;
+  police_report_number?: string | null;
   description?: string | null;
+  vehicle_available_after_accident?: boolean;
+  estimated_damage_cost?: number | string | null;
+  actual_damage_cost?: number | string | null;
+  fault_determination?: string | null;
   license_plate?: string | null;
   brand?: string | null;
   model?: string | null;
+  driver_name?: string | null;
   files: string[];
   archived?: boolean;
+};
+
+export type AccidentClaim = {
+  id: number;
+  insurance_company: string;
+  policy_number: string;
+  claim_number: string;
+  claim_status: string;
+  claim_opened_date: string;
+  claim_closed_date?: string | null;
+  settlement_amount?: string | null;
+  deductible?: string | null;
+  adjuster_name?: string | null;
+  notes?: string | null;
+  insurance_document_id?: number | null;
+  insurance_document_type?: string | null;
+};
+
+export type AccidentDetail = Accident & {
+  assignment_id?: number | null;
+  claim?: AccidentClaim | null;
+  parties: Array<Record<string, unknown>>;
+  injuries: Array<Record<string, unknown>>;
+  work_orders: Array<{
+    id: number; title: string; status: string; total_cost?: string | null;
+    service?: { id: number; service_type: string; service_date: string; cost?: string | null } | null;
+  }>;
+  attachments: Array<Attachment & { download_url: string }>;
+  timeline: Array<{ id: number; action: string; description?: string | null; username?: string | null; created_at: string }>;
+  resolved_at?: string | null;
+  closed_at?: string | null;
 };
 
 export type Reservation = {

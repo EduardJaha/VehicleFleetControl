@@ -1,6 +1,7 @@
 {
   "generic": "Ndodhi një gabim. Ju lutemi provoni përsëri.",
   "api": "Kërkesa nuk mund të përfundohej.",
+  "network": "Nuk mund të lidhet me API-në. Nisni ose rinisni backend-in, pastaj rifreskoni këtë faqe.",
   "validation_error": "Validimi dështoi.",
   "invalid_credentials": "Email-i ose fjalëkalimi është i pasaktë.",
   "inactive_user": "Llogaria e përdoruesit është joaktive.",
@@ -36,6 +37,12 @@
   "min_length": "Fusha {{field}} duhet të ketë të paktën {{min}} karaktere.",
   "max_length": "Fusha {{field}} duhet të ketë jo më shumë se {{max}} karaktere.",
   "invalid_value": "Vendosni një vlerë të vlefshme.",
+  "duplicate_existing": "Ky rresht përputhet me një rekord ekzistues. Zgjidhni mënyrën e përditësimit për ta ndryshuar shprehimisht.",
+  "duplicate_in_file": "Ky identifikues paraqitet më shumë se një herë në skedar.",
+  "conflicting_duplicates": "Identifikuesit përputhen me rekorde të ndryshme ekzistuese.",
+  "unknown_brand": "Marka duhet të përputhet me Katalogun aktiv të Automjeteve.",
+  "unknown_model": "Modeli duhet të përputhet me Katalogun aktiv për markën e zgjedhur.",
+  "import_failed": "Rreshti nuk mund të importohej sepse të dhënat ndryshuan pas validimit.",
   "fields": {
     "email": "Email-i", "password": "Fjalëkalimi", "full_name": "Emri i plotë",
     "license_plate": "Targa", "registration_country": "Shteti i regjistrimit",

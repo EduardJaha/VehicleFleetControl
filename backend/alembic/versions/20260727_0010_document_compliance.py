@@ -24,6 +24,12 @@ def upgrade() -> None:
             op.add_column("Vehicles", sa.Column("VehicleCategory", sa.String(length=100), nullable=True))
             op.create_index("ix_vehicles_vehicle_category", "Vehicles", ["VehicleCategory"])
 
+    # The foundation migration creates the current metadata for a brand-new
+    # database. In that path this schema already exists and must not be
+    # created a second time.
+    if "DocumentRequirements" in tables:
+        return
+
     # Some supported data-repair tests deliberately migrate a narrow legacy
     # schema containing only Fuel-related tables. A compliance migration must
     # leave that database usable instead of assuming unrelated modules exist.

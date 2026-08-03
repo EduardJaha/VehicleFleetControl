@@ -16,5 +16,6 @@
   "reservations": "Reservations",
   "reports": "Reports",
   "notifications": "Notifications",
-  "auditLogs": "Audit Logs"
+  "auditLogs": "Audit Logs",
+  "imports": "Imports"
 }

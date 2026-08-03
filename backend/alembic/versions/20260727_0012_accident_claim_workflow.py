@@ -23,6 +23,10 @@ def upgrade() -> None:
     # real fleet database always has VehicleAccidents from the base schema.
     if not inspector.has_table("VehicleAccidents"):
         return
+    # A new database is initialized from current SQLAlchemy metadata by the
+    # foundation revision, so the complete workflow may already be present.
+    if inspector.has_table("AccidentClaims"):
+        return
     with op.batch_alter_table("VehicleAccidents") as batch:
         batch.add_column(sa.Column("DriverId", sa.Integer(), nullable=True))
         batch.add_column(sa.Column("ReservationId", sa.Integer(), nullable=True))

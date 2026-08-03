@@ -1,6 +1,7 @@
 {
   "generic": "Something went wrong. Please try again.",
   "api": "The request could not be completed.",
+  "network": "Cannot connect to the API. Start or restart the backend, then refresh this page.",
   "validation_error": "Validation failed.",
   "invalid_credentials": "Invalid email or password.",
   "inactive_user": "User account is inactive.",
@@ -36,6 +37,12 @@
   "min_length": "{{field}} must contain at least {{min}} characters.",
   "max_length": "{{field}} must contain no more than {{max}} characters.",
   "invalid_value": "Enter a valid value.",
+  "duplicate_existing": "This row matches an existing record. Choose update-existing mode to update it explicitly.",
+  "duplicate_in_file": "This identifier appears more than once in the file.",
+  "conflicting_duplicates": "The identifiers match different existing records.",
+  "unknown_brand": "The brand must match the active Vehicle Catalogue.",
+  "unknown_model": "The model must match the active Vehicle Catalogue for that brand.",
+  "import_failed": "The row could not be imported because the data changed after validation.",
   "fields": {
     "email": "Email", "password": "Password", "full_name": "Full name",
     "license_plate": "Licence plate", "registration_country": "Registration country",

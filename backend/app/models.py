@@ -788,6 +788,70 @@ class AuditLog(Base):
     user = relationship("User")
 
 
+class ImportJob(Base):
+    """A retained, auditable CSV/XLSX import attempt.
+
+    Source files and row results are intentionally kept separate from the
+    target entities so validation is a genuine dry run.
+    """
+
+    __tablename__ = "ImportJobs"
+    __table_args__ = (
+        Index("ix_import_jobs_uploaded_by", "UploadedBy"),
+        Index("ix_import_jobs_entity_status", "EntityType", "Status"),
+        Index("ix_import_jobs_created_at", "CreatedAt"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    entity_type = Column("EntityType", String(50), nullable=False)
+    filename = Column("Filename", String(255), nullable=False)
+    source_path = Column("SourcePath", String(500), nullable=False)
+    uploaded_by = Column("UploadedBy", Integer, ForeignKey("Users.Id", ondelete="RESTRICT"), nullable=False)
+    status = Column("Status", String(50), nullable=False, default="Uploaded")
+    column_mapping = Column("ColumnMapping", JSON, nullable=True)
+    update_mode = Column("UpdateMode", String(50), nullable=True)
+    transaction_mode = Column("TransactionMode", String(20), nullable=True)
+    source_headers = Column("SourceHeaders", JSON, nullable=True)
+    total_rows = Column("TotalRows", Integer, nullable=False, default=0)
+    valid_rows = Column("ValidRows", Integer, nullable=False, default=0)
+    invalid_rows = Column("InvalidRows", Integer, nullable=False, default=0)
+    created_rows = Column("CreatedRows", Integer, nullable=False, default=0)
+    updated_rows = Column("UpdatedRows", Integer, nullable=False, default=0)
+    skipped_rows = Column("SkippedRows", Integer, nullable=False, default=0)
+    started_at = Column("StartedAt", DateTime, nullable=True)
+    completed_at = Column("CompletedAt", DateTime, nullable=True)
+    error_report_path = Column("ErrorReportPath", String(500), nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+    row_results = relationship(
+        "ImportRowResult", back_populates="job", cascade="all, delete-orphan", order_by="ImportRowResult.row_number"
+    )
+
+
+class ImportRowResult(Base):
+    __tablename__ = "ImportRowResults"
+    __table_args__ = (
+        UniqueConstraint("ImportJobId", "RowNumber", name="uq_import_row_results_job_row"),
+        Index("ix_import_row_results_job_status", "ImportJobId", "Status"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    import_job_id = Column("ImportJobId", Integer, ForeignKey("ImportJobs.Id", ondelete="CASCADE"), nullable=False)
+    row_number = Column("RowNumber", Integer, nullable=False)
+    status = Column("Status", String(30), nullable=False)
+    action = Column("Action", String(30), nullable=False)
+    raw_data = Column("RawData", JSON, nullable=False)
+    mapped_data = Column("MappedData", JSON, nullable=True)
+    errors = Column("Errors", JSON, nullable=True)
+    duplicate_fields = Column("DuplicateFields", JSON, nullable=True)
+    target_id = Column("TargetId", Integer, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    job = relationship("ImportJob", back_populates="row_results")
+
+
 class Notification(Base):
     __tablename__ = "Notifications"
     __table_args__ = (

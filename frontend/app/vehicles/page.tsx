@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
 import { VehicleForm, vehicleToPayload } from "@/components/vehicles/VehicleForm";
-import { apiDelete, apiGet, apiPost, apiPut, buildQuery, vehicleRegistrationApi } from "@/lib/api";
+import { apiDelete, apiDownload, apiGet, apiPost, apiPut, buildQuery, vehicleRegistrationApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { normalizePlateInput } from "@/lib/licensePlates";
 import type { ApiMessage, RegistrationCountryCode, RegistrationCountryOption, Vehicle, VehiclePayload } from "@/lib/types";
@@ -31,6 +31,10 @@ export default function VehiclesPage() {
   const [updating, setUpdating] = useState(false);
   const [countries, setCountries] = useState<RegistrationCountryOption[]>([]);
   const [filters, setFilters] = useState({ search: "", registration_country: "" as RegistrationCountryCode | "", fuel: "", location: "", status: "", include_archived: false });
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkAction, setBulkAction] = useState("archive");
+  const [bulkValue, setBulkValue] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   async function loadVehicles(
     status = filters.status,
@@ -156,6 +160,28 @@ export default function VehiclesPage() {
     }
   }
 
+  async function applyBulkAction() {
+    const ids = Array.from(selected);
+    if (!ids.length || !confirm(t("modules:bulk.confirm", { count: ids.length }))) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await apiPost<{ affected: number }>("/bulk-actions", {
+        entity_type: "Vehicles", action: bulkAction, ids,
+        value: bulkValue || null,
+        options: bulkAction === "create_work_orders" ? { title: bulkValue || t("modules:bulk.defaultWorkOrder") }
+          : bulkAction === "assign_service_program" ? { service_type: bulkValue } : {}
+      });
+      setMessage(t("modules:bulk.completed", { count: ids.length }));
+      setSelected(new Set());
+      await loadVehicles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("modules:bulk.error"));
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   return (
     <section>
       <EntityPageHeader
@@ -233,16 +259,32 @@ export default function VehiclesPage() {
 
       {error && <div className="error spaced">{error}</div>}
       {message && <div className="success spaced" role="status">{message}</div>}
+      {canWrite && <div className="card bulkBar spaced">
+        <strong>{t("modules:bulk.selected", { count: selected.size })}</strong>
+        <select className="select" value={bulkAction} onChange={(event) => { setBulkAction(event.target.value); setBulkValue(""); }}>
+          <option value="archive">{t("modules:bulk.archive")}</option>
+          {user?.role === "admin" && <option value="restore">{t("modules:bulk.restore")}</option>}
+          <option value="change_status">{t("modules:bulk.changeStatus")}</option>
+          <option value="change_location">{t("modules:bulk.changeLocation")}</option>
+          <option value="assign_service_program">{t("modules:bulk.assignServiceProgram")}</option>
+          <option value="create_work_orders">{t("modules:bulk.createWorkOrders")}</option>
+        </select>
+        {bulkAction === "change_status" ? <select className="select" value={bulkValue} onChange={(event) => setBulkValue(event.target.value)}><option value="">{t("modules:bulk.chooseValue")}</option>{VEHICLE_STATUSES.map((status) => <option key={status.value} value={status.value}>{t(`common:${status.labelKey}`)}</option>)}</select>
+          : ["change_location", "assign_service_program", "create_work_orders"].includes(bulkAction) && <input className="input" value={bulkValue} onChange={(event) => setBulkValue(event.target.value)} placeholder={t(`modules:bulk.placeholders.${bulkAction}`)} />}
+        <button className="button" type="button" disabled={!selected.size || bulkBusy || (["change_status", "change_location", "assign_service_program"].includes(bulkAction) && !bulkValue)} onClick={() => void applyBulkAction()}>{t("modules:bulk.apply")}</button>
+        <button className="secondaryButton" type="button" disabled={!selected.size} onClick={() => void apiDownload(`/bulk-actions/export?entity_type=Vehicles&ids=${Array.from(selected).join(",")}`, "selected-vehicles.csv")}>{t("modules:bulk.exportSelected")}</button>
+      </div>}
       {loading ? <div className="card">{t("modules:vehicles.loading")}</div> : (
         <table className="table">
           <thead>
             <tr>
-              <th>{t("common:labels.country")}</th><th>{t("common:labels.licencePlate")}</th><th>{t("common:labels.brand")}</th><th>{t("common:labels.model")}</th><th>{t("modules:vehicles.fuel")}</th><th>{t("common:labels.location")}</th><th>{t("common:labels.odometer")}</th><th>{t("common:labels.status")}</th><th>{t("common:labels.actions")}</th>
+              {canWrite && <th><input type="checkbox" aria-label={t("modules:bulk.selectAll")} checked={filtered.length > 0 && filtered.every((row) => selected.has(row.id))} onChange={(event) => setSelected(event.target.checked ? new Set(filtered.map((row) => row.id)) : new Set())} /></th>}<th>{t("common:labels.country")}</th><th>{t("common:labels.licencePlate")}</th><th>{t("common:labels.brand")}</th><th>{t("common:labels.model")}</th><th>{t("modules:vehicles.fuel")}</th><th>{t("common:labels.location")}</th><th>{t("common:labels.odometer")}</th><th>{t("common:labels.status")}</th><th>{t("common:labels.actions")}</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((vehicle) => (
               <tr key={vehicle.id}>
+                {canWrite && <td><input type="checkbox" aria-label={t("modules:bulk.selectRow", { name: vehicle.license_plate })} checked={selected.has(vehicle.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); event.target.checked ? next.add(vehicle.id) : next.delete(vehicle.id); return next; })} /></td>}
                 <td>{vehicle.registration_country ? t(`common:countries.${vehicle.registration_country}`) : t("modules:vehicles.unresolved")}</td>
                 <td><strong>{vehicle.license_plate}</strong></td>
                 <td>{vehicle.brand}</td>
@@ -262,7 +304,7 @@ export default function VehiclesPage() {
                   </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={9} className="muted">{t("modules:vehicles.empty")}</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canWrite ? 10 : 9} className="muted">{t("modules:vehicles.empty")}</td></tr>}
           </tbody>
         </table>
       )}

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
-import { apiDelete, apiGet, apiPost, apiPut, buildQuery } from "@/lib/api";
+import { apiDelete, apiDownload, apiGet, apiPost, apiPut, buildQuery } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { DRIVER_STATUSES } from "@/lib/constants";
 import { toApiDate, toInputDate, todayInputDate } from "@/lib/format";
@@ -91,7 +91,7 @@ function expiryBadge(expiryDate: string, expired: string, expiresIn: (days: numb
 export default function DriversPage() {
   const { t } = useTranslation(["modules", "common"]);
   const { formatDate } = useLanguage();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const canWrite = can("driversWrite");
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -104,7 +104,11 @@ export default function DriversPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isDriverDialogOpen, setIsDriverDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [filters, setFilters] = useState({ search: "", status: "", department: "", license_expiring_before: "" });
+  const [filters, setFilters] = useState({ search: "", status: "", department: "", license_expiring_before: "", include_archived: false });
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkAction, setBulkAction] = useState("archive");
+  const [bulkValue, setBulkValue] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   async function loadDrivers(currentFilters = filters) {
     setLoading(true);
@@ -114,7 +118,8 @@ export default function DriversPage() {
         search: currentFilters.search,
         status: currentFilters.status,
         department: currentFilters.department,
-        license_expiring_before: toApiDate(currentFilters.license_expiring_before)
+        license_expiring_before: toApiDate(currentFilters.license_expiring_before),
+        include_archived: currentFilters.include_archived || undefined
       });
       setDrivers(await apiGet<Driver[]>(`/drivers${query}`));
     } catch (err) {
@@ -201,6 +206,23 @@ export default function DriversPage() {
     }
   }
 
+  async function applyBulkAction() {
+    const ids = Array.from(selected);
+    if (!ids.length || !confirm(t("modules:bulk.confirm", { count: ids.length }))) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await apiPost<{ affected: number }>("/bulk-actions", { entity_type: "Drivers", action: bulkAction, ids, value: bulkValue || null });
+      setMessage(t("modules:bulk.completed", { count: ids.length }));
+      setSelected(new Set());
+      await loadDrivers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("modules:bulk.error"));
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   return (
     <section>
       <EntityPageHeader
@@ -268,14 +290,24 @@ export default function DriversPage() {
         </select>
         <input className="input" type="date" value={filters.license_expiring_before} onChange={(event) => setFilters({ ...filters, license_expiring_before: event.target.value })} title={t("modules:drivers.expiringBefore")} />
         <button className="button" type="button" onClick={() => void loadDrivers()}>{t("common:actions.applyFilters")}</button>
+        {user?.role === "admin" && <label className="actions"><input type="checkbox" checked={filters.include_archived} onChange={(event) => { const include_archived = event.target.checked; const next = { ...filters, include_archived }; setFilters(next); void loadDrivers(next); }} /> {t("modules:vehicles.includeArchived")}</label>}
       </div>
+
+      {canWrite && <div className="card bulkBar spaced">
+        <strong>{t("modules:bulk.selected", { count: selected.size })}</strong>
+        <select className="select" value={bulkAction} onChange={(event) => { setBulkAction(event.target.value); setBulkValue(""); }}><option value="archive">{t("modules:bulk.archive")}</option>{user?.role === "admin" && <option value="restore">{t("modules:bulk.restore")}</option>}<option value="change_status">{t("modules:bulk.changeStatus")}</option><option value="change_department">{t("modules:bulk.changeDepartment")}</option></select>
+        {bulkAction === "change_status" ? <select className="select" value={bulkValue} onChange={(event) => setBulkValue(event.target.value)}><option value="">{t("modules:bulk.chooseValue")}</option>{DRIVER_STATUSES.map((status) => <option key={status} value={status}>{translateStatus(status)}</option>)}</select> : bulkAction === "change_department" && <input className="input" value={bulkValue} onChange={(event) => setBulkValue(event.target.value)} placeholder={t("modules:bulk.placeholders.change_department")} />}
+        <button className="button" type="button" disabled={!selected.size || bulkBusy || (["change_status", "change_department"].includes(bulkAction) && !bulkValue)} onClick={() => void applyBulkAction()}>{t("modules:bulk.apply")}</button>
+        <button className="secondaryButton" type="button" disabled={!selected.size} onClick={() => void apiDownload(`/bulk-actions/export?entity_type=Drivers&ids=${Array.from(selected).join(",")}`, "selected-drivers.csv")}>{t("modules:bulk.exportSelected")}</button>
+      </div>}
 
       {loading ? <div className="card">{t("modules:drivers.loading")}</div> : (
         <table className="table">
-          <thead><tr><th>{t("common:labels.name")}</th><th>{t("modules:drivers.contact")}</th><th>{t("modules:drivers.employee")}</th><th>{t("common:labels.department")}</th><th>{t("modules:drivers.licence")}</th><th>{t("modules:drivers.expiry")}</th><th>{t("modules:drivers.assignedVehicle")}</th><th>{t("common:labels.status")}</th>{canWrite && <th>{t("common:labels.actions")}</th>}</tr></thead>
+          <thead><tr>{canWrite && <th><input type="checkbox" aria-label={t("modules:bulk.selectAll")} checked={drivers.length > 0 && drivers.every((row) => selected.has(row.id))} onChange={(event) => setSelected(event.target.checked ? new Set(drivers.map((row) => row.id)) : new Set())} /></th>}<th>{t("common:labels.name")}</th><th>{t("modules:drivers.contact")}</th><th>{t("modules:drivers.employee")}</th><th>{t("common:labels.department")}</th><th>{t("modules:drivers.licence")}</th><th>{t("modules:drivers.expiry")}</th><th>{t("modules:drivers.assignedVehicle")}</th><th>{t("common:labels.status")}</th>{canWrite && <th>{t("common:labels.actions")}</th>}</tr></thead>
           <tbody>
             {drivers.map((driver) => (
               <tr key={driver.id}>
+                {canWrite && <td><input type="checkbox" aria-label={t("modules:bulk.selectRow", { name: driver.full_name })} checked={selected.has(driver.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); event.target.checked ? next.add(driver.id) : next.delete(driver.id); return next; })} /></td>}
                 <td><Link className="link" href={`/drivers/${driver.id}`}>{driver.full_name}</Link></td>
                 <td>{driver.phone_number || driver.email ? <>{driver.phone_number || "-"}<br /><span className="muted">{driver.email || ""}</span></> : "-"}</td>
                 <td>{driver.employee_number}</td>
@@ -287,7 +319,7 @@ export default function DriversPage() {
                 {canWrite && <td><div className="actions"><button className="secondaryButton smallButton" type="button" onClick={() => startEdit(driver)}>{t("common:actions.edit")}</button><button className="dangerButton smallButton" type="button" onClick={() => void deleteDriver(driver)}>{t("common:actions.archive")}</button></div></td>}
               </tr>
             ))}
-            {drivers.length === 0 && <tr><td colSpan={canWrite ? 9 : 8} className="muted">{t("modules:drivers.empty")}</td></tr>}
+            {drivers.length === 0 && <tr><td colSpan={canWrite ? 10 : 8} className="muted">{t("modules:drivers.empty")}</td></tr>}
           </tbody>
         </table>
       )}

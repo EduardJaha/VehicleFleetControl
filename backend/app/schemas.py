@@ -39,6 +39,38 @@ class LanguageCode(str, Enum):
     sq = "sq"
 
 
+class ImportEntityType(str, Enum):
+    vehicles = "Vehicles"
+    drivers = "Drivers"
+    historical_services = "Historical Services"
+    fuel_charging = "Fuel and Charging Records"
+    documents = "Documents Metadata"
+    assignments = "Vehicle Assignments"
+    vendors = "Vendors"
+    parts = "Parts"
+
+
+class ImportJobStatus(str, Enum):
+    uploaded = "Uploaded"
+    validating = "Validating"
+    ready = "Ready"
+    importing = "Importing"
+    completed = "Completed"
+    completed_with_errors = "Completed With Errors"
+    failed = "Failed"
+    cancelled = "Cancelled"
+
+
+class ImportUpdateMode(str, Enum):
+    create_only = "create_only"
+    update_existing = "update_existing"
+
+
+class ImportTransactionMode(str, Enum):
+    row = "row"
+    file = "file"
+
+
 class EnergyUnit(str, Enum):
     liter = "L"
     kilowatt_hour = "KWH"
@@ -1389,6 +1421,99 @@ class AuditLogPage(BaseModel):
     page_size: int
     total: int
     pages: int
+
+
+class ImportFieldDefinition(BaseModel):
+    key: str
+    label: str
+    required: bool = False
+    example: str | int | None = None
+
+
+class ImportUploadOut(BaseModel):
+    id: int
+    entity_type: ImportEntityType
+    filename: str
+    status: ImportJobStatus
+    headers: list[str]
+    fields: list[ImportFieldDefinition]
+    suggested_mapping: dict[str, str]
+
+
+class ImportValidationRequest(BaseModel):
+    column_mapping: dict[str, str]
+    update_mode: ImportUpdateMode
+
+
+class ImportConfirmRequest(BaseModel):
+    update_mode: ImportUpdateMode
+    transaction_mode: ImportTransactionMode = ImportTransactionMode.row
+
+
+class ImportRowResultOut(BaseModel):
+    id: int
+    row_number: int
+    status: str
+    action: str
+    raw_data: dict
+    mapped_data: dict | None = None
+    errors: list[dict] = []
+    duplicate_fields: list[str] = []
+    target_id: int | None = None
+
+
+class ImportJobOut(BaseModel):
+    id: int
+    entity_type: ImportEntityType
+    filename: str
+    uploaded_by: int
+    status: ImportJobStatus
+    column_mapping: dict[str, str] | None = None
+    update_mode: ImportUpdateMode | None = None
+    transaction_mode: ImportTransactionMode | None = None
+    source_headers: list[str] = []
+    total_rows: int
+    valid_rows: int
+    invalid_rows: int
+    created_rows: int
+    updated_rows: int
+    skipped_rows: int
+    started_at: str | None = None
+    completed_at: str | None = None
+    error_report_path: str | None = None
+    created_at: str
+    rows: list[ImportRowResultOut] = []
+
+
+class ImportJobPage(BaseModel):
+    items: list[ImportJobOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class BulkActionRequest(BaseModel):
+    entity_type: str
+    action: str
+    ids: list[int] = Field(min_length=1, max_length=500)
+    value: str | int | None = None
+    options: dict = Field(default_factory=dict)
+
+    @field_validator("ids")
+    @classmethod
+    def unique_positive_ids(cls, values: list[int]) -> list[int]:
+        unique = list(dict.fromkeys(values))
+        if any(value <= 0 for value in unique):
+            raise ValueError("IDs must be positive integers.")
+        return unique
+
+
+class BulkActionOut(BaseModel):
+    entity_type: str
+    action: str
+    affected: int
+    created_ids: list[int] = []
 
 
 class NotificationStatus(str, Enum):

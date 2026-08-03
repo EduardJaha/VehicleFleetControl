@@ -25,7 +25,8 @@ export const PERMISSIONS = {
   fuelWrite: ["admin", "finance"],
   accidentsWrite: ["admin", "fleet_manager"],
   claimsWrite: ["admin", "fleet_manager", "finance"],
-  reportsRead: ["admin", "fleet_manager", "finance"]
+  reportsRead: ["admin", "fleet_manager", "finance"],
+  importsWrite: ["admin", "fleet_manager"]
 } as const satisfies Record<string, readonly UserRole[]>;
 
 type PermissionKey = keyof typeof PERMISSIONS;

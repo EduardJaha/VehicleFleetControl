@@ -37,6 +37,17 @@ function authHeaders(): HeadersInit {
   };
 }
 
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(i18n.t("errors:network"));
+    }
+    throw error;
+  }
+}
+
 function validationIssueMessage(issue: unknown): string | null {
   if (!issue || typeof issue !== "object") return null;
   const record = issue as { loc?: unknown; msg?: unknown };
@@ -155,12 +166,12 @@ export function fileHref(path?: string | null): string {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store", headers: authHeaders() });
+  const response = await apiFetch(`${API_BASE_URL}${path}`, { cache: "no-store", headers: authHeaders() });
   return handleResponse<T>(response);
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await apiFetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body)
@@ -169,7 +180,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function apiPostForm<T>(path: string, body: FormData): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await apiFetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: authHeaders(),
     body
@@ -178,7 +189,7 @@ export async function apiPostForm<T>(path: string, body: FormData): Promise<T> {
 }
 
 export async function apiPut<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await apiFetch(`${API_BASE_URL}${path}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body)
@@ -187,7 +198,7 @@ export async function apiPut<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function apiDelete<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, { method: "DELETE", headers: authHeaders() });
+  const response = await apiFetch(`${API_BASE_URL}${path}`, { method: "DELETE", headers: authHeaders() });
   return handleResponse<T>(response);
 }
 
@@ -258,7 +269,7 @@ export const vehicleRegistrationApi = {
 
 export async function apiDownload(path: string, fallbackFilename: string): Promise<void> {
   const url = path.startsWith("/api/v1/") ? `${API_ORIGIN}${path}` : `${API_BASE_URL}${path}`;
-  const response = await fetch(url, { cache: "no-store", headers: authHeaders() });
+  const response = await apiFetch(url, { cache: "no-store", headers: authHeaders() });
   if (!response.ok) {
     await handleResponse<never>(response);
     return;

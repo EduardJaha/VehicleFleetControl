@@ -113,6 +113,65 @@ export type DriverPayload = Omit<Driver, "id" | "assigned_vehicle_id" | "created
   assigned_vehicle_id?: number | null;
 };
 
+export type ImportEntityType =
+  | "Vehicles" | "Drivers" | "Historical Services" | "Fuel and Charging Records"
+  | "Documents Metadata" | "Vehicle Assignments" | "Vendors" | "Parts";
+export type ImportUpdateMode = "create_only" | "update_existing";
+export type ImportTransactionMode = "row" | "file";
+export type ImportJobStatus = "Uploaded" | "Validating" | "Ready" | "Importing" | "Completed" | "Completed With Errors" | "Failed" | "Cancelled";
+
+export type ImportFieldDefinition = {
+  key: string;
+  label: string;
+  required: boolean;
+  example?: string | number | null;
+};
+
+export type ImportRowResult = {
+  id: number;
+  row_number: number;
+  status: string;
+  action: string;
+  raw_data: Record<string, unknown>;
+  mapped_data?: Record<string, unknown> | null;
+  errors: Array<{ field?: string; code?: string; message?: string }>;
+  duplicate_fields: string[];
+  target_id?: number | null;
+};
+
+export type ImportJob = {
+  id: number;
+  entity_type: ImportEntityType;
+  filename: string;
+  uploaded_by: number;
+  status: ImportJobStatus;
+  column_mapping?: Record<string, string> | null;
+  update_mode?: ImportUpdateMode | null;
+  transaction_mode?: ImportTransactionMode | null;
+  source_headers: string[];
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  created_rows: number;
+  updated_rows: number;
+  skipped_rows: number;
+  started_at?: string | null;
+  completed_at?: string | null;
+  error_report_path?: string | null;
+  created_at: string;
+  rows: ImportRowResult[];
+};
+
+export type ImportUpload = {
+  id: number;
+  entity_type: ImportEntityType;
+  filename: string;
+  status: ImportJobStatus;
+  headers: string[];
+  fields: ImportFieldDefinition[];
+  suggested_mapping: Record<string, string>;
+};
+
 export type VehicleAssignmentStatus = "Scheduled" | "Active" | "Completed" | "Cancelled" | "Overdue";
 
 export type VehicleAssignment = {

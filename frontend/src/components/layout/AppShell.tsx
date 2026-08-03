@@ -98,6 +98,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
             </div>
           </details>
           {navItems.slice(3).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
+          {(user.role === "admin" || user.role === "fleet_manager") && <Link href="/imports" className={pathname === "/imports" ? "navLink active" : "navLink"}>{t("navigation:imports")}</Link>}
           <Link href="/notifications" className={pathname === "/notifications" ? "navLink active" : "navLink"}>{t("navigation:notifications")}</Link>
           {user.role === "admin" && <Link href="/audit-logs" className={pathname === "/audit-logs" ? "navLink active" : "navLink"}>{t("navigation:auditLogs")}</Link>}
         </nav>

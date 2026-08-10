@@ -23,6 +23,7 @@ export type Vehicle = {
   model: string;
   fuel_type: string;
   vehicle_location: string;
+  location_id?: number | null;
   vehicle_category?: string | null;
   registration_country: RegistrationCountryCode | null;
   registration_country_name: string | null;
@@ -57,10 +58,21 @@ export type CurrentUser = {
   id: number;
   email: string;
   full_name: string;
-  role: UserRole;
+  role: string;
+  roles: string[];
+  permissions?: string[];
   is_active: boolean;
   preferred_language: "en" | "sq";
+  last_login_at?: string | null;
+  password_reset_required?: boolean;
+  driver_id?: number | null;
+  role_assignments?: ScopeAssignment[];
 };
+
+export type Permission = { id: number; code: string; name: string; description?: string | null; module: string };
+export type Role = { id: number; code: string; name: string; description?: string | null; is_system: boolean; is_active: boolean; permissions: string[]; user_count: number };
+export type ScopeAssignment = { role_id: number; location_id?: number | null; department_id?: number | null; cost_center_id?: number | null; own_records_only: boolean };
+export type MasterDataItem = { id: number; code: string; name: string; is_active: boolean };
 
 export type AuthResponse = {
   access_token: string;
@@ -94,6 +106,8 @@ export type Driver = {
   email?: string | null;
   employee_number: string;
   department?: string | null;
+  department_id?: number | null;
+  cost_center_id?: number | null;
   license_number: string;
   license_category: string;
   license_expiry_date: string;
@@ -628,8 +642,8 @@ export type FuelRecord = {
   fuel_type: string;
   quantity: string | number;
   unit: EnergyUnit;
-  unit_cost: string | number;
-  total_cost: string | number;
+  unit_cost: string | number | null;
+  total_cost: string | number | null;
   location: string;
   station_name: string;
   bill_file_path?: string | null;

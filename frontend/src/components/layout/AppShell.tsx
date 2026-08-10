@@ -13,15 +13,15 @@ import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { translateNotification, translateStatus } from "@/i18n/translate";
 
 const navItems = [
-  { href: "/dashboard", labelKey: "dashboard" },
-  { href: "/vehicles", labelKey: "vehicles" },
-  { href: "/drivers", labelKey: "drivers" },
-  { href: "/vehicle-assignments", labelKey: "vehicleAssignments" },
-  { href: "/reports", labelKey: "reports" },
-  { href: "/compliance/documents", labelKey: "documentCompliance" },
-  { href: "/fuel", labelKey: "fuel" },
-  { href: "/accidents", labelKey: "accidents" },
-  { href: "/reservations", labelKey: "reservations" }
+  { href: "/dashboard", labelKey: "dashboard", permission: "dashboard.view" },
+  { href: "/vehicles", labelKey: "vehicles", permission: "vehicles.view" },
+  { href: "/drivers", labelKey: "drivers", permission: "drivers.view" },
+  { href: "/vehicle-assignments", labelKey: "vehicleAssignments", permission: "assignments.view" },
+  { href: "/reports", labelKey: "reports", permission: "reports.view" },
+  { href: "/compliance/documents", labelKey: "documentCompliance", permission: "documents.view" },
+  { href: "/fuel", labelKey: "fuel", permission: "fuel.view" },
+  { href: "/accidents", labelKey: "accidents", permission: "accidents.view" },
+  { href: "/reservations", labelKey: "reservations", permission: "reservations.view" }
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -35,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function ProtectedShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, ready, logout } = useAuth();
+  const { user, ready, logout, can } = useAuth();
   const { t } = useTranslation(["common", "navigation", "modules"]);
   const { formatDateTime } = useLanguage();
   const isLoginPage = pathname === "/login";
@@ -88,23 +88,26 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
       <aside className="sidebar">
         <div className="brand">{t("common:appName")}</div>
         <nav>
-          {navItems.slice(0, 3).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
-          <details className="navGroup" open={maintenanceActive}>
+          {navItems.slice(0, 3).filter((item) => can(item.permission)).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
+          {(can("maintenance.view") || can("inspections.view")) && <details className="navGroup" open={maintenanceActive}>
             <summary className={maintenanceActive ? "navLink active" : "navLink"}>{t("navigation:maintenance")}</summary>
             <div className="navSubmenu">
-              {MAINTENANCE_LINKS.filter((item) => item.roles.includes(user.role)).map((item) => (
+              {MAINTENANCE_LINKS.filter((item) => can(item.permission)).map((item) => (
                 <Link key={item.href} href={item.href} className={pathname === item.href || (item.href !== "/maintenance" && pathname.startsWith(`${item.href}/`)) ? "navLink navSubLink active" : "navLink navSubLink"}>{t(`navigation:${item.labelKey}`)}</Link>
               ))}
             </div>
-          </details>
-          {navItems.slice(3).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
-          {(user.role === "admin" || user.role === "fleet_manager") && <Link href="/imports" className={pathname === "/imports" ? "navLink active" : "navLink"}>{t("navigation:imports")}</Link>}
+          </details>}
+          {navItems.slice(3).filter((item) => can(item.permission)).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
+          {can("imports.manage") && <Link href="/imports" className={pathname === "/imports" ? "navLink active" : "navLink"}>{t("navigation:imports")}</Link>}
           <Link href="/notifications" className={pathname === "/notifications" ? "navLink active" : "navLink"}>{t("navigation:notifications")}</Link>
-          {user.role === "admin" && <Link href="/audit-logs" className={pathname === "/audit-logs" ? "navLink active" : "navLink"}>{t("navigation:auditLogs")}</Link>}
+          {can("audit_logs.view") && <Link href="/audit-logs" className={pathname === "/audit-logs" ? "navLink active" : "navLink"}>{t("navigation:auditLogs")}</Link>}
+          {can("users.manage") && <Link href="/admin/users" className={pathname.startsWith("/admin/users") ? "navLink active" : "navLink"}>{t("navigation:users")}</Link>}
+          {can("roles.manage") && <Link href="/admin/roles" className={pathname.startsWith("/admin/roles") ? "navLink active" : "navLink"}>{t("navigation:rolesPermissions")}</Link>}
+          {can("settings.manage") && <Link href="/admin/settings" className={pathname.startsWith("/admin/settings") ? "navLink active" : "navLink"}>{t("navigation:organizationSettings")}</Link>}
         </nav>
         <div className="userPanel">
           <div className="userName">{user.full_name}</div>
-          <div className="userRole">{t(`common:roles.${user.role}`)}</div>
+          <div className="userRole">{t(`common:roles.${user.role}`, { defaultValue: user.role.replaceAll("_", " ") })}</div>
           <button className="logoutButton" type="button" onClick={logout}>{t("common:actions.logout")}</button>
         </div>
       </aside>
@@ -123,6 +126,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
             </div>}
           </div>
         </div>
+        {user.password_reset_required && <div className="warningBanner">{t("modules:admin.passwordChangeRequired")} <Link className="link" href="/account/password">{t("modules:admin.changePassword")}</Link></div>}
         {children}
       </main>
     </div>

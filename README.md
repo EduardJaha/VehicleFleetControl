@@ -38,6 +38,15 @@ The project is built with a **Next.js + TypeScript frontend** and a **Python Fas
 
 VehicleFleetControl currently includes the following modules:
 
+### User Administration and Permissions
+
+* Default Admin, Fleet Manager, Mechanic, Driver, Finance, and Viewer roles are retained
+* Granular backend-enforced permissions support custom roles without relying on hidden UI controls
+* Users can have scoped role assignments by Location, Department, Cost Center, or own records only
+* Administrators can create and edit users, activate or deactivate accounts, link Driver profiles, set preferred language, reset passwords, and revoke sessions
+* Locations, Departments, and Cost Centers are managed master data while legacy free-text fields remain available during migration
+* Administration pages are available at `/admin/users`, `/admin/roles`, and `/admin/settings`
+
 ### Dashboard
 
 * Fleet overview

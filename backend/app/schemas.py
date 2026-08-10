@@ -210,7 +210,7 @@ class ReminderStatusUpdate(BaseModel):
 class UserBase(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     full_name: str = Field(min_length=1, max_length=255)
-    role: UserRole = UserRole.viewer
+    role: str = UserRole.viewer.value
     is_active: bool = True
     preferred_language: LanguageCode = LanguageCode.en
 
@@ -232,6 +232,7 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
+    role: UserRole = UserRole.viewer
     password: str = Field(min_length=8, max_length=128)
 
 
@@ -251,7 +252,118 @@ class FirstAdminCreate(BaseModel):
         return UserBase.normalize_full_name(value)
 
 
+class ScopeAssignmentIn(BaseModel):
+    role_id: int
+    location_id: int | None = None
+    department_id: int | None = None
+    cost_center_id: int | None = None
+    own_records_only: bool = False
+
+
 class UserOut(UserBase):
+    id: int
+    roles: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
+    last_login_at: str | None = None
+    password_reset_required: bool = False
+    driver_id: int | None = None
+    role_assignments: list[ScopeAssignmentIn] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PermissionOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    description: str | None = None
+    module: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RoleSummaryOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    description: str | None = None
+    is_system: bool
+    is_active: bool
+    permissions: list[str] = Field(default_factory=list)
+    user_count: int = 0
+
+
+class RoleCreate(BaseModel):
+    code: str = Field(min_length=2, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    name: str = Field(min_length=2, max_length=100)
+    description: str | None = Field(default=None, max_length=500)
+    permission_codes: list[str] = Field(default_factory=list)
+
+
+class RoleUpdate(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    description: str | None = Field(default=None, max_length=500)
+    is_active: bool = True
+    permission_codes: list[str] = Field(default_factory=list)
+
+
+class AdminUserCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+    is_active: bool = True
+    preferred_language: LanguageCode = LanguageCode.en
+    driver_id: int | None = None
+    role_assignments: list[ScopeAssignmentIn]
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return UserBase.normalize_email(value)
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return UserBase.normalize_full_name(value)
+
+
+class AdminUserUpdate(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    full_name: str = Field(min_length=1, max_length=255)
+    is_active: bool = True
+    preferred_language: LanguageCode = LanguageCode.en
+    driver_id: int | None = None
+    role_assignments: list[ScopeAssignmentIn]
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return UserBase.normalize_email(value)
+
+    @field_validator("full_name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return UserBase.normalize_full_name(value)
+
+
+class PasswordResetRequest(BaseModel):
+    temporary_password: str = Field(min_length=8, max_length=128)
+    require_change: bool = True
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class MasterDataCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=150)
+
+
+class MasterDataUpdate(MasterDataCreate):
+    is_active: bool = True
+
+
+class MasterDataOut(MasterDataUpdate):
     id: int
     model_config = ConfigDict(from_attributes=True)
 
@@ -286,6 +398,8 @@ class DriverBase(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     employee_number: str = Field(min_length=1, max_length=100)
     department: str | None = Field(default=None, max_length=100)
+    department_id: int | None = None
+    cost_center_id: int | None = None
     license_number: str = Field(min_length=1, max_length=100)
     license_category: str = Field(min_length=1, max_length=50)
     license_expiry_date: str
@@ -696,6 +810,7 @@ class WorkOrderOut(WorkOrderBase):
 class VehicleFields(BaseModel):
     fuel_type: str
     vehicle_location: str
+    location_id: int | None = None
     vehicle_category: str | None = Field(default=None, max_length=100)
     registration_country: RegistrationCountry | None = None
     license_plate: str
@@ -1090,8 +1205,8 @@ class FuelRecordOut(BaseModel):
     fuel_type: str
     quantity: Decimal
     unit: EnergyUnit
-    unit_cost: Decimal
-    total_cost: Decimal
+    unit_cost: Decimal | None = None
+    total_cost: Decimal | None = None
     location: str
     station_name: str
     bill_file_path: str | None = None
@@ -1108,12 +1223,12 @@ class FuelOverviewOut(BaseModel):
     fuel_type: str
     unit: EnergyUnit
     total_quantity: Decimal
-    total_cost: Decimal
+    total_cost: Decimal | None = None
     record_count: int
 
 
 class FuelFleetTotalsOut(BaseModel):
-    total_fuel_cost: Decimal
+    total_fuel_cost: Decimal | None = None
     total_liters: Decimal
     total_kwh: Decimal
     record_count: int

@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import own_records_only, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import (
     Attachment,
@@ -33,7 +34,7 @@ from app.services.document_compliance import (
 from app.utils.dates import parse_date
 from app.utils.files import store_upload
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("documents.view"))])
 WRITE_ROLES = (UserRole.admin, UserRole.fleet_manager)
 
 
@@ -74,8 +75,8 @@ def version_out(row: DocumentVersion) -> DocumentVersionOut:
     )
 
 
-def _authorize_document(current_user: User, document: VehiclePaper) -> None:
-    if current_user.role != UserRole.driver.value:
+def _authorize_document(db: Session, current_user: User, document: VehiclePaper) -> None:
+    if current_user.role != UserRole.driver.value and not own_records_only(db, current_user, "documents.view"):
         return
     profile = current_user.driver_profile
     if not profile or document.driver_id != profile.id:
@@ -100,7 +101,7 @@ def _owner_and_requirement(
             raise HTTPException(status_code=404, detail="Vehicle not found.")
         if not requirement_applies_to_vehicle(requirement, owner):
             raise HTTPException(status_code=422, detail="This Requirement does not apply to the selected Vehicle.")
-        if current_user.role == UserRole.driver.value:
+        if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "documents.upload"):
             raise HTTPException(status_code=403, detail="Drivers cannot upload Vehicle Documents.")
         return owner, requirement
     if normalized == "driver":
@@ -109,7 +110,7 @@ def _owner_and_requirement(
             raise HTTPException(status_code=404, detail="Driver not found.")
         if not requirement_applies_to_driver(requirement, owner):
             raise HTTPException(status_code=422, detail="This Requirement does not apply to Drivers.")
-        if current_user.role == UserRole.driver.value and (
+        if (current_user.role == UserRole.driver.value or own_records_only(db, current_user, "documents.upload")) and (
             not current_user.driver_profile or current_user.driver_profile.id != owner.id
         ):
             raise HTTPException(status_code=403, detail="Drivers can only upload their own Documents.")
@@ -140,7 +141,7 @@ def list_requirements(
 def create_requirement(
     payload: DocumentRequirementCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("documents.verify")),
 ):
     row = DocumentRequirement(**payload.model_dump())
     db.add(row)
@@ -164,7 +165,7 @@ def update_requirement(
     requirement_id: int,
     payload: DocumentRequirementUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("documents.verify")),
 ):
     row = db.get(DocumentRequirement, requirement_id)
     if not row:
@@ -192,7 +193,7 @@ def get_document_compliance(
     current_user: User = Depends(get_current_user),
 ):
     result = compliance_dashboard(db)
-    if current_user.role == UserRole.driver.value:
+    if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "documents.view"):
         driver_id = current_user.driver_profile.id if current_user.driver_profile else None
         result["items"] = [
             item for item in result["items"]
@@ -227,7 +228,7 @@ async def upload_document(
     issuing_authority: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.driver)),
+    current_user: User = Depends(require_permission("documents.upload")),
 ):
     owner, requirement = _owner_and_requirement(
         db,
@@ -316,7 +317,7 @@ def list_versions(
     document = db.query(VehiclePaper).options(joinedload(VehiclePaper.versions)).filter(VehiclePaper.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found.")
-    _authorize_document(current_user, document)
+    _authorize_document(db, current_user, document)
     return [version_out(row) for row in document.versions]
 
 
@@ -329,12 +330,12 @@ async def renew_document(
     issuing_authority: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.driver)),
+    current_user: User = Depends(require_permission("documents.upload")),
 ):
     document = db.query(VehiclePaper).options(joinedload(VehiclePaper.versions)).filter(VehiclePaper.id == document_id).first()
     if not document or document.archived:
         raise HTTPException(status_code=404, detail="Document not found.")
-    _authorize_document(current_user, document)
+    _authorize_document(db, current_user, document)
     issue, expiry = _validate_dates(issue_date, expiry_date)
     stored = await store_upload(file, "documents", "document")
     for previous in document.versions:
@@ -392,7 +393,7 @@ def verify_version(
     version_id: int,
     payload: DocumentVerificationRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("documents.verify")),
 ):
     version = db.query(DocumentVersion).options(joinedload(DocumentVersion.document)).filter(DocumentVersion.id == version_id).first()
     if not version or version.archived:
@@ -422,7 +423,7 @@ def verify_version(
 def archive_document(
     document_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("documents.verify")),
 ):
     document = db.get(VehiclePaper, document_id)
     if not document:
@@ -442,7 +443,7 @@ def archive_document(
 def restore_document(
     document_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("documents.verify")),
 ):
     document = db.get(VehiclePaper, document_id)
     if not document:

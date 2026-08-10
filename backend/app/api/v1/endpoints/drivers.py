@@ -5,10 +5,11 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import authorization_scope, has_permission, require_permission
+from app.core.security import get_current_user
 from app.core.errors import localized_http_exception
 from app.db.session import get_db
-from app.models import Driver, User, Vehicle, VehicleAssignment
+from app.models import CostCenter, Department, Driver, User, Vehicle, VehicleAssignment
 from app.schemas import DriverCreate, DriverOut, DriverStatus, DriverUpdate, UserRole
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate
@@ -18,7 +19,7 @@ from app.services.vehicle_assignments import (
     ensure_no_active_conflicts,
 )
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("drivers.view"))])
 
 
 def driver_out(driver: Driver) -> DriverOut:
@@ -29,6 +30,8 @@ def driver_out(driver: Driver) -> DriverOut:
         email=driver.email,
         employee_number=driver.employee_number,
         department=driver.department,
+        department_id=driver.department_id,
+        cost_center_id=driver.cost_center_id,
         license_number=driver.license_number,
         license_category=driver.license_category,
         license_expiry_date=format_date(driver.license_expiry_date) or "",
@@ -71,6 +74,14 @@ def apply_driver_payload(driver: Driver, payload: DriverCreate | DriverUpdate, d
     driver.email = payload.email
     driver.employee_number = payload.employee_number.strip()
     driver.department = payload.department
+    if payload.department_id is not None and not db.get(Department, payload.department_id):
+        raise HTTPException(status_code=422, detail="The selected Department does not exist.")
+    if payload.cost_center_id is not None and not db.get(CostCenter, payload.cost_center_id):
+        raise HTTPException(status_code=422, detail="The selected Cost Center does not exist.")
+    driver.department_id = payload.department_id or (
+        db.query(Department.id).filter(Department.name.ilike(payload.department)).scalar() if payload.department else None
+    )
+    driver.cost_center_id = payload.cost_center_id
     driver.license_number = payload.license_number.strip()
     driver.license_category = payload.license_category.strip()
     driver.license_expiry_date = parse_date(payload.license_expiry_date, "LicenseExpiryDate")
@@ -158,8 +169,18 @@ def list_drivers(
     current_user: User = Depends(get_current_user),
 ):
     query = db.query(Driver).options(joinedload(Driver.assigned_vehicle))
-    if include_archived and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can include archived Drivers.")
+    access_scope = authorization_scope(db, current_user, "drivers.view")
+    if not access_scope.unrestricted:
+        if access_scope.department_ids:
+            query = query.filter(Driver.department_id.in_(access_scope.department_ids))
+        if access_scope.cost_center_ids:
+            query = query.filter(Driver.cost_center_id.in_(access_scope.cost_center_ids))
+        if access_scope.own_records_only:
+            query = query.filter(Driver.user_id == current_user.id)
+        elif not access_scope.department_ids and not access_scope.cost_center_ids:
+            query = query.filter(False)
+    if include_archived and not has_permission(db, current_user, "drivers.manage"):
+        raise HTTPException(status_code=403, detail="drivers.manage is required to include archived Drivers.")
     if not include_archived:
         query = query.filter(Driver.archived.is_(False))
     if search:
@@ -186,7 +207,7 @@ def list_drivers(
 
 
 @router.post("", response_model=DriverOut, status_code=201)
-def create_driver(payload: DriverCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def create_driver(payload: DriverCreate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("drivers.manage"))):
     driver = Driver()
     apply_driver_payload(driver, payload, db)
     db.add(driver)
@@ -221,7 +242,7 @@ def get_driver(driver_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{driver_id}", response_model=DriverOut)
-def update_driver(driver_id: int, payload: DriverUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def update_driver(driver_id: int, payload: DriverUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("drivers.manage"))):
     driver = db.query(Driver).options(joinedload(Driver.assigned_vehicle)).filter(Driver.id == driver_id).first()
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found.")
@@ -260,7 +281,7 @@ def update_driver(driver_id: int, payload: DriverUpdate, db: Session = Depends(g
 
 
 @router.delete("/{driver_id}")
-def delete_driver(driver_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def delete_driver(driver_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("drivers.manage"))):
     driver = db.get(Driver, driver_id)
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found.")
@@ -287,7 +308,7 @@ def delete_driver(driver_id: int, db: Session = Depends(get_db), current_user: U
 def restore_driver(
     driver_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("drivers.manage")),
 ):
     driver = db.query(Driver).options(joinedload(Driver.assigned_vehicle)).filter(Driver.id == driver_id).first()
     if not driver:

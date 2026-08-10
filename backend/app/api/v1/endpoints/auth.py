@@ -2,15 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token, get_current_user, hash_password, require_roles, verify_password
+from app.core.authorization import get_user_permissions, require_permission
+from app.core.security import create_access_token, get_current_user, hash_password, verify_password
 from app.db.session import get_db
-from app.models import User
+from app.models import Role, User, UserRole as UserRoleAssignment
 from app.schemas import (
     FirstAdminCreate,
     LanguageCode,
     LanguagePreferenceOut,
     LanguagePreferenceUpdate,
     LoginRequest,
+    PasswordChangeRequest,
     TokenOut,
     UserCreate,
     UserOut,
@@ -21,14 +23,27 @@ from app.services.audit import record_audit
 router = APIRouter()
 
 
-def user_out(user: User) -> UserOut:
+def user_out(user: User, db: Session | None = None) -> UserOut:
+    assignments = list(user.role_assignments) if db is not None else []
     return UserOut(
         id=user.id,
         email=user.email,
         full_name=user.full_name,
-        role=UserRole(user.role),
+        role=user.role,
         is_active=user.is_active,
         preferred_language=LanguageCode(user.preferred_language or "en"),
+        roles=[assignment.role.code for assignment in assignments] or [user.role],
+        permissions=sorted(get_user_permissions(db, user)),
+        last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
+        password_reset_required=user.password_reset_required,
+        driver_id=user.driver_profile.id if user.driver_profile else None,
+        role_assignments=[{
+            "role_id": assignment.role_id,
+            "location_id": assignment.location_id,
+            "department_id": assignment.department_id,
+            "cost_center_id": assignment.cost_center_id,
+            "own_records_only": assignment.own_records_only,
+        } for assignment in assignments],
     )
 
 
@@ -37,16 +52,21 @@ def find_user_by_email(db: Session, email: str) -> User | None:
 
 
 def create_user_record(db: Session, payload: UserCreate | FirstAdminCreate, role: UserRole | None = None) -> User:
+    selected_role = role or getattr(payload, "role", UserRole.viewer)
     user = User(
         email=payload.email.strip().lower(),
         full_name=payload.full_name.strip(),
         hashed_password=hash_password(payload.password),
-        role=(role or getattr(payload, "role", UserRole.viewer)).value,
+        role=selected_role.value if isinstance(selected_role, UserRole) else str(selected_role),
         is_active=getattr(payload, "is_active", True),
         preferred_language=getattr(payload, "preferred_language", LanguageCode.en).value,
     )
     db.add(user)
     try:
+        db.flush()
+        configured_role = db.query(Role).filter(Role.code == user.role, Role.is_active.is_(True)).first()
+        if configured_role:
+            db.add(UserRoleAssignment(user_id=user.id, role_id=configured_role.id))
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -66,7 +86,7 @@ def register_first_admin(payload: FirstAdminCreate, db: Session = Depends(get_db
         description="Initial Admin user created.",
     )
     db.commit()
-    return TokenOut(access_token=create_access_token(user.id), user=user_out(user))
+    return TokenOut(access_token=create_access_token(user.id, session_version=user.session_version), user=user_out(user, db))
 
 
 @router.post("/login", response_model=TokenOut)
@@ -86,26 +106,28 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         )
         db.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive.")
+    from datetime import datetime
+    user.last_login_at = datetime.utcnow()
     record_audit(
         db, action="Login success", entity_type="User", entity_id=user.id, user=user,
         description="User logged in successfully.",
     )
     db.commit()
-    return TokenOut(access_token=create_access_token(user.id), user=user_out(user))
+    return TokenOut(access_token=create_access_token(user.id, session_version=user.session_version), user=user_out(user, db))
 
 
 @router.get("/me", response_model=UserOut)
-def me(current_user: User = Depends(get_current_user)):
-    return user_out(current_user)
+def me(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return user_out(current_user, db)
 
 
 @router.get("/users", response_model=list[UserOut])
 def list_users(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager)),
+    _: User = Depends(require_permission("users.manage")),
 ):
     return [
-        user_out(user)
+        user_out(user, db)
         for user in db.query(User).order_by(User.full_name, User.email).all()
     ]
 
@@ -135,8 +157,27 @@ def update_my_language(
     return LanguagePreferenceOut(preferred_language=payload.language)
 
 
+@router.put("/me/password", response_model=TokenOut)
+def change_my_password(
+    payload: PasswordChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    current_user.hashed_password = hash_password(payload.new_password)
+    current_user.password_reset_required = False
+    current_user.session_version = (current_user.session_version or 0) + 1
+    record_audit(db, action="Password changed", entity_type="User", entity_id=current_user.id, user=current_user, description="User changed their password and existing sessions were revoked.")
+    db.commit()
+    return TokenOut(
+        access_token=create_access_token(current_user.id, session_version=current_user.session_version),
+        user=user_out(current_user, db),
+    )
+
+
 @router.post("/users", response_model=UserOut, status_code=201)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin))):
+def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("users.manage"))):
     user = create_user_record(db, payload)
     record_audit(
         db, action="User created", entity_type="User", entity_id=user.id, user=current_user,
@@ -144,4 +185,4 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user
         description=f"User {user.email} created.",
     )
     db.commit()
-    return user_out(user)
+    return user_out(user, db)

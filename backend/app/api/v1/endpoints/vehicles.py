@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import authorization_scope, has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
-from app.models import User, Vehicle, VehicleAssignment, VehicleBrand, VehicleModel
+from app.models import Location, User, Vehicle, VehicleAssignment, VehicleBrand, VehicleModel
 from app.schemas import RegistrationCountry, UserRole, VehicleCreate, VehicleOut, VehicleUpdate, UpdateLocation, UpdateStatus
 from app.schemas import MaintenanceTimelinePage, VehicleMaintenanceSummaryOut
 from app.api.v1.endpoints.maintenance import vehicle_summary, vehicle_timeline
@@ -20,7 +21,7 @@ from app.services.license_plates import (
 )
 from app.services.vehicle_assignments import ACTIVE_ASSIGNMENT_STATUSES
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("vehicles.view"))])
 
 
 def vehicle_out(vehicle: Vehicle) -> VehicleOut:
@@ -32,6 +33,7 @@ def vehicle_out(vehicle: Vehicle) -> VehicleOut:
         model=vehicle.model,
         fuel_type=vehicle.fuel_type,
         vehicle_location=vehicle.vehicle_location,
+        location_id=vehicle.location_id,
         vehicle_category=vehicle.vehicle_category,
         registration_country=vehicle.registration_country,
         registration_country_name=registration_country_name(vehicle.registration_country),
@@ -85,8 +87,21 @@ def list_vehicles(
     current_user: User = Depends(get_current_user),
 ):
     query = db.query(Vehicle)
-    if include_archived and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can include archived Vehicles.")
+    access_scope = authorization_scope(db, current_user, "vehicles.view")
+    if not access_scope.unrestricted:
+        if access_scope.location_ids:
+            query = query.filter(Vehicle.location_id.in_(access_scope.location_ids))
+        elif not access_scope.own_records_only:
+            query = query.filter(False)
+        if access_scope.own_records_only:
+            from app.models import Driver
+            driver = db.query(Driver).filter(Driver.user_id == current_user.id).first()
+            if driver is None:
+                query = query.filter(False)
+            else:
+                query = query.filter(Vehicle.id.in_(db.query(VehicleAssignment.vehicle_id).filter(VehicleAssignment.driver_id == driver.id)))
+    if include_archived and not has_permission(db, current_user, "vehicles.archive"):
+        raise HTTPException(status_code=403, detail="vehicles.archive is required to include archived Vehicles.")
     if not include_archived:
         query = query.filter(Vehicle.archived.is_(False))
     if status is not None and status != "":
@@ -111,7 +126,7 @@ def list_vehicles(
 
 
 @router.post("", response_model=VehicleOut, status_code=201)
-def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("vehicles.create"))):
     brand, model = validate_catalog_selection(db, payload.brand_id, payload.model_id)
     normalized_plate = normalize_license_plate(payload.registration_country, payload.license_plate)
     existing = (
@@ -135,6 +150,7 @@ def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), curren
         model=model.name,
         fuel_type=payload.fuel_type.strip(),
         vehicle_location=payload.vehicle_location.strip(),
+        location_id=(payload.location_id or (db.query(Location.id).filter(Location.name.ilike(payload.vehicle_location.strip())).scalar())),
         vehicle_category=payload.vehicle_category,
         registration_country=payload.registration_country.value,
         license_plate=payload.license_plate,
@@ -192,7 +208,7 @@ def get_vehicle_maintenance_timeline(vehicle_id: int, page: int = 1, page_size: 
 
 
 @router.put("/{vehicle_id}", response_model=VehicleOut)
-def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("vehicles.edit"))):
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
@@ -230,6 +246,7 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
         vehicle.model = model.name
     vehicle.fuel_type = payload.fuel_type.strip()
     vehicle.vehicle_location = payload.vehicle_location.strip()
+    vehicle.location_id = payload.location_id or db.query(Location.id).filter(Location.name.ilike(payload.vehicle_location.strip())).scalar()
     vehicle.vehicle_category = payload.vehicle_category
     old_registration_country = vehicle.registration_country
     old_license_plate = vehicle.license_plate
@@ -289,7 +306,7 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
 
 
 @router.put("/status/{license_plate}", response_model=VehicleOut)
-def update_vehicle_status(license_plate: str, payload: UpdateStatus, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def update_vehicle_status(license_plate: str, payload: UpdateStatus, db: Session = Depends(get_db), current_user: User = Depends(require_permission("vehicles.edit"))):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
@@ -313,18 +330,19 @@ def update_vehicle_status(license_plate: str, payload: UpdateStatus, db: Session
 
 
 @router.put("/location/{license_plate}", response_model=VehicleOut)
-def update_vehicle_location(license_plate: str, payload: UpdateLocation, db: Session = Depends(get_db), _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def update_vehicle_location(license_plate: str, payload: UpdateLocation, db: Session = Depends(get_db), _: User = Depends(require_permission("vehicles.edit"))):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
     vehicle.vehicle_location = payload.new_location.strip()
+    vehicle.location_id = db.query(Location.id).filter(Location.name.ilike(payload.new_location.strip())).scalar()
     db.commit()
     db.refresh(vehicle)
     return vehicle_out(vehicle)
 
 
 @router.delete("/{vehicle_id}")
-def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("vehicles.archive"))):
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
@@ -351,7 +369,7 @@ def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), current_user:
 def restore_vehicle(
     vehicle_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("vehicles.archive")),
 ):
     vehicle = db.get(Vehicle, vehicle_id)
     if not vehicle:

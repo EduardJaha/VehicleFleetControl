@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.security import require_roles
+from app.core.authorization import require_permission
 from app.db.session import get_db
 from app.models import (
     Driver, User, Vehicle, VehicleAccident, VehicleAssignment, VehicleFuel,
@@ -22,7 +22,7 @@ from app.services.audit import record_audit
 from app.services.document_compliance import compliance_dashboard
 from app.core.i18n import request_language
 
-router = APIRouter(dependencies=[Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.finance))])
+router = APIRouter(dependencies=[Depends(require_permission("reports.view"))])
 
 
 def money(value: str | Decimal | int | float | None) -> Decimal:
@@ -644,7 +644,7 @@ def export_report(
     department: str | None = None, driver_id: int | None = None,
     registration_country: str | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.finance)),
+    current_user: User = Depends(require_permission("reports.export")),
 ):
     report = REPORTS.get(report_name)
     if not report:

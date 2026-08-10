@@ -2,7 +2,7 @@ from collections import Counter
 from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
-from app.core.security import get_current_user
+from app.core.authorization import require_permission
 from app.db.session import get_db
 from app.models import Vehicle, VehicleAssignment, VehicleReservation
 from app.schemas import (
@@ -14,7 +14,7 @@ from app.schemas import (
 )
 from app.utils.domain import reservation_status_name, parse_vehicle_status
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("dashboard.view"))])
 
 
 @router.get("/summary", response_model=DashboardSummaryOut)

@@ -4,7 +4,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import Attachment, User, Vehicle, VehicleFuel
 from app.schemas import (
@@ -21,7 +22,7 @@ from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.utils.files import store_upload
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("fuel.view"))])
 VALID_FUEL_TYPES = {"Petrol", "Diesel", "Hybrid", "Electric", "LPG", "CNG", "Gas"}
 MONEY_QUANTUM = Decimal("0.01")
 FUEL_AUDIT_FIELDS = (
@@ -82,7 +83,7 @@ def unit_cost_error(unit: EnergyUnit) -> str:
     return "Cost per liter cannot be negative."
 
 
-def fuel_record_out(record: VehicleFuel) -> FuelRecordOut:
+def fuel_record_out(record: VehicleFuel, *, show_cost: bool = True) -> FuelRecordOut:
     vehicle = record.vehicle
     return FuelRecordOut(
         id=record.id,
@@ -95,8 +96,8 @@ def fuel_record_out(record: VehicleFuel) -> FuelRecordOut:
         fuel_type=record.fuel_type,
         quantity=record.quantity,
         unit=EnergyUnit(record.unit),
-        unit_cost=record.unit_cost,
-        total_cost=record.total_cost,
+        unit_cost=record.unit_cost if show_cost else None,
+        total_cost=record.total_cost if show_cost else None,
         location=record.location,
         station_name=record.station_name,
         bill_file_path=record.bill_file_path,
@@ -208,7 +209,7 @@ async def add_fuel_record(
     liters: Decimal | None = Form(None),
     cost_per_liter: Decimal | None = Form(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.finance)),
+    current_user: User = Depends(require_permission("fuel.create")),
 ):
     vehicle = resolve_vehicle(
         db,
@@ -331,7 +332,7 @@ async def add_fuel_record(
 
 
 @router.get("/record/{record_id}", response_model=FuelRecordOut)
-def get_fuel_record(record_id: int, db: Session = Depends(get_db)):
+def get_fuel_record(record_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     record = (
         db.query(VehicleFuel)
         .options(joinedload(VehicleFuel.vehicle))
@@ -343,7 +344,7 @@ def get_fuel_record(record_id: int, db: Session = Depends(get_db)):
             status_code=404,
             detail=f"Fuel record with id '{record_id}' was not found.",
         )
-    return fuel_record_out(record)
+    return fuel_record_out(record, show_cost=has_permission(db, current_user, "fuel.view_cost"))
 
 
 @router.put("/{record_id}")
@@ -351,7 +352,7 @@ def update_fuel_record(
     record_id: int,
     payload: FuelUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.finance)),
+    current_user: User = Depends(require_permission("fuel.edit")),
 ):
     record = (
         db.query(VehicleFuel)
@@ -438,16 +439,17 @@ def all_fuel_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if include_archived and current_user.role != UserRole.admin.value:
+    if include_archived and not has_permission(db, current_user, "fuel.edit"):
         raise HTTPException(
             status_code=403,
-            detail="Only Admin users can include archived Fuel records.",
+            detail="fuel.edit is required to include archived Fuel records.",
         )
     query = db.query(VehicleFuel).options(joinedload(VehicleFuel.vehicle))
     if not include_archived:
         query = query.filter(VehicleFuel.archived.is_(False))
     records = query.order_by(VehicleFuel.refuel_date.desc()).all()
-    return [fuel_record_out(record) for record in records]
+    show_cost = has_permission(db, current_user, "fuel.view_cost")
+    return [fuel_record_out(record, show_cost=show_cost) for record in records]
 
 
 def filtered_fuel_query(
@@ -496,6 +498,7 @@ def overview(
     location: str | None = None,
     station: str | None = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     records = filtered_fuel_query(
         db,
@@ -524,8 +527,9 @@ def overview(
         grouped[key]["total_quantity"] += Decimal(str(record.quantity or "0"))
         grouped[key]["total_cost"] += Decimal(str(record.total_cost or "0"))
         grouped[key]["record_count"] += 1
+    show_cost = not isinstance(current_user, User) or has_permission(db, current_user, "fuel.view_cost")
     return [
-        FuelOverviewOut(**values)
+        FuelOverviewOut(**{**values, "total_cost": values["total_cost"] if show_cost else None})
         for values in sorted(
             grouped.values(),
             key=lambda value: (value["license_plate"], value["unit"].value),
@@ -542,6 +546,7 @@ def overview_totals(
     location: str | None = None,
     station: str | None = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     records = filtered_fuel_query(
         db,
@@ -563,7 +568,7 @@ def overview_totals(
             total_liters += quantity
         total_cost += Decimal(str(record.total_cost or "0"))
     return FuelFleetTotalsOut(
-        total_fuel_cost=total_cost,
+        total_fuel_cost=total_cost if not isinstance(current_user, User) or has_permission(db, current_user, "fuel.view_cost") else None,
         total_liters=total_liters,
         total_kwh=total_kwh,
         record_count=len(records),
@@ -571,7 +576,7 @@ def overview_totals(
 
 
 @router.get("/{license_plate}", response_model=list[FuelRecordOut])
-def by_license_plate(license_plate: str, db: Session = Depends(get_db)):
+def by_license_plate(license_plate: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
         raise HTTPException(
@@ -588,14 +593,15 @@ def by_license_plate(license_plate: str, db: Session = Depends(get_db)):
         .order_by(VehicleFuel.refuel_date.desc())
         .all()
     )
-    return [fuel_record_out(record) for record in records]
+    show_cost = has_permission(db, current_user, "fuel.view_cost")
+    return [fuel_record_out(record, show_cost=show_cost) for record in records]
 
 
 @router.delete("/{record_id}")
 def delete_fuel_record(
     record_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.finance)),
+    current_user: User = Depends(require_permission("fuel.edit")),
 ):
     record = db.query(VehicleFuel).filter(VehicleFuel.id == record_id).first()
     if not record:
@@ -628,7 +634,7 @@ def delete_fuel_record(
 def restore_fuel_record(
     record_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("fuel.edit")),
 ):
     record = (
         db.query(VehicleFuel)

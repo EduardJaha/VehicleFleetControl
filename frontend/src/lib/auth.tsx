@@ -9,25 +9,55 @@ import {
   LanguageCode,
   userLanguageSyncKey
 } from "@/i18n/language";
-import type { AuthResponse, CurrentUser, UserRole } from "@/lib/types";
+import type { AuthResponse, CurrentUser } from "@/lib/types";
 
 export const PERMISSIONS = {
-  vehiclesWrite: ["admin", "fleet_manager"],
-  driversWrite: ["admin", "fleet_manager"],
-  vehicleAssignmentsWrite: ["admin", "fleet_manager"],
-  inspectionsCreate: ["admin", "fleet_manager", "mechanic", "driver"],
-  inspectionsWrite: ["admin", "fleet_manager", "mechanic"],
-  workOrdersWrite: ["admin", "fleet_manager", "mechanic"],
-  papersWrite: ["admin", "fleet_manager"],
-  reservationsCreate: ["admin", "fleet_manager", "driver"],
-  reservationsApprove: ["admin", "fleet_manager"],
-  servicesWrite: ["admin", "fleet_manager", "mechanic"],
-  fuelWrite: ["admin", "finance"],
-  accidentsWrite: ["admin", "fleet_manager"],
-  claimsWrite: ["admin", "fleet_manager", "finance"],
-  reportsRead: ["admin", "fleet_manager", "finance"],
-  importsWrite: ["admin", "fleet_manager"]
-} as const satisfies Record<string, readonly UserRole[]>;
+  vehiclesWrite: "vehicles.edit",
+  driversWrite: "drivers.manage",
+  vehicleAssignmentsWrite: "assignments.manage",
+  inspectionsCreate: "inspections.create",
+  inspectionsWrite: "inspections.manage",
+  workOrdersWrite: "maintenance.assign_work_order",
+  papersWrite: "documents.verify",
+  reservationsCreate: "reservations.create",
+  reservationsApprove: "reservations.approve",
+  servicesWrite: "maintenance.assign_work_order",
+  fuelWrite: "fuel.create",
+  accidentsWrite: "accidents.manage",
+  claimsWrite: "claims.manage",
+  reportsRead: "reports.view",
+  importsWrite: "imports.manage"
+} as const;
+
+// Compatibility for sessions created before granular permissions were added.
+// The API-provided list always wins when present; backend authorization remains authoritative.
+const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  admin: [
+    "dashboard.view", "vehicles.view", "vehicles.create", "vehicles.edit", "vehicles.archive",
+    "drivers.view", "drivers.manage", "assignments.view", "assignments.manage",
+    "fuel.view", "fuel.create", "fuel.edit", "fuel.view_cost",
+    "maintenance.view", "maintenance.create_work_order", "maintenance.assign_work_order", "maintenance.complete_work_order",
+    "inspections.view", "inspections.create", "inspections.manage",
+    "documents.view", "documents.upload", "documents.verify",
+    "reservations.view", "reservations.create", "reservations.approve",
+    "reports.view", "reports.export", "accidents.view", "accidents.manage", "claims.manage",
+    "imports.manage", "audit_logs.view", "users.manage", "roles.manage", "settings.manage"
+  ],
+  fleet_manager: [
+    "dashboard.view", "vehicles.view", "vehicles.create", "vehicles.edit", "vehicles.archive",
+    "drivers.view", "drivers.manage", "assignments.view", "assignments.manage",
+    "fuel.view", "fuel.create", "fuel.edit", "fuel.view_cost",
+    "maintenance.view", "maintenance.create_work_order", "maintenance.assign_work_order", "maintenance.complete_work_order",
+    "inspections.view", "inspections.create", "inspections.manage",
+    "documents.view", "documents.upload", "documents.verify",
+    "reservations.view", "reservations.create", "reservations.approve", "reports.view", "reports.export",
+    "accidents.view", "accidents.manage", "claims.manage", "imports.manage", "audit_logs.view"
+  ],
+  mechanic: ["dashboard.view", "vehicles.view", "drivers.view", "assignments.view", "maintenance.view", "maintenance.create_work_order", "maintenance.assign_work_order", "maintenance.complete_work_order", "inspections.view", "inspections.create", "inspections.manage", "documents.view", "accidents.view"],
+  driver: ["dashboard.view", "vehicles.view", "assignments.view", "fuel.view", "fuel.create", "maintenance.view", "inspections.view", "inspections.create", "documents.view", "documents.upload", "reservations.view", "reservations.create", "accidents.view"],
+  finance: ["dashboard.view", "vehicles.view", "drivers.view", "fuel.view", "fuel.create", "fuel.edit", "fuel.view_cost", "maintenance.view", "documents.view", "reports.view", "reports.export", "accidents.view", "claims.manage"],
+  viewer: ["dashboard.view", "vehicles.view", "drivers.view", "assignments.view", "fuel.view", "maintenance.view", "inspections.view", "documents.view", "reservations.view", "accidents.view"]
+};
 
 type PermissionKey = keyof typeof PERMISSIONS;
 
@@ -37,7 +67,7 @@ type AuthContextValue = {
   login: (email: string, password: string) => Promise<void>;
   registerFirstAdmin: (payload: { email: string; full_name: string; password: string }) => Promise<void>;
   logout: () => void;
-  can: (permission: PermissionKey) => boolean;
+  can: (permission: PermissionKey | string) => boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -120,8 +150,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setReady(true);
     },
-    can(permission: PermissionKey) {
-      return !!user && (PERMISSIONS[permission] as readonly UserRole[]).includes(user.role);
+    can(permission: PermissionKey | string) {
+      if (!user) return false;
+      const code = permission in PERMISSIONS ? PERMISSIONS[permission as PermissionKey] : permission;
+      const granted = Array.isArray(user.permissions)
+        ? user.permissions
+        : DEFAULT_ROLE_PERMISSIONS[user.role] ?? [];
+      return granted.includes(code);
     }
   }), [ready, user]);
 

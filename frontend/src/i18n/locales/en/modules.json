@@ -997,6 +997,18 @@
     },
     "actions": { "create": "Create", "update": "Update", "skip": "Skip" }
   },
+  "admin": {
+    "usersTitle": "User Administration", "usersDescription": "Manage accounts, roles, scopes, language, driver links, and active sessions.",
+    "rolesTitle": "Roles and Permissions", "rolesDescription": "Keep the default fleet roles or create granular roles for your organization.",
+    "settingsTitle": "Organization Settings", "settingsDescription": "Maintain controlled locations, departments, and cost centers while legacy text fields remain compatible.",
+    "createUser": "Create user", "editUser": "Edit user", "user": "User", "role": "Role", "roles": "Roles", "status": "Status", "lastLogin": "Last login", "never": "Never",
+    "fullName": "Full name", "email": "Email", "password": "Password", "temporaryPassword": "Temporary password", "language": "Preferred language", "driverProfile": "Driver profile",
+    "locationScope": "Location scope", "departmentScope": "Department scope", "costCenterScope": "Cost center scope", "ownRecordsOnly": "Own records only", "all": "All (unrestricted)",
+    "active": "Active", "inactive": "Inactive", "forceLogout": "Force logout", "resetPassword": "Reset password", "saved": "Changes saved.", "passwordReset": "Password reset and existing sessions revoked.", "sessionsRevoked": "All sessions revoked.",
+    "createRole": "Create role", "editRole": "Edit role", "roleCode": "Role code", "roleName": "Role name", "description": "Description", "permissions": "Permissions", "userCount": "{{count}} users",
+    "locations": "Locations", "departments": "Departments", "costcenters": "Cost Centers", "editSetting": "Edit setting", "createSetting": "Create setting", "code": "Code", "name": "Name", "requestFailed": "The administration data could not be loaded. Please try again.", "noAccess": "You do not have permission to view this page.",
+    "changePassword": "Change password", "currentPassword": "Current password", "newPassword": "New password", "confirmPassword": "Confirm password", "passwordChangeRequired": "You must change your temporary password.", "passwordsDoNotMatch": "The new passwords do not match.", "passwordChangeFailed": "The password could not be changed."
+  },
   "bulk": {
     "selected": "{{count}} selected", "selectAll": "Select all visible records", "selectRow": "Select {{name}}",
     "archive": "Archive", "restore": "Restore", "changeStatus": "Change Status", "changeLocation": "Change Location",

@@ -233,7 +233,7 @@ def test_workflow_guards_permissions_and_driver_attachment_scope(db: Session, re
         resolve_accident(accident.id, db, users["fleet_manager"])
     assert transition.value.status_code == 409
 
-    authorize_entity_access(users["driver"], "VehicleAccident", accident)
+    authorize_entity_access(db, users["driver"], "VehicleAccident", accident)
     other_driver = Driver(
         full_name="Other Driver", employee_number="ACC-DRIVER-2", license_number="ACC-LIC-2",
         license_category="B", license_expiry_date=datetime.utcnow() + timedelta(days=365), status="Active",
@@ -243,7 +243,7 @@ def test_workflow_guards_permissions_and_driver_attachment_scope(db: Session, re
     accident.driver_id = other_driver.id
     db.commit()
     with pytest.raises(HTTPException) as denied:
-        authorize_entity_access(users["driver"], "VehicleAccident", accident)
+        authorize_entity_access(db, users["driver"], "VehicleAccident", accident)
     assert denied.value.status_code == 403
 
     mark_vehicle_unavailable(accident.id, db, users["fleet_manager"])

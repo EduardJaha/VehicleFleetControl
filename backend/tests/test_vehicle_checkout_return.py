@@ -364,5 +364,5 @@ def test_driver_cannot_access_another_drivers_condition_attachments(db: Session,
     condition = db.get(VehicleConditionRecord, result.condition_record.id)
 
     with pytest.raises(HTTPException) as denied:
-        authorize_entity_access(other_user, "VehicleConditionRecord", condition)
+        authorize_entity_access(db, other_user, "VehicleConditionRecord", condition)
     assert denied.value.status_code == 403

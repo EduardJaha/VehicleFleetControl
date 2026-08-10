@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.security import require_roles
+from app.core.authorization import require_permission
 from app.db.session import get_db
 from app.models import AuditLog, User
 from app.schemas import AuditLogOut, AuditLogPage, UserRole
@@ -47,7 +47,7 @@ def list_audit_logs(
     page: int = 1,
     page_size: int = 50,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager)),
+    _: User = Depends(require_permission("audit_logs.view")),
 ):
     if page < 1 or page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")

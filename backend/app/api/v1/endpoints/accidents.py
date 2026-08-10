@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, own_records_only, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import (
     AccidentClaim,
@@ -42,7 +43,7 @@ from app.utils.dates import format_date, parse_date
 from app.utils.domain import VehicleStatusEnum, find_vehicle_by_plate
 from app.utils.files import file_url, store_upload
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("accidents.view"))])
 MANAGE_ROLES = (UserRole.admin, UserRole.fleet_manager)
 CLAIM_ROLES = (UserRole.admin, UserRole.fleet_manager, UserRole.finance)
 
@@ -93,8 +94,8 @@ def get_accident(db: Session, accident_id: int, *, include_archived: bool = Fals
     return accident
 
 
-def authorize_driver(current_user: User, accident: VehicleAccident) -> None:
-    if current_user.role == UserRole.driver.value:
+def authorize_driver(db: Session, current_user: User, accident: VehicleAccident) -> None:
+    if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "accidents.view"):
         if not current_user.driver_profile or current_user.driver_profile.id != accident.driver_id:
             raise HTTPException(status_code=403, detail="Drivers can only access their own Accident records.")
 
@@ -188,7 +189,7 @@ def create_accident(
     payload: AccidentCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     vehicle = db.get(Vehicle, payload.vehicle_id)
     if not vehicle or vehicle.archived:
@@ -236,7 +237,7 @@ async def report_accident(
     description: str | None = Form(None),
     files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     """Backward-compatible report endpoint used by the original Accident UI."""
     vehicle = find_vehicle_by_plate(db, license_plate)
@@ -286,14 +287,14 @@ def all_accidents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if include_archived and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can include archived Accidents.")
+    if include_archived and not has_permission(db, current_user, "accidents.manage"):
+        raise HTTPException(status_code=403, detail="accidents.manage is required to include archived Accidents.")
     query = db.query(VehicleAccident).options(
         joinedload(VehicleAccident.vehicle), joinedload(VehicleAccident.driver), joinedload(VehicleAccident.files)
     )
     if not include_archived:
         query = query.filter(VehicleAccident.archived.is_(False))
-    if current_user.role == UserRole.driver.value:
+    if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "accidents.view"):
         if not current_user.driver_profile:
             return []
         query = query.filter(VehicleAccident.driver_id == current_user.driver_profile.id)
@@ -307,8 +308,8 @@ def accident_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    accident = get_accident(db, accident_id, include_archived=current_user.role == UserRole.admin.value)
-    authorize_driver(current_user, accident)
+    accident = get_accident(db, accident_id, include_archived=has_permission(db, current_user, "accidents.manage"))
+    authorize_driver(db, current_user, accident)
     generic_files = db.query(Attachment).filter(
         Attachment.entity_type == "VehicleAccident",
         Attachment.entity_id == accident.id,
@@ -373,7 +374,7 @@ def update_accident(
     payload: AccidentUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
     old = snapshot(accident)
@@ -403,7 +404,7 @@ def transition_accident(
     target_status: AccidentStatus,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
     old_status = accident.status
@@ -432,7 +433,7 @@ def open_claim(
     accident_id: int,
     payload: AccidentClaimPayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*CLAIM_ROLES)),
+    current_user: User = Depends(require_permission("claims.manage")),
 ):
     accident = get_accident(db, accident_id)
     if accident.claim:
@@ -475,7 +476,7 @@ def update_claim(
     accident_id: int,
     payload: AccidentClaimPayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*CLAIM_ROLES)),
+    current_user: User = Depends(require_permission("claims.manage")),
 ):
     accident = get_accident(db, accident_id)
     claim = accident.claim
@@ -511,7 +512,7 @@ def update_claim(
 def close_claim(
     accident_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*CLAIM_ROLES)),
+    current_user: User = Depends(require_permission("claims.manage")),
 ):
     accident = get_accident(db, accident_id)
     if not accident.claim:
@@ -534,7 +535,7 @@ def close_claim(
 def mark_vehicle_unavailable(
     accident_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
     accident.vehicle_available_after_accident = False
@@ -557,7 +558,7 @@ def create_accident_work_order(
     accident_id: int,
     payload: AccidentWorkOrderPayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic)),
+    current_user: User = Depends(require_permission("maintenance.create_work_order")),
 ):
     accident = get_accident(db, accident_id)
     if accident.estimated_damage_cost is None and payload.estimated_damage_cost is None:
@@ -608,7 +609,7 @@ def create_accident_work_order(
 def resolve_accident(
     accident_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
     incomplete = [row.id for row in accident.work_orders if not row.archived and row.status not in {"Completed", "Cancelled"}]
@@ -637,7 +638,7 @@ def resolve_accident(
 def close_accident(
     accident_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
     if accident.status not in {"Resolved", "Rejected"}:
@@ -657,7 +658,7 @@ def add_party(
     accident_id: int,
     payload: AccidentPartyPayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
     party = AccidentParty(accident_id=accident.id, **payload.model_dump())
@@ -676,7 +677,7 @@ def add_injury(
     accident_id: int,
     payload: AccidentInjuryPayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
     if payload.party_id:
@@ -698,7 +699,7 @@ def add_injury(
 def archive_accident(
     accident_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*MANAGE_ROLES)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
     accident.archived = True
@@ -716,7 +717,7 @@ def archive_accident(
 def restore_accident(
     accident_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id, include_archived=True)
     accident.archived = False
@@ -743,7 +744,7 @@ def accidents_by_plate(
     query = db.query(VehicleAccident).options(
         joinedload(VehicleAccident.vehicle), joinedload(VehicleAccident.driver), joinedload(VehicleAccident.files)
     ).filter(VehicleAccident.vehicle_id == vehicle.id, VehicleAccident.archived.is_(False))
-    if current_user.role == UserRole.driver.value:
+    if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "accidents.view"):
         if not current_user.driver_profile:
             return []
         query = query.filter(VehicleAccident.driver_id == current_user.driver_profile.id)

@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import Driver, Inspection, InspectionItem, User, Vehicle, WorkOrder
 from app.schemas import (
@@ -27,7 +28,7 @@ from app.services.audit import record_audit, snapshot
 from app.services.notifications import notify_roles
 from app.services.vehicle_assignments import active_assignment_at
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("inspections.view"))])
 
 DEFAULT_CHECKLIST_ITEMS = [
     "Tires",
@@ -185,8 +186,8 @@ def list_inspections(
     query = inspection_query(db)
     if page < 1 or page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
-    if include_archived and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can include archived Inspections.")
+    if include_archived and not has_permission(db, current_user, "inspections.manage"):
+        raise HTTPException(status_code=403, detail="inspections.manage is required to include archived Inspections.")
     if not include_archived:
         query = query.filter(Inspection.archived.is_(False))
     if search:
@@ -222,7 +223,7 @@ def list_inspections(
 
 
 @router.post("", response_model=InspectionOut, status_code=201)
-def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic, UserRole.driver))):
+def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("inspections.create"))):
     inspection = Inspection()
     apply_payload(inspection, payload, db)
     inspection.inspector = inspection.inspector or current_user.full_name
@@ -269,7 +270,7 @@ def get_inspection(inspection_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{inspection_id}", response_model=InspectionOut)
-def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("inspections.manage"))):
     inspection = inspection_query(db).filter(Inspection.id == inspection_id).first()
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found.")
@@ -287,7 +288,7 @@ def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session
 
 
 @router.delete("/{inspection_id}")
-def delete_inspection(inspection_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def delete_inspection(inspection_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("inspections.manage"))):
     inspection = db.get(Inspection, inspection_id)
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found.")
@@ -304,7 +305,7 @@ def delete_inspection(inspection_id: int, db: Session = Depends(get_db), current
 
 
 @router.put("/{inspection_id}/archive", response_model=InspectionOut)
-def archive_inspection(inspection_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def archive_inspection(inspection_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("inspections.manage"))):
     inspection = inspection_query(db).filter(Inspection.id == inspection_id).first()
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found.")
@@ -325,7 +326,7 @@ def archive_inspection(inspection_id: int, db: Session = Depends(get_db), curren
 def restore_inspection(
     inspection_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("inspections.manage")),
 ):
     inspection = inspection_query(db).filter(Inspection.id == inspection_id).first()
     if not inspection:

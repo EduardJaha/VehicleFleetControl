@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import User, Vehicle, VehicleBrand, VehicleModel
 from app.schemas import (
@@ -16,7 +17,7 @@ from app.schemas import (
 )
 from app.utils.vehicle_catalog import normalize_catalog_name
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("vehicles.view"))])
 
 
 def brand_out(brand: VehicleBrand) -> VehicleBrandOut:
@@ -32,9 +33,9 @@ def model_out(model: VehicleModel) -> VehicleModelOut:
     )
 
 
-def require_inactive_access(include_inactive: bool, user: User) -> None:
-    if include_inactive and user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can view inactive catalog entries.")
+def require_inactive_access(include_inactive: bool, user: User, db: Session) -> None:
+    if include_inactive and not has_permission(db, user, "settings.manage"):
+        raise HTTPException(status_code=403, detail="settings.manage is required to view inactive catalog entries.")
 
 
 def commit_catalog_change(db: Session, duplicate_message: str) -> None:
@@ -53,7 +54,7 @@ def list_brands(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_inactive_access(include_inactive, current_user)
+    require_inactive_access(include_inactive, current_user, db)
     query = db.query(VehicleBrand)
     if not include_inactive:
         query = query.filter(VehicleBrand.is_active.is_(True))
@@ -71,7 +72,7 @@ def list_models(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_inactive_access(include_inactive, current_user)
+    require_inactive_access(include_inactive, current_user, db)
     brand = db.get(VehicleBrand, brand_id)
     if not brand or (not include_inactive and not brand.is_active):
         raise HTTPException(status_code=404, detail="Vehicle brand not found.")
@@ -88,7 +89,7 @@ def list_models(
     "/brands",
     response_model=VehicleBrandOut,
     status_code=201,
-    dependencies=[Depends(require_roles(UserRole.admin))],
+    dependencies=[Depends(require_permission("settings.manage"))],
 )
 def create_brand(payload: VehicleBrandCreate, db: Session = Depends(get_db)):
     brand = VehicleBrand(
@@ -105,7 +106,7 @@ def create_brand(payload: VehicleBrandCreate, db: Session = Depends(get_db)):
 @router.put(
     "/brands/{brand_id}",
     response_model=VehicleBrandOut,
-    dependencies=[Depends(require_roles(UserRole.admin))],
+    dependencies=[Depends(require_permission("settings.manage"))],
 )
 def update_brand(brand_id: int, payload: VehicleBrandUpdate, db: Session = Depends(get_db)):
     brand = db.get(VehicleBrand, brand_id)
@@ -122,7 +123,7 @@ def update_brand(brand_id: int, payload: VehicleBrandUpdate, db: Session = Depen
 @router.delete(
     "/brands/{brand_id}",
     response_model=VehicleBrandOut,
-    dependencies=[Depends(require_roles(UserRole.admin))],
+    dependencies=[Depends(require_permission("settings.manage"))],
 )
 def deactivate_brand(brand_id: int, db: Session = Depends(get_db)):
     brand = db.get(VehicleBrand, brand_id)
@@ -138,7 +139,7 @@ def deactivate_brand(brand_id: int, db: Session = Depends(get_db)):
     "/models",
     response_model=VehicleModelOut,
     status_code=201,
-    dependencies=[Depends(require_roles(UserRole.admin))],
+    dependencies=[Depends(require_permission("settings.manage"))],
 )
 def create_model(payload: VehicleModelCreate, db: Session = Depends(get_db)):
     if not db.get(VehicleBrand, payload.brand_id):
@@ -158,7 +159,7 @@ def create_model(payload: VehicleModelCreate, db: Session = Depends(get_db)):
 @router.put(
     "/models/{model_id}",
     response_model=VehicleModelOut,
-    dependencies=[Depends(require_roles(UserRole.admin))],
+    dependencies=[Depends(require_permission("settings.manage"))],
 )
 def update_model(model_id: int, payload: VehicleModelUpdate, db: Session = Depends(get_db)):
     model = db.get(VehicleModel, model_id)
@@ -180,7 +181,7 @@ def update_model(model_id: int, payload: VehicleModelUpdate, db: Session = Depen
 @router.delete(
     "/models/{model_id}",
     response_model=VehicleModelOut,
-    dependencies=[Depends(require_roles(UserRole.admin))],
+    dependencies=[Depends(require_permission("settings.manage"))],
 )
 def deactivate_model(model_id: int, db: Session = Depends(get_db)):
     model = db.get(VehicleModel, model_id)

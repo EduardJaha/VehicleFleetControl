@@ -6,7 +6,8 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import (
     Attachment,
@@ -49,7 +50,7 @@ from app.services.vehicle_assignments import (
     validate_assignment_parties,
 )
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("assignments.view"))])
 WRITE_ROLES = (UserRole.admin, UserRole.fleet_manager)
 ASSIGNED_VEHICLE_STATUS = 4
 AVAILABLE_VEHICLE_STATUS = 0
@@ -228,8 +229,8 @@ def list_vehicle_assignments(
 ):
     if page < 1 or page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
-    if include_archived and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can include archived Vehicle Assignments.")
+    if include_archived and not has_permission(db, current_user, "assignments.manage"):
+        raise HTTPException(status_code=403, detail="assignments.manage is required to include archived Vehicle Assignments.")
     query = assignment_query(db)
     if not include_archived:
         query = query.filter(VehicleAssignment.archived.is_(False))
@@ -277,7 +278,7 @@ def list_vehicle_assignments(
 def checkout_vehicle(
     payload: VehicleCheckoutCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("assignments.manage")),
 ):
     try:
         checkout_at = parse_assignment_datetime(payload.checkout_datetime, "checkout_datetime")
@@ -443,7 +444,7 @@ def list_condition_records(assignment_id: int, db: Session = Depends(get_db)):
 def create_vehicle_assignment(
     payload: VehicleAssignmentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("assignments.manage")),
 ):
     vehicle, driver, _ = validate_assignment_parties(
         db, payload.vehicle_id, payload.driver_id, payload.reservation_id
@@ -485,7 +486,7 @@ def update_vehicle_assignment(
     assignment_id: int,
     payload: VehicleAssignmentUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("assignments.manage")),
 ):
     assignment = get_assignment_or_404(db, assignment_id)
     if assignment.archived:
@@ -524,7 +525,7 @@ def start_vehicle_assignment(
     assignment_id: int,
     payload: VehicleAssignmentStart | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("assignments.manage")),
 ):
     assignment = get_assignment_or_404(db, assignment_id)
     if assignment.archived:
@@ -586,7 +587,7 @@ def complete_vehicle_assignment(
     assignment_id: int,
     payload: VehicleAssignmentComplete,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("assignments.manage")),
 ):
     assignment = get_assignment_or_404(db, assignment_id)
     if assignment.archived:
@@ -644,7 +645,7 @@ def return_vehicle(
     assignment_id: int,
     payload: VehicleReturnCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("assignments.manage")),
 ):
     try:
         assignment = get_assignment_or_404(db, assignment_id)
@@ -825,7 +826,7 @@ def return_vehicle(
 def cancel_vehicle_assignment(
     assignment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("assignments.manage")),
 ):
     assignment = get_assignment_or_404(db, assignment_id)
     if assignment.archived:
@@ -873,7 +874,7 @@ def cancel_vehicle_assignment(
 def archive_vehicle_assignment(
     assignment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    current_user: User = Depends(require_permission("assignments.manage")),
 ):
     assignment = get_assignment_or_404(db, assignment_id)
     if assignment.status in ACTIVE_ASSIGNMENT_STATUSES:
@@ -899,7 +900,7 @@ def archive_vehicle_assignment(
 def restore_vehicle_assignment(
     assignment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("assignments.manage")),
 ):
     assignment = get_assignment_or_404(db, assignment_id)
     assignment.archived = False

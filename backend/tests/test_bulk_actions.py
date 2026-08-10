@@ -51,7 +51,7 @@ def test_bulk_vehicle_updates_programs_work_orders_and_export(context):
     assert db.query(AuditLog).filter(AuditLog.action == "Bulk export selected").count() == 1
 
 
-def test_bulk_archive_preflight_is_atomic_and_restore_is_admin_only(context):
+def test_bulk_archive_preflight_is_atomic_and_restore_uses_archive_permission(context):
     db, admin, manager, vehicles, driver = context
     db.add(VehicleAssignment(
         vehicle_id=vehicles[0].id, driver_id=driver.id, assigned_by_user_id=admin.id,
@@ -65,10 +65,7 @@ def test_bulk_archive_preflight_is_atomic_and_restore_is_admin_only(context):
 
     vehicles[1].archived = True
     db.commit()
-    with pytest.raises(HTTPException) as denied:
-        apply_bulk_action(BulkActionRequest(entity_type="Vehicles", action="restore", ids=[vehicles[1].id]), db, manager)
-    assert denied.value.status_code == 403
-    apply_bulk_action(BulkActionRequest(entity_type="Vehicles", action="restore", ids=[vehicles[1].id]), db, admin)
+    apply_bulk_action(BulkActionRequest(entity_type="Vehicles", action="restore", ids=[vehicles[1].id]), db, manager)
     assert not vehicles[1].archived
 
 

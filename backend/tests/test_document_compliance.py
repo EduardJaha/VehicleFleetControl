@@ -297,13 +297,13 @@ def test_driver_file_access_is_owner_scoped(db: Session, users):
     db.commit()
     db.refresh(users["driver"])
 
-    _authorize_document(users["driver"], own)
+    _authorize_document(db, users["driver"], own)
     with pytest.raises(HTTPException) as denied:
-        _authorize_document(users["driver"], other)
+        _authorize_document(db, users["driver"], other)
     assert denied.value.status_code == 403
     with pytest.raises(HTTPException):
-        _authorize_document(users["driver"], vehicle_document)
-    _authorize_document(users["viewer"], other)
+        _authorize_document(db, users["driver"], vehicle_document)
+    _authorize_document(db, users["viewer"], other)
 
 
 def test_permissions_archive_restore_audit_report_and_translations(db: Session, users):

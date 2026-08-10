@@ -61,7 +61,9 @@ export default function FuelPage() {
   const { t } = useTranslation(["modules", "common"]);
   const { language, formatDate, formatNumber, formatCurrency } = useLanguage();
   const { can } = useAuth();
-  const canWrite = can("fuelWrite");
+  const canCreate = can("fuel.create");
+  const canEdit = can("fuel.edit") && can("fuel.view_cost");
+  const canViewCost = can("fuel.view_cost");
   const [records, setRecords] = useState<FuelRecord[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -271,13 +273,13 @@ export default function FuelPage() {
       <EntityPageHeader
         title={t("modules:fuel.title")}
         description={t("modules:fuel.description")}
-        actionLabel={canWrite ? t("modules:fuel.add") : undefined}
-        onAction={canWrite ? openFuelDialog : undefined}
+        actionLabel={canCreate ? t("modules:fuel.add") : undefined}
+        onAction={canCreate ? openFuelDialog : undefined}
       />
       {error && !isFuelDialogOpen && <div className="error spaced" role="alert">{error}</div>}
       {message && <div className="success spaced" role="status">{message}</div>}
 
-      {canWrite && <CreateEntityDialog
+      {canCreate && <CreateEntityDialog
         open={isFuelDialogOpen}
         title={t("modules:fuel.add")}
         description={t("modules:fuel.formDescription")}
@@ -417,9 +419,9 @@ export default function FuelPage() {
           <thead>
             <tr>
               <th>{t("common:labels.licencePlate")}</th><th>{t("common:labels.vehicle")}</th><th>{t("common:labels.date")}</th><th>{t("modules:fuel.type")}</th>
-              <th>{t("common:labels.quantity")}</th><th>{t("modules:fuel.unitPrice")}</th><th>{t("common:labels.totalCost")}</th><th>{t("common:labels.location")}</th>
+              <th>{t("common:labels.quantity")}</th>{canViewCost && <><th>{t("modules:fuel.unitPrice")}</th><th>{t("common:labels.totalCost")}</th></>}<th>{t("common:labels.location")}</th>
               <th>{t("modules:fuel.station")}</th><th>{t("common:labels.odometer")}</th><th>{t("modules:fuel.bill")}</th>
-              {canWrite && <th>{t("common:labels.actions")}</th>}
+              {canEdit && <th>{t("common:labels.actions")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -432,25 +434,25 @@ export default function FuelPage() {
                 <tr key={record.id}>
                   <td><strong>{record.license_plate}</strong></td>
                   <td>{record.brand} {record.model}</td>
-                  <td>{canWrite && isEditing ? <input className="input compactInput" type="date" value={editForm.refuel_date} onChange={(event) => setEditForm({ ...editForm, refuel_date: event.target.value })} /> : formatDate(record.refuel_date)}</td>
+                  <td>{canEdit && isEditing ? <input className="input compactInput" type="date" value={editForm.refuel_date} onChange={(event) => setEditForm({ ...editForm, refuel_date: event.target.value })} /> : formatDate(record.refuel_date)}</td>
                   <td>
                     {translateType(record.fuel_type)}
                     {record.unit_review_required && <div className="muted">{t("modules:fuel.unitReview")}</div>}
                   </td>
-                  <td>{canWrite && isEditing
+                  <td>{canEdit && isEditing
                     ? <div><label className="muted">{quantityLabel(record.unit)}</label><input aria-label={quantityLabel(record.unit)} className="input compactInput" type="number" min="0.001" step="0.001" value={editForm.quantity} onChange={(event) => setEditForm({ ...editForm, quantity: event.target.value })} /></div>
                     : formatEnergyQuantity(record.quantity, record.unit)}
                   </td>
-                  <td>{canWrite && isEditing
+                  {canViewCost && <td>{canEdit && isEditing
                     ? <div><label className="muted">{unitCostLabel(record.unit)}</label><input aria-label={unitCostLabel(record.unit)} className="input compactInput" type="number" min="0" step="0.0001" value={editForm.unit_cost} onChange={(event) => setEditForm({ ...editForm, unit_cost: event.target.value })} /></div>
-                    : formatEnergyUnitPrice(record.unit_cost, record.unit)}
-                  </td>
-                  <td>{isEditing ? formatCurrency(editTotal) : formatCurrency(record.total_cost)}</td>
-                  <td>{canWrite && isEditing ? <input className="input compactInput" value={editForm.location} onChange={(event) => setEditForm({ ...editForm, location: event.target.value })} /> : record.location}</td>
-                  <td>{canWrite && isEditing ? <input className="input compactInput" value={editForm.station_name} onChange={(event) => setEditForm({ ...editForm, station_name: event.target.value })} /> : record.station_name}</td>
-                  <td>{canWrite && isEditing ? <input className="input compactInput" type="number" value={editForm.odometer_km} onChange={(event) => setEditForm({ ...editForm, odometer_km: event.target.value })} /> : formatNumber(record.odometer_km)}</td>
+                    : record.unit_cost == null ? "-" : formatEnergyUnitPrice(record.unit_cost, record.unit)}
+                  </td>}
+                  {canViewCost && <td>{isEditing ? formatCurrency(editTotal) : record.total_cost == null ? "-" : formatCurrency(record.total_cost)}</td>}
+                  <td>{canEdit && isEditing ? <input className="input compactInput" value={editForm.location} onChange={(event) => setEditForm({ ...editForm, location: event.target.value })} /> : record.location}</td>
+                  <td>{canEdit && isEditing ? <input className="input compactInput" value={editForm.station_name} onChange={(event) => setEditForm({ ...editForm, station_name: event.target.value })} /> : record.station_name}</td>
+                  <td>{canEdit && isEditing ? <input className="input compactInput" type="number" value={editForm.odometer_km} onChange={(event) => setEditForm({ ...editForm, odometer_km: event.target.value })} /> : formatNumber(record.odometer_km)}</td>
                   <td>{record.bill_file_path ? <button className="linkButton" type="button" onClick={() => void apiDownloadFile(record.bill_file_path!, `fuel-${record.id}-bill`)}>{t("common:actions.download")}</button> : "-"}</td>
-                  {canWrite && <td>
+                  {canEdit && <td>
                     <div className="actions">
                       {isEditing
                         ? <>
@@ -464,7 +466,7 @@ export default function FuelPage() {
                 </tr>
               );
             })}
-            {filtered.length === 0 && <tr><td colSpan={canWrite ? 12 : 11} className="muted">{t("modules:fuel.empty")}</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={(canViewCost ? 11 : 9) + (canEdit ? 1 : 0)} className="muted">{t("modules:fuel.empty")}</td></tr>}
           </tbody>
         </table>
       )}

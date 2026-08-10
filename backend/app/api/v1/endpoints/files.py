@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, own_records_only
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import (
     Attachment,
@@ -39,14 +40,14 @@ ENTITY_MODELS = {
 }
 
 
-def authorize_entity_access(current_user: User, entity_type: str, entity) -> None:
-    if entity_type == "VehicleAccident" and current_user.role == UserRole.driver.value:
+def authorize_entity_access(db: Session, current_user: User, entity_type: str, entity) -> None:
+    if entity_type == "VehicleAccident" and (current_user.role == UserRole.driver.value or own_records_only(db, current_user, "accidents.view")):
         if not current_user.driver_profile or current_user.driver_profile.id != entity.driver_id:
             raise HTTPException(
                 status_code=403,
                 detail="Drivers can only access attachments for their own Accident records.",
             )
-    if entity_type == "VehicleConditionRecord" and current_user.role == UserRole.driver.value:
+    if entity_type == "VehicleConditionRecord" and (current_user.role == UserRole.driver.value or own_records_only(db, current_user, "assignments.view")):
         if not current_user.driver_profile or current_user.driver_profile.id != entity.driver_id:
             raise HTTPException(
                 status_code=403,
@@ -60,9 +61,27 @@ def authorize_entity_access(current_user: User, entity_type: str, entity) -> Non
     if document is not None:
         if document.archived:
             raise HTTPException(status_code=404, detail="Related record not found.")
-        if current_user.role == UserRole.driver.value:
+        if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "documents.view"):
             if not current_user.driver_profile or current_user.driver_profile.id != document.driver_id:
                 raise HTTPException(status_code=403, detail="Drivers can only access their own Documents.")
+
+
+READ_PERMISSIONS = {
+    "VehicleService": "maintenance.view", "WorkOrder": "maintenance.view",
+    "VehicleFuel": "fuel.view", "VehiclePaper": "documents.view", "DocumentVersion": "documents.view",
+    "VehicleAccident": "accidents.view", "Inspection": "inspections.view", "VehicleConditionRecord": "assignments.view",
+}
+WRITE_PERMISSIONS = {
+    "VehicleService": "maintenance.assign_work_order", "WorkOrder": "maintenance.assign_work_order",
+    "VehicleFuel": "fuel.edit", "VehiclePaper": "documents.upload", "DocumentVersion": "documents.upload",
+    "VehicleAccident": "accidents.view", "Inspection": "inspections.create", "VehicleConditionRecord": "assignments.view",
+}
+
+
+def authorize_entity_permission(db: Session, user: User, entity_type: str, *, write: bool = False) -> None:
+    permission = (WRITE_PERMISSIONS if write else READ_PERMISSIONS).get(entity_type)
+    if permission is None or not has_permission(db, user, permission):
+        raise HTTPException(status_code=403, detail="Insufficient permissions for this attachment.")
 
 
 def attachment_out(row: Attachment) -> AttachmentOut:
@@ -88,7 +107,8 @@ def list_files(
     entity = db.get(model, entity_id) if model else None
     if not entity or getattr(entity, "archived", False):
         raise HTTPException(status_code=404, detail="Related record not found.")
-    authorize_entity_access(current_user, entity_type.strip(), entity)
+    authorize_entity_permission(db, current_user, entity_type.strip())
+    authorize_entity_access(db, current_user, entity_type.strip(), entity)
     rows = db.query(Attachment).filter(
         Attachment.entity_type == entity_type.strip(),
         Attachment.entity_id == entity_id,
@@ -104,7 +124,7 @@ async def upload_file(
     category: str = Form("auto"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*UPLOAD_ROLES)),
+    current_user: User = Depends(get_current_user),
 ):
     normalized_entity = entity_type.strip()
     if normalized_entity not in ENTITY_MODELS:
@@ -114,7 +134,8 @@ async def upload_file(
     entity = db.get(ENTITY_MODELS[normalized_entity], entity_id)
     if not entity or getattr(entity, "archived", False):
         raise HTTPException(status_code=404, detail="Related record not found.")
-    authorize_entity_access(current_user, normalized_entity, entity)
+    authorize_entity_permission(db, current_user, normalized_entity, write=True)
+    authorize_entity_access(db, current_user, normalized_entity, entity)
     stored = await store_upload(file, normalized_entity.lower(), category)
     attachment = Attachment(
         original_filename=stored.original_filename,
@@ -162,7 +183,14 @@ def download_legacy_file(
     if not authorized:
         raise HTTPException(status_code=404, detail="File not found.")
     if isinstance(authorized, VehiclePaper):
-        authorize_entity_access(current_user, "VehiclePaper", authorized)
+        authorize_entity_permission(db, current_user, "VehiclePaper")
+        authorize_entity_access(db, current_user, "VehiclePaper", authorized)
+    elif isinstance(authorized, VehicleFuel):
+        authorize_entity_permission(db, current_user, "VehicleFuel")
+    elif isinstance(authorized, ServiceBill):
+        authorize_entity_permission(db, current_user, "VehicleService")
+    elif isinstance(authorized, AccidentFile):
+        authorize_entity_permission(db, current_user, "VehicleAccident")
     file_path = legacy_upload_path(path)
     mime_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
     record_audit(
@@ -191,7 +219,8 @@ def download_file(
     entity = db.get(model, attachment.entity_id) if model else None
     if not entity or getattr(entity, "archived", False):
         raise HTTPException(status_code=404, detail="Related record not found.")
-    authorize_entity_access(current_user, attachment.entity_type, entity)
+    authorize_entity_permission(db, current_user, attachment.entity_type)
+    authorize_entity_access(db, current_user, attachment.entity_type, entity)
     path = attachment_path(attachment.storage_path)
     record_audit(
         db, action="Document downloaded", entity_type=attachment.entity_type,
@@ -213,11 +242,12 @@ def download_file(
 def archive_file(
     file_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager)),
+    current_user: User = Depends(get_current_user),
 ):
     attachment = db.get(Attachment, file_id)
     if not attachment:
         raise HTTPException(status_code=404, detail="File not found.")
+    authorize_entity_permission(db, current_user, attachment.entity_type, write=True)
     attachment.archived = True
     attachment.archived_at = datetime.utcnow()
     attachment.archived_by = current_user.id

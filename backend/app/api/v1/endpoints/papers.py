@@ -2,7 +2,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session, joinedload
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import Attachment, DocumentVersion, User, VehiclePaper
 from app.schemas import UserRole, VehiclePaperListOut
@@ -11,7 +12,7 @@ from app.utils.domain import find_vehicle_by_plate
 from app.utils.files import file_url, store_upload
 from app.services.audit import record_audit, snapshot
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("documents.view"))])
 
 
 @router.post("/upload")
@@ -22,7 +23,7 @@ async def upload_paper(
     expiry_date: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager)),
+    current_user: User = Depends(require_permission("documents.upload")),
 ):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
@@ -81,8 +82,8 @@ def all_papers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if include_archived and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can include archived Documents.")
+    if include_archived and not has_permission(db, current_user, "documents.verify"):
+        raise HTTPException(status_code=403, detail="documents.verify is required to include archived Documents.")
     # This legacy endpoint remains the Vehicle Documents compatibility view;
     # Driver Documents are exposed through the scoped compliance endpoint.
     query = db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle)).filter(
@@ -109,7 +110,7 @@ def all_papers(
 
 
 @router.delete("/{paper_id}")
-def delete_paper(paper_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def delete_paper(paper_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("documents.verify"))):
     paper = db.get(VehiclePaper, paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Document not found.")
@@ -131,7 +132,7 @@ def delete_paper(paper_id: int, db: Session = Depends(get_db), current_user: Use
 def restore_paper(
     paper_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("documents.verify")),
 ):
     paper = db.query(VehiclePaper).options(joinedload(VehiclePaper.vehicle)).filter(VehiclePaper.id == paper_id).first()
     if not paper:

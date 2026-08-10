@@ -6,7 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import Driver, Inspection, User, Vehicle, VehicleAccident, VehicleService, WorkOrder
 from app.schemas import (
@@ -21,7 +22,7 @@ from app.services.work_order_completion import complete_work_order_transaction
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("maintenance.view"))])
 
 
 def decimal_from_text(value) -> Decimal | None:
@@ -256,8 +257,8 @@ def list_work_orders(
     query = work_order_query(db)
     if page < 1 or page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
-    if include_archived and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can include archived Work Orders.")
+    if include_archived and not has_permission(db, current_user, "maintenance.assign_work_order"):
+        raise HTTPException(status_code=403, detail="maintenance.assign_work_order is required to include archived Work Orders.")
     if not include_archived:
         query = query.filter(WorkOrder.archived.is_(False))
     if search:
@@ -296,7 +297,7 @@ def list_work_orders(
 
 
 @router.post("", response_model=WorkOrderOut, status_code=201)
-def create_work_order(payload: WorkOrderCreate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def create_work_order(payload: WorkOrderCreate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.create_work_order"))):
     work_order = WorkOrder()
     apply_payload(work_order, payload, db)
     work_order.created_by = current_user.full_name
@@ -330,7 +331,7 @@ def get_work_order(work_order_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{work_order_id}", response_model=WorkOrderOut)
-def update_work_order(work_order_id: int, payload: WorkOrderUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def update_work_order(work_order_id: int, payload: WorkOrderUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
     work_order = work_order_query(db).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="Work order not found.")
@@ -348,7 +349,7 @@ def update_work_order(work_order_id: int, payload: WorkOrderUpdate, db: Session 
 
 
 @router.put("/{work_order_id}/status", response_model=WorkOrderOut)
-def update_work_order_status(work_order_id: int, payload: WorkOrderStatusUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def update_work_order_status(work_order_id: int, payload: WorkOrderStatusUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
     work_order = work_order_query(db).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="Work order not found.")
@@ -379,7 +380,7 @@ def update_work_order_status(work_order_id: int, payload: WorkOrderStatusUpdate,
 
 
 @router.delete("/{work_order_id}")
-def delete_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic))):
+def delete_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
     work_order = db.get(WorkOrder, work_order_id)
     if not work_order:
         raise HTTPException(status_code=404, detail="Work order not found.")
@@ -396,7 +397,7 @@ def delete_work_order(work_order_id: int, db: Session = Depends(get_db), current
 
 
 @router.put("/{work_order_id}/archive", response_model=WorkOrderOut)
-def archive_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def archive_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
     work_order = work_order_query(db).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
         raise HTTPException(status_code=404, detail="Work order not found.")
@@ -417,7 +418,7 @@ def archive_work_order(work_order_id: int, db: Session = Depends(get_db), curren
 def restore_work_order(
     work_order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("maintenance.assign_work_order")),
 ):
     work_order = work_order_query(db).filter(WorkOrder.id == work_order_id).first()
     if not work_order:
@@ -440,7 +441,7 @@ def complete_work_order(
     work_order_id: int,
     payload: WorkOrderCompletionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.mechanic)),
+    current_user: User = Depends(require_permission("maintenance.complete_work_order")),
 ):
     try:
         work_order, service, reminder_resolved, next_reminder_created = complete_work_order_transaction(

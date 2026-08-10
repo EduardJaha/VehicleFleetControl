@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, Request
 
 from app.core.i18n import request_language
-from app.core.security import get_current_user
+from app.core.authorization import require_permission
 from app.services.license_plates import REGISTRATION_COUNTRIES
 
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("vehicles.view"))])
 
 
 @router.get("/countries")

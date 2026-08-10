@@ -17,5 +17,8 @@
   "reports": "Reports",
   "notifications": "Notifications",
   "auditLogs": "Audit Logs",
-  "imports": "Imports"
+  "imports": "Imports",
+  "users": "User Administration",
+  "rolesPermissions": "Roles & Permissions",
+  "organizationSettings": "Organization Settings"
 }

@@ -30,10 +30,14 @@ class User(Base):
     role = Column("Role", String(50), nullable=False, default="viewer")
     is_active = Column("IsActive", Boolean, nullable=False, default=True)
     preferred_language = Column("PreferredLanguage", String(5), nullable=False, default="en")
+    last_login_at = Column("LastLoginAt", DateTime, nullable=True)
+    session_version = Column("SessionVersion", Integer, nullable=False, default=0)
+    password_reset_required = Column("PasswordResetRequired", Boolean, nullable=False, default=False)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     driver_profile = relationship("Driver", back_populates="user", uselist=False, foreign_keys="Driver.user_id")
+    role_assignments = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
     assignments_created = relationship(
         "VehicleAssignment",
         back_populates="assigned_by_user",
@@ -44,6 +48,105 @@ class User(Base):
         back_populates="ended_by_user",
         foreign_keys="VehicleAssignment.ended_by_user_id",
     )
+
+
+class Permission(Base):
+    __tablename__ = "Permissions"
+    __table_args__ = (UniqueConstraint("Code", name="uq_permissions_code"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    code = Column("Code", String(100), nullable=False, index=True)
+    name = Column("Name", String(150), nullable=False)
+    description = Column("Description", Text, nullable=True)
+    module = Column("Module", String(50), nullable=False, index=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    role_permissions = relationship("RolePermission", back_populates="permission", cascade="all, delete-orphan")
+
+
+class Role(Base):
+    __tablename__ = "Roles"
+    __table_args__ = (UniqueConstraint("Code", name="uq_roles_code"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    code = Column("Code", String(50), nullable=False, index=True)
+    name = Column("Name", String(100), nullable=False)
+    description = Column("Description", Text, nullable=True)
+    is_system = Column("IsSystem", Boolean, nullable=False, default=False)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    role_permissions = relationship("RolePermission", back_populates="role", cascade="all, delete-orphan")
+    user_assignments = relationship("UserRole", back_populates="role", cascade="all, delete-orphan")
+
+
+class RolePermission(Base):
+    __tablename__ = "RolePermissions"
+    __table_args__ = (UniqueConstraint("RoleId", "PermissionId", name="uq_role_permissions_role_permission"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    role_id = Column("RoleId", Integer, ForeignKey("Roles.Id", ondelete="CASCADE"), nullable=False, index=True)
+    permission_id = Column("PermissionId", Integer, ForeignKey("Permissions.Id", ondelete="CASCADE"), nullable=False, index=True)
+
+    role = relationship("Role", back_populates="role_permissions")
+    permission = relationship("Permission", back_populates="role_permissions")
+
+
+class Location(Base):
+    __tablename__ = "Locations"
+    __table_args__ = (UniqueConstraint("Code", name="uq_locations_code"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    code = Column("Code", String(50), nullable=False, index=True)
+    name = Column("Name", String(150), nullable=False)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Department(Base):
+    __tablename__ = "Departments"
+    __table_args__ = (UniqueConstraint("Code", name="uq_departments_code"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    code = Column("Code", String(50), nullable=False, index=True)
+    name = Column("Name", String(150), nullable=False)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CostCenter(Base):
+    __tablename__ = "CostCenters"
+    __table_args__ = (UniqueConstraint("Code", name="uq_cost_centers_code"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    code = Column("Code", String(50), nullable=False, index=True)
+    name = Column("Name", String(150), nullable=False)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserRole(Base):
+    __tablename__ = "UserRoles"
+    __table_args__ = (UniqueConstraint("UserId", "RoleId", name="uq_user_roles_user_role"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="CASCADE"), nullable=False, index=True)
+    role_id = Column("RoleId", Integer, ForeignKey("Roles.Id", ondelete="CASCADE"), nullable=False, index=True)
+    location_id = Column("LocationId", Integer, ForeignKey("Locations.Id", ondelete="SET NULL"), nullable=True)
+    department_id = Column("DepartmentId", Integer, ForeignKey("Departments.Id", ondelete="SET NULL"), nullable=True)
+    cost_center_id = Column("CostCenterId", Integer, ForeignKey("CostCenters.Id", ondelete="SET NULL"), nullable=True)
+    own_records_only = Column("OwnRecordsOnly", Boolean, nullable=False, default=False)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="role_assignments")
+    role = relationship("Role", back_populates="user_assignments")
+    location = relationship("Location")
+    department = relationship("Department")
+    cost_center = relationship("CostCenter")
 
 
 class VehicleBrand(Base):
@@ -106,6 +209,7 @@ class Vehicle(Base):
     model_id = Column("ModelId", Integer, ForeignKey("VehicleModels.Id"), nullable=True)
     fuel_type = Column("FuelType", String, nullable=False)
     vehicle_location = Column("VehicleLocation", String, nullable=False)
+    location_id = Column("LocationId", Integer, ForeignKey("Locations.Id", ondelete="SET NULL"), nullable=True, index=True)
     vehicle_category = Column("VehicleCategory", String(100), nullable=True, index=True)
     license_plate = Column("LicensePlate", String, nullable=False, index=True)
     registration_country = Column("RegistrationCountry", String(2), nullable=False)
@@ -147,6 +251,8 @@ class Driver(Base):
     email = Column("Email", String(255), nullable=True, index=True)
     employee_number = Column("EmployeeNumber", String(100), nullable=False, index=True)
     department = Column("Department", String(100), nullable=True)
+    department_id = Column("DepartmentId", Integer, ForeignKey("Departments.Id", ondelete="SET NULL"), nullable=True, index=True)
+    cost_center_id = Column("CostCenterId", Integer, ForeignKey("CostCenters.Id", ondelete="SET NULL"), nullable=True, index=True)
     license_number = Column("LicenseNumber", String(100), nullable=False, index=True)
     license_category = Column("LicenseCategory", String(50), nullable=False)
     license_expiry_date = Column("LicenseExpiryDate", DateTime, nullable=False)

@@ -4,27 +4,27 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
-import type { MaintenanceTimelineEvent, UserRole } from "@/lib/types";
+import type { MaintenanceTimelineEvent } from "@/lib/types";
 import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { translateNotification, translateStatus, translateType } from "@/i18n/translate";
 
-export const MAINTENANCE_LINKS: Array<{ href: string; labelKey: string; roles: UserRole[] }> = [
-  { href: "/maintenance", labelKey: "maintenanceDashboard", roles: ["admin", "fleet_manager", "mechanic", "finance", "viewer"] },
-  { href: "/work-orders", labelKey: "workOrders", roles: ["admin", "fleet_manager", "mechanic", "finance", "viewer"] },
-  { href: "/services/overview", labelKey: "serviceHistory", roles: ["admin", "fleet_manager", "mechanic", "finance", "viewer"] },
-  { href: "/services/reminders", labelKey: "serviceReminders", roles: ["admin", "fleet_manager", "mechanic", "viewer"] },
-  { href: "/inspections", labelKey: "inspections", roles: ["admin", "fleet_manager", "mechanic", "driver", "viewer"] }
+export const MAINTENANCE_LINKS: Array<{ href: string; labelKey: string; permission: string }> = [
+  { href: "/maintenance", labelKey: "maintenanceDashboard", permission: "maintenance.view" },
+  { href: "/work-orders", labelKey: "workOrders", permission: "maintenance.view" },
+  { href: "/services/overview", labelKey: "serviceHistory", permission: "maintenance.view" },
+  { href: "/services/reminders", labelKey: "serviceReminders", permission: "maintenance.view" },
+  { href: "/inspections", labelKey: "inspections", permission: "inspections.view" }
 ];
 
 export function MaintenanceNavigation() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const { t } = useTranslation(["navigation", "common"]);
   if (!user) return null;
   return (
     <nav className="maintenanceTabs" aria-label={t("navigation:maintenance")}>
-      {MAINTENANCE_LINKS.filter((item) => item.roles.includes(user.role)).map((item) => (
+      {MAINTENANCE_LINKS.filter((item) => can(item.permission)).map((item) => (
         <Link key={item.href} href={item.href} className={pathname === item.href || (item.href !== "/maintenance" && pathname.startsWith(`${item.href}/`)) ? "maintenanceTab active" : "maintenanceTab"}>
           {t(`navigation:${item.labelKey}`)}
         </Link>

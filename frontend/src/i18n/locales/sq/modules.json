@@ -997,6 +997,18 @@
     },
     "actions": { "create": "Krijo", "update": "Përditëso", "skip": "Anashkalo" }
   },
+  "admin": {
+    "usersTitle": "Administrimi i Përdoruesve", "usersDescription": "Menaxhoni llogaritë, rolet, kufizimet, gjuhën, profilet e shoferëve dhe sesionet aktive.",
+    "rolesTitle": "Rolet dhe Lejet", "rolesDescription": "Ruani rolet bazë të flotës ose krijoni role të hollësishme për organizatën.",
+    "settingsTitle": "Cilësimet e Organizatës", "settingsDescription": "Menaxhoni lokacionet, departamentet dhe qendrat e kostos duke ruajtur përputhshmërinë me fushat ekzistuese.",
+    "createUser": "Krijo përdorues", "editUser": "Ndrysho përdoruesin", "user": "Përdoruesi", "role": "Roli", "roles": "Rolet", "status": "Statusi", "lastLogin": "Hyrja e fundit", "never": "Asnjëherë",
+    "fullName": "Emri i plotë", "email": "Email", "password": "Fjalëkalimi", "temporaryPassword": "Fjalëkalim i përkohshëm", "language": "Gjuha e preferuar", "driverProfile": "Profili i shoferit",
+    "locationScope": "Kufizimi sipas lokacionit", "departmentScope": "Kufizimi sipas departamentit", "costCenterScope": "Kufizimi sipas qendrës së kostos", "ownRecordsOnly": "Vetëm rekordet e veta", "all": "Të gjitha (pa kufizim)",
+    "active": "Aktiv", "inactive": "Joaktiv", "forceLogout": "Dil nga të gjitha sesionet", "resetPassword": "Rivendos fjalëkalimin", "saved": "Ndryshimet u ruajtën.", "passwordReset": "Fjalëkalimi u rivendos dhe sesionet u revokuan.", "sessionsRevoked": "Të gjitha sesionet u revokuan.",
+    "createRole": "Krijo rol", "editRole": "Ndrysho rolin", "roleCode": "Kodi i rolit", "roleName": "Emri i rolit", "description": "Përshkrimi", "permissions": "Lejet", "userCount": "{{count}} përdorues",
+    "locations": "Lokacionet", "departments": "Departamentet", "costcenters": "Qendrat e Kostos", "editSetting": "Ndrysho cilësimin", "createSetting": "Krijo cilësim", "code": "Kodi", "name": "Emri", "requestFailed": "Të dhënat e administrimit nuk mund të ngarkoheshin. Ju lutemi provoni përsëri.", "noAccess": "Nuk keni leje për ta parë këtë faqe.",
+    "changePassword": "Ndrysho fjalëkalimin", "currentPassword": "Fjalëkalimi aktual", "newPassword": "Fjalëkalimi i ri", "confirmPassword": "Konfirmo fjalëkalimin", "passwordChangeRequired": "Duhet ta ndryshoni fjalëkalimin e përkohshëm.", "passwordsDoNotMatch": "Fjalëkalimet e reja nuk përputhen.", "passwordChangeFailed": "Fjalëkalimi nuk mund të ndryshohej."
+  },
   "bulk": {
     "selected": "{{count}} të zgjedhura", "selectAll": "Zgjidh të gjitha rekordet e dukshme", "selectRow": "Zgjidh {{name}}",
     "archive": "Arkivo", "restore": "Rikthe", "changeStatus": "Ndrysho Statusin", "changeLocation": "Ndrysho Lokacionin",

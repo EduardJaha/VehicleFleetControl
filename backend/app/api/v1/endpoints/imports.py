@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import ImportJob, ImportRowResult, User
 from app.schemas import (
@@ -32,14 +33,14 @@ from app.services.imports import (
     validate_job,
 )
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("imports.manage"))])
 IMPORT_ROLES = (UserRole.admin, UserRole.fleet_manager)
 
 
-def authorize_job(job: ImportJob | None, current_user: User) -> ImportJob:
+def authorize_job(job: ImportJob | None, current_user: User, db: Session | None = None) -> ImportJob:
     if not job:
         raise HTTPException(status_code=404, detail="Import job not found.")
-    if current_user.role != UserRole.admin.value and job.uploaded_by != current_user.id:
+    if not has_permission(db, current_user, "users.manage") and job.uploaded_by != current_user.id:
         raise HTTPException(status_code=403, detail="You can only access your own import jobs.")
     return job
 
@@ -88,7 +89,7 @@ def download_template(
     entity_type: ImportEntityType,
     format: str = Query("xlsx", pattern="^(csv|xlsx)$"),
     language: LanguageCode = LanguageCode.en,
-    current_user: User = Depends(require_roles(*IMPORT_ROLES)),
+    current_user: User = Depends(require_permission("imports.manage")),
 ):
     content, filename, media_type = template_bytes(entity_type.value, language.value, format)
     return Response(
@@ -107,7 +108,7 @@ async def upload_import(
     entity_type: ImportEntityType = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*IMPORT_ROLES)),
+    current_user: User = Depends(require_permission("imports.manage")),
 ):
     job = await store_import(file, entity_type.value, current_user, db)
     mapping = suggested_mapping(job.entity_type, job.source_headers or [])
@@ -129,10 +130,10 @@ def list_imports(
     entity_type: ImportEntityType | None = None,
     status: str | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*IMPORT_ROLES)),
+    current_user: User = Depends(require_permission("imports.manage")),
 ):
     query = db.query(ImportJob)
-    if current_user.role != UserRole.admin.value:
+    if not has_permission(db, current_user, "users.manage"):
         query = query.filter(ImportJob.uploaded_by == current_user.id)
     if entity_type:
         query = query.filter(ImportJob.entity_type == entity_type.value)
@@ -152,7 +153,7 @@ def get_import(
     row_status: str | None = None,
     row_limit: int = Query(200, ge=0, le=1000),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*IMPORT_ROLES)),
+    current_user: User = Depends(require_permission("imports.manage")),
 ):
     job = authorize_job(db.get(ImportJob, job_id), current_user)
     query = db.query(ImportRowResult).filter(ImportRowResult.import_job_id == job.id)
@@ -167,7 +168,7 @@ def dry_run_import(
     job_id: int,
     payload: ImportValidationRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*IMPORT_ROLES)),
+    current_user: User = Depends(require_permission("imports.manage")),
 ):
     job = authorize_job(db.get(ImportJob, job_id), current_user)
     validated = validate_job(db, job, payload.column_mapping, payload.update_mode)
@@ -180,7 +181,7 @@ def confirm_import(
     job_id: int,
     payload: ImportConfirmRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*IMPORT_ROLES)),
+    current_user: User = Depends(require_permission("imports.manage")),
 ):
     job = authorize_job(db.get(ImportJob, job_id), current_user)
     result = confirm_job(db, job, current_user, payload.update_mode, payload.transaction_mode)
@@ -192,7 +193,7 @@ def confirm_import(
 def cancel_import(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*IMPORT_ROLES)),
+    current_user: User = Depends(require_permission("imports.manage")),
 ):
     job = authorize_job(db.get(ImportJob, job_id), current_user)
     if job.status not in {"Uploaded", "Ready"}:
@@ -213,7 +214,7 @@ def download_errors(
     job_id: int,
     language: LanguageCode = LanguageCode.en,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*IMPORT_ROLES)),
+    current_user: User = Depends(require_permission("imports.manage")),
 ):
     job = authorize_job(db.get(ImportJob, job_id), current_user)
     rows = db.query(ImportRowResult).filter(ImportRowResult.import_job_id == job.id).order_by(ImportRowResult.row_number).all()

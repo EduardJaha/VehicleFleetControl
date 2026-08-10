@@ -2,7 +2,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import User, VehicleReservation
 from app.schemas import AddReservation, ReservationStatusUpdate, UserRole, VehicleReservationListOut
@@ -11,7 +12,7 @@ from app.utils.domain import find_vehicle_by_plate, parse_reservation_status, re
 from app.services.audit import record_audit, snapshot
 from app.services.notifications import notify_roles
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("reservations.view"))])
 
 
 def reservation_out(reservation: VehicleReservation) -> VehicleReservationListOut:
@@ -33,7 +34,7 @@ def reservation_out(reservation: VehicleReservation) -> VehicleReservationListOu
 
 
 @router.post("")
-def add_reservation(payload: AddReservation, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager, UserRole.driver))):
+def add_reservation(payload: AddReservation, db: Session = Depends(get_db), current_user: User = Depends(require_permission("reservations.create"))):
     vehicle = find_vehicle_by_plate(db, payload.license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail=f"No vehicle found with license plate '{payload.license_plate}'.")
@@ -86,8 +87,8 @@ def all_reservations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if include_archived and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can include archived Reservations.")
+    if include_archived and not has_permission(db, current_user, "reservations.approve"):
+        raise HTTPException(status_code=403, detail="reservations.approve is required to include archived Reservations.")
     query = db.query(VehicleReservation).options(joinedload(VehicleReservation.vehicle))
     if not include_archived:
         query = query.filter(VehicleReservation.archived.is_(False))
@@ -107,7 +108,7 @@ def by_plate(license_plate: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{reservation_id}/status")
-def update_status(reservation_id: int, payload: ReservationStatusUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def update_status(reservation_id: int, payload: ReservationStatusUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("reservations.approve"))):
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")
@@ -128,7 +129,7 @@ def update_status(reservation_id: int, payload: ReservationStatusUpdate, db: Ses
 
 
 @router.put("/{reservation_id}/approve")
-def approve(reservation_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def approve(reservation_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("reservations.approve"))):
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")
@@ -144,7 +145,7 @@ def approve(reservation_id: int, db: Session = Depends(get_db), current_user: Us
 
 
 @router.put("/{reservation_id}/reject")
-def reject(reservation_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def reject(reservation_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("reservations.approve"))):
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")
@@ -163,7 +164,7 @@ def reject(reservation_id: int, db: Session = Depends(get_db), current_user: Use
 def archive_reservation(
     reservation_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager)),
+    current_user: User = Depends(require_permission("reservations.approve")),
 ):
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
@@ -184,7 +185,7 @@ def archive_reservation(
 def restore_reservation(
     reservation_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("reservations.approve")),
 ):
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:

@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import Numeric, case, cast, func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import Attachment, ServiceBill, User, Vehicle, VehicleService, WorkOrder
 from app.schemas import (
@@ -29,7 +30,7 @@ from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.utils.files import store_upload
 from app.services.audit import record_audit, snapshot
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("maintenance.view"))])
 
 MILEAGE_TYPES = {"General Service", "Oil Change"}
 DATE_TYPES = {"Tire Change/Control"}
@@ -210,7 +211,7 @@ def apply_service_payload(service: VehicleService, payload: AddService, db: Sess
 
 
 @router.post("")
-def add_service(payload: AddService, db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES))):
+def add_service(payload: AddService, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
     service = VehicleService(created_at=datetime.utcnow(), updated_at=datetime.utcnow())
     apply_service_payload(service, payload, db)
     db.add(service)
@@ -232,7 +233,7 @@ async def register_with_bill(
     service_date: str = Form(...), next_service_date: str | None = Form(None),
     next_service_km_interval: int | None = Form(None), work_order_id: int | None = Form(None),
     source: ServiceSource = Form(ServiceSource.manual), file: UploadFile = File(...),
-    db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order")),
 ):
     payload = AddService(
         license_plate=license_plate, service_type=service_type, description=description, workshop=workshop,
@@ -271,7 +272,7 @@ async def register_with_bill(
 @router.post("/upload-bill-later")
 async def upload_bill_later(
     license_plate: str = Form(...), service_type: str = Form(...), bill_file: UploadFile = File(...),
-    db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES)),
+    db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order")),
 ):
     vehicle = find_vehicle_by_plate(db, license_plate)
     if not vehicle:
@@ -439,7 +440,7 @@ def reminders(
 
 
 @router.put("/reminders/{service_id}/status", response_model=ServiceReminderOut)
-def update_reminder_status(service_id: int, payload: ReminderStatusUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES))):
+def update_reminder_status(service_id: int, payload: ReminderStatusUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
     if payload.status not in {ReminderStatus.resolved, ReminderStatus.dismissed}:
         raise HTTPException(status_code=400, detail="Reminders can only be manually Resolved or Dismissed.")
     service = db.query(VehicleService).options(joinedload(VehicleService.vehicle), joinedload(VehicleService.reminder_work_orders)).filter(VehicleService.id == service_id).first()
@@ -469,8 +470,8 @@ def service_history(
 ):
     if page < 1 or page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
-    if include_archived and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can include archived Services.")
+    if include_archived and not has_permission(db, current_user, "maintenance.assign_work_order"):
+        raise HTTPException(status_code=403, detail="maintenance.assign_work_order is required to include archived Services.")
     query = service_query(db)
     if not include_archived:
         query = query.filter(VehicleService.archived.is_(False))
@@ -533,7 +534,7 @@ def get_service(service_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/id/{service_id}", response_model=VehicleServiceOverviewOut)
-def update_service(service_id: int, payload: AddService, db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES))):
+def update_service(service_id: int, payload: AddService, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
     service = service_query(db).filter(VehicleService.id == service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found.")
@@ -549,7 +550,7 @@ def update_service(service_id: int, payload: AddService, db: Session = Depends(g
 
 
 @router.put("/id/{service_id}/archive", response_model=VehicleServiceOverviewOut)
-def archive_service(service_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(UserRole.admin, UserRole.fleet_manager))):
+def archive_service(service_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
     service = service_query(db).filter(VehicleService.id == service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found.")
@@ -579,7 +580,7 @@ def get_by_license_plate(license_plate: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{service_id}")
-def delete_service(service_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_roles(*WRITE_ROLES))):
+def delete_service(service_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
     service = db.query(VehicleService).options(joinedload(VehicleService.bills)).filter(VehicleService.id == service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail=f"Service with id '{service_id}' was not found.")
@@ -599,7 +600,7 @@ def delete_service(service_id: int, db: Session = Depends(get_db), current_user:
 def restore_service(
     service_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_permission("maintenance.assign_work_order")),
 ):
     service = service_query(db).filter(VehicleService.id == service_id).first()
     if not service:

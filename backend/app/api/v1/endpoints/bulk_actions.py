@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import has_permission, require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import Driver, User, Vehicle, VehicleAssignment, VehicleService, WorkOrder
 from app.schemas import BulkActionOut, BulkActionRequest, UserRole
@@ -48,13 +49,20 @@ def ensure_can_archive(db: Session, entity_type: str, ids: list[int]) -> None:
 def apply_bulk_action(
     payload: BulkActionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*BULK_ROLES)),
+    current_user: User = Depends(get_current_user),
 ):
     if payload.action not in ACTIONS:
         raise HTTPException(status_code=422, detail="Unsupported bulk action.")
+    required = (
+        "maintenance.create_work_order" if payload.action == "create_work_orders"
+        else "maintenance.assign_work_order" if payload.action == "assign_service_program"
+        else "drivers.manage" if payload.entity_type == "Drivers"
+        else "vehicles.archive" if payload.action in {"archive", "restore"}
+        else "vehicles.edit"
+    )
+    if not has_permission(db, current_user, required):
+        raise HTTPException(status_code=403, detail=f"{required} is required for this bulk action.")
     rows = selected_rows(db, payload.entity_type, payload.ids)
-    if payload.action == "restore" and current_user.role != UserRole.admin.value:
-        raise HTTPException(status_code=403, detail="Only Admin users can restore archived records.")
     if payload.action not in {"archive", "restore"} and any(row.archived for row in rows):
         raise HTTPException(status_code=409, detail="Restore archived records before applying other bulk changes.")
     now = datetime.utcnow()
@@ -151,7 +159,7 @@ def export_selected(
     entity_type: str,
     ids: str = Query(min_length=1, max_length=5000),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(*BULK_ROLES)),
+    current_user: User = Depends(require_permission("reports.export")),
 ):
     try:
         selected_ids = list(dict.fromkeys(int(value) for value in ids.split(",") if value.strip()))

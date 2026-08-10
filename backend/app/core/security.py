@@ -24,12 +24,17 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(subject: str | int, expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    subject: str | int,
+    expires_delta: timedelta | None = None,
+    *,
+    session_version: int = 0,
+) -> str:
     settings = get_settings()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
-    payload: dict[str, Any] = {"sub": str(subject), "exp": expire}
+    payload: dict[str, Any] = {"sub": str(subject), "exp": expire, "sv": session_version}
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
@@ -46,12 +51,15 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         if subject is None:
             raise credentials_error
         user_id = int(subject)
+        token_session_version = int(payload.get("sv", 0))
     except (JWTError, ValueError) as exc:
         raise credentials_error from exc
 
     user = db.get(User, user_id)
     if user is None:
         raise credentials_error
+    if token_session_version != (user.session_version or 0):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session has been revoked.")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive.")
     return user

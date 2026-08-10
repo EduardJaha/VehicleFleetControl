@@ -17,5 +17,8 @@
   "reports": "Raportet",
   "notifications": "Njoftimet",
   "auditLogs": "Regjistri i Aktiviteteve",
-  "imports": "Importet"
+  "imports": "Importet",
+  "users": "Administrimi i Përdoruesve",
+  "rolesPermissions": "Rolet dhe Lejet",
+  "organizationSettings": "Cilësimet e Organizatës"
 }

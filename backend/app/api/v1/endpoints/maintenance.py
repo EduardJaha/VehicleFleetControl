@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import Numeric, case, cast, func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.security import get_current_user, require_roles
+from app.core.authorization import require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import Inspection, User, Vehicle, VehicleService, WorkOrder
 from app.schemas import (
@@ -23,7 +24,7 @@ from app.schemas import (
 from app.utils.dates import format_date
 from app.api.v1.endpoints.services import current_reminder_status, reminder_status_expression
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(require_permission("maintenance.view"))])
 
 SUMMARY_ROLES = (UserRole.admin, UserRole.fleet_manager, UserRole.mechanic, UserRole.finance, UserRole.viewer)
 ACTIVE_WORK_ORDER_STATUSES = ["Open", "Assigned", "In Progress", "Waiting for Parts"]
@@ -152,7 +153,7 @@ def actual_maintenance_cost(db: Session, start: datetime | None = None, end: dat
 @router.get("/summary", response_model=MaintenanceSummaryOut)
 def maintenance_summary(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*SUMMARY_ROLES)),
+    _: User = Depends(require_permission("maintenance.view")),
 ):
     now = datetime.now()
     month_start, month_end = month_bounds(now)

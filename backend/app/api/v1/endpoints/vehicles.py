@@ -4,11 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.core.authorization import authorization_scope, has_permission, require_permission
+from app.core.authorization import authorization_scope, has_permission, require_any_permission, require_permission
 from app.core.security import get_current_user
 from app.db.session import get_db
-from app.models import Location, User, Vehicle, VehicleAssignment, VehicleBrand, VehicleModel
-from app.schemas import RegistrationCountry, UserRole, VehicleCreate, VehicleOut, VehicleUpdate, UpdateLocation, UpdateStatus
+from app.models import Location, Supplier, User, Vehicle, VehicleAssignment, VehicleBrand, VehicleModel, VehicleOperatingCost
+from app.schemas import (
+    RegistrationCountry, UserRole, VehicleCreate, VehicleOut, VehicleUpdate,
+    UpdateLocation, UpdateStatus, VehicleOperatingCostCreate, VehicleOperatingCostOut,
+)
 from app.schemas import MaintenanceTimelinePage, VehicleMaintenanceSummaryOut
 from app.api.v1.endpoints.maintenance import vehicle_summary, vehicle_timeline
 from app.utils.domain import find_vehicle_by_plate, parse_vehicle_status, status_name
@@ -44,10 +47,51 @@ def vehicle_out(vehicle: Vehicle) -> VehicleOut:
         odometer_km=vehicle.odometer_km,
         status=vehicle.status,
         status_name=status_name(vehicle.status),
+        acquisition_date=vehicle.acquisition_date,
+        purchase_price=vehicle.purchase_price,
+        supplier_id=vehicle.supplier_id,
+        ownership_type=vehicle.ownership_type or "Owned",
+        lease_start=vehicle.lease_start,
+        lease_end=vehicle.lease_end,
+        monthly_lease_payment=vehicle.monthly_lease_payment,
+        warranty_expiry=vehicle.warranty_expiry,
+        expected_service_years=vehicle.expected_service_years,
+        expected_service_km=vehicle.expected_service_km,
+        depreciation_method=vehicle.depreciation_method or "Straight Line",
+        residual_value=vehicle.residual_value,
+        sale_date=vehicle.sale_date,
+        sale_price=vehicle.sale_price,
+        disposal_reason=vehicle.disposal_reason,
+        fuel_tank_capacity_l=vehicle.fuel_tank_capacity_l,
+        battery_capacity_kwh=vehicle.battery_capacity_kwh,
         archived=vehicle.archived,
         archived_at=vehicle.archived_at.isoformat() if vehicle.archived_at else None,
         archived_by=vehicle.archived_by,
     )
+
+
+def lifecycle_values(payload: VehicleCreate | VehicleUpdate, db: Session) -> dict:
+    if payload.supplier_id is not None and db.get(Supplier, payload.supplier_id) is None:
+        raise HTTPException(status_code=422, detail="The selected supplier does not exist.")
+    return {
+        "acquisition_date": payload.acquisition_date,
+        "purchase_price": payload.purchase_price,
+        "supplier_id": payload.supplier_id,
+        "ownership_type": payload.ownership_type.value,
+        "lease_start": payload.lease_start,
+        "lease_end": payload.lease_end,
+        "monthly_lease_payment": payload.monthly_lease_payment,
+        "warranty_expiry": payload.warranty_expiry,
+        "expected_service_years": payload.expected_service_years,
+        "expected_service_km": payload.expected_service_km,
+        "depreciation_method": payload.depreciation_method.value,
+        "residual_value": payload.residual_value,
+        "sale_date": payload.sale_date,
+        "sale_price": payload.sale_price,
+        "disposal_reason": payload.disposal_reason,
+        "fuel_tank_capacity_l": payload.fuel_tank_capacity_l,
+        "battery_capacity_kwh": payload.battery_capacity_kwh,
+    }
 
 
 def validate_catalog_selection(
@@ -160,6 +204,7 @@ def create_vehicle(payload: VehicleCreate, db: Session = Depends(get_db), curren
         engine_cc=payload.engine_cc,
         odometer_km=payload.odometer_km,
         status=parse_vehicle_status(payload.status),
+        **lifecycle_values(payload, db),
     )
     db.add(vehicle)
     try:
@@ -258,6 +303,8 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
     vehicle.engine_cc = payload.engine_cc
     vehicle.odometer_km = payload.odometer_km
     vehicle.status = parse_vehicle_status(payload.status)
+    for field, value in lifecycle_values(payload, db).items():
+        setattr(vehicle, field, value)
     record_audit(
         db, action="Vehicle updated", entity_type="Vehicle", entity_id=vehicle.id,
         user=current_user, old_values=old_values, new_values=snapshot(vehicle),
@@ -303,6 +350,73 @@ def update_vehicle(vehicle_id: int, payload: VehicleUpdate, db: Session = Depend
         ) from exc
     db.refresh(vehicle)
     return vehicle_out(vehicle)
+
+
+@router.get("/{vehicle_id}/operating-costs", response_model=list[VehicleOperatingCostOut])
+def list_vehicle_operating_costs(
+    vehicle_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("reports.view")),
+):
+    if db.get(Vehicle, vehicle_id) is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found.")
+    return db.query(VehicleOperatingCost).filter(
+        VehicleOperatingCost.vehicle_id == vehicle_id,
+        VehicleOperatingCost.archived.is_(False),
+    ).order_by(VehicleOperatingCost.cost_date.desc()).all()
+
+
+@router.post("/{vehicle_id}/operating-costs", response_model=VehicleOperatingCostOut, status_code=201)
+def create_vehicle_operating_cost(
+    vehicle_id: int,
+    payload: VehicleOperatingCostCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_any_permission("vehicles.edit", "fuel.edit")),
+):
+    if db.get(Vehicle, vehicle_id) is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found.")
+    if payload.supplier_id is not None and db.get(Supplier, payload.supplier_id) is None:
+        raise HTTPException(status_code=422, detail="The selected supplier does not exist.")
+    row = VehicleOperatingCost(
+        vehicle_id=vehicle_id,
+        category=payload.category.value,
+        cost_date=payload.cost_date,
+        amount=payload.amount,
+        supplier_id=payload.supplier_id,
+        description=payload.description.strip() if payload.description else None,
+    )
+    db.add(row)
+    db.flush()
+    record_audit(
+        db, action="Vehicle operating cost created", entity_type="VehicleOperatingCost",
+        entity_id=row.id, user=current_user, new_values=snapshot(row),
+        description=f"{row.category} cost added to Vehicle #{vehicle_id}.",
+    )
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.delete("/{vehicle_id}/operating-costs/{cost_id}")
+def archive_vehicle_operating_cost(
+    vehicle_id: int,
+    cost_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_any_permission("vehicles.edit", "fuel.edit")),
+):
+    row = db.query(VehicleOperatingCost).filter(
+        VehicleOperatingCost.id == cost_id,
+        VehicleOperatingCost.vehicle_id == vehicle_id,
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Operating cost not found.")
+    row.archived = True
+    record_audit(
+        db, action="Vehicle operating cost archived", entity_type="VehicleOperatingCost",
+        entity_id=row.id, user=current_user, new_values={"archived": True},
+    )
+    db.commit()
+    return {"message": "Operating cost archived."}
 
 
 @router.put("/status/{license_plate}", response_model=VehicleOut)

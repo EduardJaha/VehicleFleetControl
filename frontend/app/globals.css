@@ -136,6 +136,16 @@ a .maintenanceKpi:hover { transform: translateY(-2px); box-shadow: 0 10px 25px r
 .detailList dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .linkedRecords { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .linkedRecordCard { display: grid; gap: 8px; align-content: start; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: #fafbfc; }
+.tcoCharts { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+.tcoCharts h2 { margin-top: 0; font-size: 18px; }
+.tcoBars { display: grid; gap: 10px; }
+.tcoBarRow { display: grid; grid-template-columns: minmax(145px, .8fr) minmax(100px, 1.4fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+.tcoBarTrack { height: 9px; overflow: hidden; border-radius: 999px; background: #eef2f6; }
+.tcoBarTrack span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.tcoTrend { height: 250px; display: flex; align-items: flex-end; gap: 6px; overflow-x: auto; padding-top: 15px; }
+.tcoTrendItem { min-width: 30px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; text-align: center; color: var(--muted); font-size: 10px; }
+.tcoTrendItem div { min-height: 3px; border-radius: 5px 5px 0 0; background: #6ea8ff; }
+@media (max-width: 900px) { .tcoCharts { grid-template-columns: 1fr; } }
 .timeline { display: grid; }
 .timelineItem { position: relative; display: grid; grid-template-columns: 24px 1fr; gap: 12px; }
 .timelineItem::before { content: ""; position: absolute; left: 7px; top: 18px; bottom: -8px; width: 2px; background: #dbe4f0; }

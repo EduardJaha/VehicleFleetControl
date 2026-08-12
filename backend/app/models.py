@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -183,6 +184,20 @@ class VehicleModel(Base):
     vehicles = relationship("Vehicle", back_populates="catalog_model", foreign_keys="Vehicle.model_id")
 
 
+class Supplier(Base):
+    """Minimal supplier master used by vehicle acquisition records."""
+
+    __tablename__ = "Suppliers"
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    name = Column("Name", String(255), nullable=False, unique=True)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    vehicles = relationship("Vehicle", back_populates="supplier")
+
+
 class Vehicle(Base):
     __tablename__ = "Vehicles"
     __table_args__ = (
@@ -219,12 +234,30 @@ class Vehicle(Base):
     vin_number = Column("VinNumber", String(50), nullable=True)
     year = Column("Year", Integer, nullable=True)
     odometer_km = Column("OdometerKm", Integer, nullable=True)
+    acquisition_date = Column("AcquisitionDate", Date, nullable=True)
+    purchase_price = Column("PurchasePrice", Numeric(14, 2), nullable=True)
+    supplier_id = Column("SupplierId", Integer, ForeignKey("Suppliers.Id", ondelete="SET NULL"), nullable=True)
+    ownership_type = Column("OwnershipType", String(20), nullable=False, default="Owned")
+    lease_start = Column("LeaseStart", Date, nullable=True)
+    lease_end = Column("LeaseEnd", Date, nullable=True)
+    monthly_lease_payment = Column("MonthlyLeasePayment", Numeric(14, 2), nullable=True)
+    warranty_expiry = Column("WarrantyExpiry", Date, nullable=True)
+    expected_service_years = Column("ExpectedServiceYears", Integer, nullable=True)
+    expected_service_km = Column("ExpectedServiceKm", Integer, nullable=True)
+    depreciation_method = Column("DepreciationMethod", String(30), nullable=False, default="Straight Line")
+    residual_value = Column("ResidualValue", Numeric(14, 2), nullable=True)
+    sale_date = Column("SaleDate", Date, nullable=True)
+    sale_price = Column("SalePrice", Numeric(14, 2), nullable=True)
+    disposal_reason = Column("DisposalReason", Text, nullable=True)
+    fuel_tank_capacity_l = Column("FuelTankCapacityL", Numeric(10, 2), nullable=True)
+    battery_capacity_kwh = Column("BatteryCapacityKwh", Numeric(10, 2), nullable=True)
     archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
     archived_at = Column("ArchivedAt", DateTime, nullable=True)
     archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
     catalog_brand = relationship("VehicleBrand", back_populates="vehicles", foreign_keys=[brand_id])
     catalog_model = relationship("VehicleModel", back_populates="vehicles", foreign_keys=[model_id])
+    supplier = relationship("Supplier", back_populates="vehicles")
     papers = relationship("VehiclePaper", back_populates="vehicle", cascade="all, delete-orphan")
     services = relationship("VehicleService", back_populates="vehicle", cascade="all, delete-orphan")
     fuels = relationship("VehicleFuel", back_populates="vehicle", cascade="all, delete-orphan")
@@ -235,6 +268,7 @@ class Vehicle(Base):
     work_orders = relationship("WorkOrder", back_populates="vehicle", cascade="all, delete-orphan")
     assignments = relationship("VehicleAssignment", back_populates="vehicle")
     condition_records = relationship("VehicleConditionRecord", back_populates="vehicle")
+    operating_costs = relationship("VehicleOperatingCost", back_populates="vehicle", cascade="all, delete-orphan")
 
 
 class Driver(Base):
@@ -715,6 +749,34 @@ class VehicleFuel(Base):
 
     vehicle = relationship("Vehicle", back_populates="fuels")
     vehicle_assignment = relationship("VehicleAssignment", back_populates="fuel_records")
+
+
+class VehicleOperatingCost(Base):
+    """Costs not represented by fuel, maintenance, accidents, leases, or depreciation."""
+
+    __tablename__ = "VehicleOperatingCosts"
+    __table_args__ = (
+        CheckConstraint(
+            '"Category" IN (\'Insurance\', \'Registration\', \'Other Operating\')',
+            name="ck_vehicle_operating_cost_category",
+        ),
+        CheckConstraint('"Amount" >= 0', name="ck_vehicle_operating_cost_amount_nonnegative"),
+        Index("ix_vehicle_operating_costs_vehicle_date", "VehicleId", "CostDate"),
+    )
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
+    category = Column("Category", String(30), nullable=False)
+    cost_date = Column("CostDate", Date, nullable=False)
+    amount = Column("Amount", Numeric(14, 2), nullable=False)
+    supplier_id = Column("SupplierId", Integer, ForeignKey("Suppliers.Id", ondelete="SET NULL"), nullable=True)
+    description = Column("Description", Text, nullable=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    vehicle = relationship("Vehicle", back_populates="operating_costs")
+    supplier = relationship("Supplier")
 
 
 class VehicleAccident(Base):

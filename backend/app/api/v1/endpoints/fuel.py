@@ -18,6 +18,7 @@ from app.schemas import (
 )
 from app.services.audit import record_audit, snapshot
 from app.services.vehicle_assignments import active_assignment_at
+from app.services.tco import detect_energy_anomalies
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.utils.files import store_upload
@@ -325,9 +326,16 @@ async def add_fuel_record(
         db.rollback()
         raise
     db.refresh(record)
+    anomalies = [
+        item for item in detect_energy_anomalies(
+            vehicle,
+            db.query(VehicleFuel).filter(VehicleFuel.vehicle_id == vehicle.id, VehicleFuel.archived.is_(False)).all(),
+        ) if item.get("record_id") == record.id
+    ]
     return {
         "message": f"Fuel or charging record added for {vehicle.license_plate}.",
         "record": fuel_record_out(record),
+        "anomalies": anomalies,
     }
 
 
@@ -430,7 +438,13 @@ def update_fuel_record(
         description=f"Fuel or charging record #{record.id} updated.",
     )
     db.commit()
-    return {"message": "Fuel or charging record updated successfully."}
+    anomalies = [
+        item for item in detect_energy_anomalies(
+            record.vehicle,
+            db.query(VehicleFuel).filter(VehicleFuel.vehicle_id == record.vehicle_id, VehicleFuel.archived.is_(False)).all(),
+        ) if item.get("record_id") == record.id
+    ]
+    return {"message": "Fuel or charging record updated successfully.", "anomalies": anomalies}
 
 
 @router.get("/all", response_model=list[FuelRecordOut])

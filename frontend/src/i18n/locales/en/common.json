@@ -181,7 +181,14 @@
     "Breakdown": "Breakdown",
     "Work Order": "Work Order",
     "Service": "Service",
-    "Imported": "Imported"
+    "Imported": "Imported",
+    "Owned": "Owned",
+    "Leased": "Leased",
+    "Rented": "Rented",
+    "Financed": "Financed",
+    "Straight Line": "Straight Line",
+    "Declining Balance": "Declining Balance",
+    "None": "None"
   },
   "checklist": {
     "Tires": "Tyres",

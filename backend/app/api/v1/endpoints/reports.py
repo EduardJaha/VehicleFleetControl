@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from typing import Callable
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -21,6 +22,7 @@ from app.services.license_plates import RegistrationCountry, registration_countr
 from app.services.audit import record_audit
 from app.services.document_compliance import compliance_dashboard
 from app.core.i18n import request_language
+from app.services.tco import tco_report as build_tco_report
 
 router = APIRouter(dependencies=[Depends(require_permission("reports.view"))])
 
@@ -263,6 +265,20 @@ def vehicle_costs_report(db: Session, **filters) -> dict:
     return report_response({"total_vehicle_cost": float(sum(row["total_cost"] for row in rows)), "vehicle_count": len(rows)}, rows)
 
 
+def tco_report(db: Session, **filters) -> dict:
+    vehicles = filtered_vehicles(
+        db, filters.get("license_plate"), filters.get("vehicle_status"), filters.get("department"),
+        filters.get("driver_id"), filters.get("registration_country"),
+    )
+    start = date_or_none(filters.get("from_date"), "from_date")
+    end = date_or_none(filters.get("to_date"), "to_date")
+    return build_tco_report(
+        db, vehicles,
+        from_date=start.date() if start else None,
+        to_date=end.date() if end else None,
+    )
+
+
 def reservations_report(db: Session, **filters) -> dict:
     from_date = date_or_none(filters.get("from_date"), "from_date")
     to_date = date_or_none(filters.get("to_date"), "to_date")
@@ -458,6 +474,7 @@ REPORTS: dict[str, Callable[..., dict]] = {
     "document-compliance": document_compliance_report,
     "work-orders": work_orders_report,
     "accidents": accidents_report,
+    "tco": tco_report,
 }
 
 
@@ -465,12 +482,12 @@ EXCEL_TEXT = {
     "en": {
         "kpis": "KPIs", "metric": "Metric", "value": "Value", "rows": "Rows", "no_rows": "No rows",
         "generated": "Generated", "filters": "Filters",
-        "reports": {"fleet-summary": "Fleet Summary", "fuel-costs": "Fuel Costs", "service-costs": "Service Costs", "vehicle-costs": "Vehicle Costs", "reservations": "Reservations", "document-expiry": "Document Expiry", "document-compliance": "Document Compliance", "work-orders": "Work Orders", "accidents": "Accident and Claim Costs"},
+        "reports": {"fleet-summary": "Fleet Summary", "fuel-costs": "Fuel Costs", "service-costs": "Service Costs", "vehicle-costs": "Vehicle Costs", "reservations": "Reservations", "document-expiry": "Document Expiry", "document-compliance": "Document Compliance", "work-orders": "Work Orders", "accidents": "Accident and Claim Costs", "tco": "Vehicle Lifecycle and TCO"},
     },
     "sq": {
         "kpis": "Treguesit", "metric": "Treguesi", "value": "Vlera", "rows": "Rreshtat", "no_rows": "Nuk ka rreshta",
         "generated": "Gjeneruar", "filters": "Filtrat",
-        "reports": {"fleet-summary": "Përmbledhja e Flotës", "fuel-costs": "Kostot e Karburantit", "service-costs": "Kostot e Servisimit", "vehicle-costs": "Kostot e Automjeteve", "reservations": "Rezervimet", "document-expiry": "Skadimi i Dokumenteve", "document-compliance": "Pajtueshmëria e Dokumenteve", "work-orders": "Urdhrat e Punës", "accidents": "Kostot e Aksidenteve dhe Dëmeve"},
+        "reports": {"fleet-summary": "Përmbledhja e Flotës", "fuel-costs": "Kostot e Karburantit", "service-costs": "Kostot e Servisimit", "vehicle-costs": "Kostot e Automjeteve", "reservations": "Rezervimet", "document-expiry": "Skadimi i Dokumenteve", "document-compliance": "Pajtueshmëria e Dokumenteve", "work-orders": "Urdhrat e Punës", "accidents": "Kostot e Aksidenteve dhe Dëmeve", "tco": "Cikli i Automjetit dhe TCO"},
     },
 }
 
@@ -487,6 +504,19 @@ EXCEL_HEADINGS_SQ = {
     "owner_type": "Lloji i Pronarit", "owner_id": "ID e Pronarit", "owner_name": "Pronari",
     "requirement_id": "ID e Kërkesës", "document_id": "ID e Dokumentit", "version_id": "ID e Versionit",
     "warning_days": "Ditët e Paralajmërimit", "file_path": "Skedari", "country": "Shteti",
+    "vehicle_id": "ID e Automjetit", "ownership_type": "Lloji i Pronësisë",
+    "fuel_cost": "Kostoja e Karburantit", "charging_cost": "Kostoja e Karikimit",
+    "maintenance_cost": "Kostoja e Mirëmbajtjes", "parts_cost": "Kostoja e Pjesëve",
+    "labor_cost": "Kostoja e Punës", "accident_cost": "Kostoja e Aksidenteve",
+    "insurance_cost": "Kostoja e Sigurimit", "registration_cost": "Kostoja e Regjistrimit",
+    "lease_cost": "Kostoja e Lizingut", "depreciation": "Zhvlerësimi",
+    "other_operating_cost": "Kosto Tjera Operative", "cost_per_km": "Kostoja për km",
+    "downtime_days": "Ditët Jashtë Pune", "maintenance_frequency_per_year": "Frekuenca Vjetore e Mirëmbajtjes",
+    "current_book_value": "Vlera Aktuale Kontabël", "recommendation_status": "Rekomandimi",
+    "recommendation_score": "Pikët e Rekomandimit", "recommendation_reasons": "Arsyet e Rekomandimit",
+    "efficiency": "Efikasiteti", "anomaly_count": "Numri i Anomalive",
+    "average_cost_per_km": "Kostoja Mesatare për km", "total_downtime_days": "Ditët Gjithsej Jashtë Pune",
+    "replacement_candidates": "Kandidatët për Zëvendësim",
 }
 
 EXCEL_VALUES_SQ = {
@@ -499,6 +529,8 @@ EXCEL_VALUES_SQ = {
     "Registration": "Regjistrim", "Insurance": "Sigurim", "Technical Control": "Kontroll teknik", "Albania": "Shqipëria", "Kosovo": "Kosova",
     "Missing": "Mungon", "Expiring Soon": "Skadon së shpejti", "Expired": "I skaduar",
     "Renewal In Progress": "Rinovim në proces", "Archived": "I arkivuar", "Vehicle": "Automjet", "Driver": "Shofer",
+    "Owned": "Në pronësi", "Leased": "Me lizing", "Rented": "Me qira", "Financed": "I financuar",
+    "Retain": "Mbaj", "Monitor": "Monitoro", "Replace Soon": "Zëvendëso Së Shpejti", "Replace": "Zëvendëso",
 }
 
 
@@ -556,6 +588,8 @@ def excel_heading(value: str, language: str = "en") -> str:
 
 
 def localize_excel_value(value, language: str):
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
     if language == "sq" and isinstance(value, str):
         return EXCEL_VALUES_SQ.get(value, value)
     return value
@@ -609,6 +643,11 @@ def service_costs(from_date: str | None = None, to_date: str | None = None, lice
 @router.get("/vehicle-costs")
 def vehicle_costs(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
     return vehicle_costs_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
+
+
+@router.get("/tco")
+def total_cost_of_ownership(from_date: str | None = None, to_date: str | None = None, license_plate: str | None = None, vehicle_status: str | None = None, department: str | None = None, driver_id: int | None = None, registration_country: str | None = None, db: Session = Depends(get_db)):
+    return tco_report(db, **report_filters(from_date, to_date, license_plate, vehicle_status, department, driver_id, registration_country))
 
 
 @router.get("/reservations")

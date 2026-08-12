@@ -181,7 +181,14 @@
     "Breakdown": "Defekt",
     "Work Order": "Urdhër Pune",
     "Service": "Servis",
-    "Imported": "Importuar"
+    "Imported": "Importuar",
+    "Owned": "Në pronësi",
+    "Leased": "Me lizing",
+    "Rented": "Me qira",
+    "Financed": "I financuar",
+    "Straight Line": "Lineare",
+    "Declining Balance": "Bilanc zbritës",
+    "None": "Asnjë"
   },
   "checklist": {
     "Tires": "Gomat",

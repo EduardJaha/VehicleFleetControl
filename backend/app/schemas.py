@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 from enum import Enum, IntEnum
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from app.utils.vehicle_catalog import clean_catalog_name
@@ -74,6 +75,25 @@ class ImportTransactionMode(str, Enum):
 class EnergyUnit(str, Enum):
     liter = "L"
     kilowatt_hour = "KWH"
+
+
+class OwnershipType(str, Enum):
+    owned = "Owned"
+    leased = "Leased"
+    rented = "Rented"
+    financed = "Financed"
+
+
+class DepreciationMethod(str, Enum):
+    straight_line = "Straight Line"
+    declining_balance = "Declining Balance"
+    none = "None"
+
+
+class OperatingCostCategory(str, Enum):
+    insurance = "Insurance"
+    registration = "Registration"
+    other = "Other Operating"
 
 
 class DriverStatus(str, Enum):
@@ -819,6 +839,23 @@ class VehicleFields(BaseModel):
     engine_cc: int | None = Field(default=None, ge=50, le=10000)
     odometer_km: int | None = Field(default=None, ge=0, le=2_000_000)
     status: int = 0
+    acquisition_date: date | None = None
+    purchase_price: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+    supplier_id: int | None = Field(default=None, gt=0)
+    ownership_type: OwnershipType = OwnershipType.owned
+    lease_start: date | None = None
+    lease_end: date | None = None
+    monthly_lease_payment: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+    warranty_expiry: date | None = None
+    expected_service_years: int | None = Field(default=None, gt=0, le=100)
+    expected_service_km: int | None = Field(default=None, gt=0, le=5_000_000)
+    depreciation_method: DepreciationMethod = DepreciationMethod.straight_line
+    residual_value: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+    sale_date: date | None = None
+    sale_price: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+    disposal_reason: str | None = Field(default=None, max_length=1000)
+    fuel_tank_capacity_l: Decimal | None = Field(default=None, gt=0, decimal_places=2)
+    battery_capacity_kwh: Decimal | None = Field(default=None, gt=0, decimal_places=2)
 
     @field_validator("license_plate")
     @classmethod
@@ -832,6 +869,23 @@ class VehicleFields(BaseModel):
             return None
         text = value.strip()
         return text or None
+
+    @field_validator("disposal_reason")
+    @classmethod
+    def clean_disposal_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+    @model_validator(mode="after")
+    def validate_lifecycle(self):
+        if self.lease_start and self.lease_end and self.lease_end < self.lease_start:
+            raise ValueError("Lease end cannot be before lease start.")
+        if self.sale_date and self.acquisition_date and self.sale_date < self.acquisition_date:
+            raise ValueError("Sale date cannot be before acquisition date.")
+        if self.residual_value is not None and self.purchase_price is not None and self.residual_value > self.purchase_price:
+            raise ValueError("Residual value cannot exceed purchase price.")
+        return self
 
 
 class VehicleWriteBase(VehicleFields):
@@ -870,6 +924,21 @@ class VehicleOut(VehicleFields):
     archived: bool = False
     archived_at: str | None = None
     archived_by: int | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VehicleOperatingCostCreate(BaseModel):
+    category: OperatingCostCategory
+    cost_date: date
+    amount: Decimal = Field(gt=0, decimal_places=2)
+    supplier_id: int | None = Field(default=None, gt=0)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class VehicleOperatingCostOut(VehicleOperatingCostCreate):
+    id: int
+    vehicle_id: int
+    archived: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 

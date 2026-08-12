@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
-import { FUEL_TYPES, VEHICLE_STATUSES } from "@/lib/constants";
+import { DEPRECIATION_METHODS, FUEL_TYPES, OWNERSHIP_TYPES, VEHICLE_STATUSES } from "@/lib/constants";
 import { vehicleCatalogApi, vehicleRegistrationApi } from "@/lib/api";
 import { formatLicensePlateInput, validateLicensePlateInput } from "@/lib/licensePlates";
 import type {
@@ -33,6 +33,23 @@ const initialVehicleForm: VehicleFormValues = {
   vin_number: null,
   engine_cc: null,
   odometer_km: null,
+  acquisition_date: null,
+  purchase_price: null,
+  supplier_id: null,
+  ownership_type: "Owned",
+  lease_start: null,
+  lease_end: null,
+  monthly_lease_payment: null,
+  warranty_expiry: null,
+  expected_service_years: null,
+  expected_service_km: null,
+  depreciation_method: "Straight Line",
+  residual_value: null,
+  sale_date: null,
+  sale_price: null,
+  disposal_reason: null,
+  fuel_tank_capacity_l: null,
+  battery_capacity_kwh: null,
   status: 0
 };
 
@@ -51,6 +68,23 @@ export function vehicleToPayload(vehicle: Vehicle): VehicleFormInitialValues {
     vin_number: vehicle.vin_number ?? null,
     engine_cc: vehicle.engine_cc ?? null,
     odometer_km: vehicle.odometer_km ?? null,
+    acquisition_date: vehicle.acquisition_date ?? null,
+    purchase_price: vehicle.purchase_price ?? null,
+    supplier_id: vehicle.supplier_id ?? null,
+    ownership_type: vehicle.ownership_type ?? "Owned",
+    lease_start: vehicle.lease_start ?? null,
+    lease_end: vehicle.lease_end ?? null,
+    monthly_lease_payment: vehicle.monthly_lease_payment ?? null,
+    warranty_expiry: vehicle.warranty_expiry ?? null,
+    expected_service_years: vehicle.expected_service_years ?? null,
+    expected_service_km: vehicle.expected_service_km ?? null,
+    depreciation_method: vehicle.depreciation_method ?? "Straight Line",
+    residual_value: vehicle.residual_value ?? null,
+    sale_date: vehicle.sale_date ?? null,
+    sale_price: vehicle.sale_price ?? null,
+    disposal_reason: vehicle.disposal_reason ?? null,
+    fuel_tank_capacity_l: vehicle.fuel_tank_capacity_l ?? null,
+    battery_capacity_kwh: vehicle.battery_capacity_kwh ?? null,
     status: vehicle.status
   };
 }
@@ -72,6 +106,23 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
       vin_number: initialValues.vin_number,
       engine_cc: initialValues.engine_cc,
       odometer_km: initialValues.odometer_km,
+      acquisition_date: initialValues.acquisition_date,
+      purchase_price: initialValues.purchase_price,
+      supplier_id: initialValues.supplier_id,
+      ownership_type: initialValues.ownership_type,
+      lease_start: initialValues.lease_start,
+      lease_end: initialValues.lease_end,
+      monthly_lease_payment: initialValues.monthly_lease_payment,
+      warranty_expiry: initialValues.warranty_expiry,
+      expected_service_years: initialValues.expected_service_years,
+      expected_service_km: initialValues.expected_service_km,
+      depreciation_method: initialValues.depreciation_method,
+      residual_value: initialValues.residual_value,
+      sale_date: initialValues.sale_date,
+      sale_price: initialValues.sale_price,
+      disposal_reason: initialValues.disposal_reason,
+      fuel_tank_capacity_l: initialValues.fuel_tank_capacity_l,
+      battery_capacity_kwh: initialValues.battery_capacity_kwh,
       status: initialValues.status
     };
   });
@@ -314,6 +365,78 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
         <div className="formRow">
           <label htmlFor={`${fieldPrefix}-odometer`}>{t("modules:vehicles.odometerKm")}</label>
           <input id={`${fieldPrefix}-odometer`} className="input" type="number" min="0" max="2000000" value={form.odometer_km ?? ""} onChange={(event) => setForm({ ...form, odometer_km: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-acquisition-date`}>{t("modules:vehicles.acquisitionDate")}</label>
+          <input id={`${fieldPrefix}-acquisition-date`} className="input" type="date" value={form.acquisition_date ?? ""} onChange={(event) => setForm({ ...form, acquisition_date: event.target.value || null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-ownership-type`}>{t("modules:vehicles.ownershipType")}</label>
+          <select id={`${fieldPrefix}-ownership-type`} className="select" value={form.ownership_type} onChange={(event) => setForm({ ...form, ownership_type: event.target.value as VehicleFormValues["ownership_type"] })}>
+            {OWNERSHIP_TYPES.map((value) => <option key={value} value={value}>{t(`common:types.${value}`, { defaultValue: value })}</option>)}
+          </select>
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-purchase-price`}>{t("modules:vehicles.purchasePrice")}</label>
+          <input id={`${fieldPrefix}-purchase-price`} className="input" type="number" min="0" step="0.01" value={form.purchase_price ?? ""} onChange={(event) => setForm({ ...form, purchase_price: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-supplier-id`}>{t("modules:vehicles.supplierId")}</label>
+          <input id={`${fieldPrefix}-supplier-id`} className="input" type="number" min="1" value={form.supplier_id ?? ""} onChange={(event) => setForm({ ...form, supplier_id: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-lease-start`}>{t("modules:vehicles.leaseStart")}</label>
+          <input id={`${fieldPrefix}-lease-start`} className="input" type="date" value={form.lease_start ?? ""} onChange={(event) => setForm({ ...form, lease_start: event.target.value || null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-lease-end`}>{t("modules:vehicles.leaseEnd")}</label>
+          <input id={`${fieldPrefix}-lease-end`} className="input" type="date" value={form.lease_end ?? ""} onChange={(event) => setForm({ ...form, lease_end: event.target.value || null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-lease-payment`}>{t("modules:vehicles.monthlyLeasePayment")}</label>
+          <input id={`${fieldPrefix}-lease-payment`} className="input" type="number" min="0" step="0.01" value={form.monthly_lease_payment ?? ""} onChange={(event) => setForm({ ...form, monthly_lease_payment: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-warranty-expiry`}>{t("modules:vehicles.warrantyExpiry")}</label>
+          <input id={`${fieldPrefix}-warranty-expiry`} className="input" type="date" value={form.warranty_expiry ?? ""} onChange={(event) => setForm({ ...form, warranty_expiry: event.target.value || null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-service-years`}>{t("modules:vehicles.expectedServiceYears")}</label>
+          <input id={`${fieldPrefix}-service-years`} className="input" type="number" min="1" max="100" value={form.expected_service_years ?? ""} onChange={(event) => setForm({ ...form, expected_service_years: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-service-km`}>{t("modules:vehicles.expectedServiceKm")}</label>
+          <input id={`${fieldPrefix}-service-km`} className="input" type="number" min="1" value={form.expected_service_km ?? ""} onChange={(event) => setForm({ ...form, expected_service_km: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-depreciation`}>{t("modules:vehicles.depreciationMethod")}</label>
+          <select id={`${fieldPrefix}-depreciation`} className="select" value={form.depreciation_method} onChange={(event) => setForm({ ...form, depreciation_method: event.target.value as VehicleFormValues["depreciation_method"] })}>
+            {DEPRECIATION_METHODS.map((value) => <option key={value} value={value}>{t(`common:types.${value}`, { defaultValue: value })}</option>)}
+          </select>
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-residual-value`}>{t("modules:vehicles.residualValue")}</label>
+          <input id={`${fieldPrefix}-residual-value`} className="input" type="number" min="0" step="0.01" value={form.residual_value ?? ""} onChange={(event) => setForm({ ...form, residual_value: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-tank-capacity`}>{t("modules:vehicles.fuelTankCapacity")}</label>
+          <input id={`${fieldPrefix}-tank-capacity`} className="input" type="number" min="0.01" step="0.01" value={form.fuel_tank_capacity_l ?? ""} onChange={(event) => setForm({ ...form, fuel_tank_capacity_l: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-battery-capacity`}>{t("modules:vehicles.batteryCapacity")}</label>
+          <input id={`${fieldPrefix}-battery-capacity`} className="input" type="number" min="0.01" step="0.01" value={form.battery_capacity_kwh ?? ""} onChange={(event) => setForm({ ...form, battery_capacity_kwh: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-sale-date`}>{t("modules:vehicles.saleDate")}</label>
+          <input id={`${fieldPrefix}-sale-date`} className="input" type="date" value={form.sale_date ?? ""} onChange={(event) => setForm({ ...form, sale_date: event.target.value || null })} />
+        </div>
+        <div className="formRow">
+          <label htmlFor={`${fieldPrefix}-sale-price`}>{t("modules:vehicles.salePrice")}</label>
+          <input id={`${fieldPrefix}-sale-price`} className="input" type="number" min="0" step="0.01" value={form.sale_price ?? ""} onChange={(event) => setForm({ ...form, sale_price: event.target.value ? Number(event.target.value) : null })} />
+        </div>
+        <div className="formRow formRowWide">
+          <label htmlFor={`${fieldPrefix}-disposal-reason`}>{t("modules:vehicles.disposalReason")}</label>
+          <textarea id={`${fieldPrefix}-disposal-reason`} className="textarea" maxLength={1000} value={form.disposal_reason ?? ""} onChange={(event) => setForm({ ...form, disposal_reason: event.target.value || null })} />
         </div>
         {mode === "edit" && <div className="formRow">
           <label htmlFor={`${fieldPrefix}-status`}>{t("common:labels.status")}</label>

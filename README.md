@@ -93,6 +93,16 @@ VehicleFleetControl currently includes the following modules:
 * Filter reports by date range, license plate, vehicle status, department, and driver
 * Export report KPIs and rows to Excel files
 
+### Vehicle Lifecycle and TCO
+
+* Record acquisition, ownership/lease, warranty, expected service life, depreciation, residual value, and disposal details
+* Track insurance, registration, and other operating costs alongside fuel, charging, maintenance, parts, labor, accidents, leases, and depreciation
+* Prevent linked Work Order and Service costs from being counted twice
+* Calculate liquid-fuel and EV efficiency from usable odometer intervals and identify fuel/charging anomalies
+* Review total cost, cost/km, category and monthly trends, downtime, maintenance frequency, current book value, and replacement status at `/reports/tco`
+* Use deterministic Retain, Monitor, Replace Soon, and Replace rules based on age, mileage, annual cost, downtime, and reliability; these are not presented as AI recommendations
+* Export the TCO report to Excel in English or Albanian
+
 ### Service Management
 
 * Register vehicle services

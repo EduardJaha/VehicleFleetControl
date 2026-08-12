@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { apiDownload, apiGet, buildQuery, vehicleRegistrationApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -112,6 +113,7 @@ export default function ReportsPage() {
           <h1>{t("modules:reports.title")}</h1>
           <p className="muted">{t("modules:reports.description")}</p>
         </div>
+        <Link className="button" href="/reports/tco">{t("modules:tco.openDashboard")}</Link>
       </div>
 
       {error && <div className="error spaced">{error}</div>}

@@ -84,6 +84,20 @@ export type CurrentUser = {
   password_reset_required?: boolean;
   driver_id?: number | null;
   role_assignments?: ScopeAssignment[];
+  company_id: number;
+  companies: CompanySummary[];
+};
+
+export type CompanySummary = { id: number; name: string; role: string };
+export type CompanySettings = {
+  company_id: number;
+  company_name: string;
+  logo_path?: string | null;
+  address?: string | null;
+  default_language: "en" | "sq";
+  timezone: string;
+  currency: string;
+  notification_rules: Record<string, boolean>;
 };
 
 export type Permission = { id: number; code: string; name: string; description?: string | null; module: string };

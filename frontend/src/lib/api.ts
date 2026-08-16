@@ -170,6 +170,14 @@ export async function apiGet<T>(path: string): Promise<T> {
   return handleResponse<T>(response);
 }
 
+export async function apiGetBlob(path: string): Promise<Blob> {
+  const response = await apiFetch(`${API_BASE_URL}${path}`, { cache: "no-store", headers: authHeaders() });
+  if (!response.ok) {
+    await handleResponse<never>(response);
+  }
+  return response.blob();
+}
+
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const response = await apiFetch(`${API_BASE_URL}${path}`, {
     method: "POST",

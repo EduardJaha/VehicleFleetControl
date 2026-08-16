@@ -65,7 +65,8 @@ type AuthContextValue = {
   user: CurrentUser | null;
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
-  registerFirstAdmin: (payload: { email: string; full_name: string; password: string }) => Promise<void>;
+  registerFirstAdmin: (payload: { company_name: string; email: string; full_name: string; password: string }) => Promise<void>;
+  switchCompany: (companyId: number) => Promise<void>;
   logout: () => void;
   can: (permission: PermissionKey | string) => boolean;
 };
@@ -139,8 +140,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(await reconcileLanguage(result.user));
       setReady(true);
     },
-    async registerFirstAdmin(payload: { email: string; full_name: string; password: string }) {
+    async registerFirstAdmin(payload: { company_name: string; email: string; full_name: string; password: string }) {
       const result = await apiPost<AuthResponse>("/auth/register", payload);
+      setAuthToken(result.access_token);
+      setUser(await reconcileLanguage(result.user));
+      setReady(true);
+    },
+    async switchCompany(companyId: number) {
+      const result = await apiPost<AuthResponse>("/auth/switch-company", { company_id: companyId });
       setAuthToken(result.access_token);
       setUser(await reconcileLanguage(result.user));
       setReady(true);

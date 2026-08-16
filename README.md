@@ -341,6 +341,21 @@ database. The reliability migrations preserve existing rows, convert financial
 columns to `NUMERIC`, add archive metadata, and create Audit Log, Notification,
 and Attachment tables. Back up production databases before every migration.
 
+The multi-company migration creates a `Default Company`, backfills every
+business-owned row, validates that no `CompanyId` is missing, and then enforces
+non-null tenant keys. After upgrading, the same invariant can be checked at any
+time with:
+
+```bash
+python -m app.scripts.validate_company_migration
+```
+
+Authenticated database sessions carry the active company from the signed JWT
+and automatically scope tenant-owned ORM reads, updates, and deletes. Company
+membership is stored in `CompanyUsers`; the UI only renders a company selector
+when the signed-in user has more than one active membership. Background
+notification generation iterates active companies independently.
+
 For a new environment, install dependencies and migrate before starting:
 
 ```bash

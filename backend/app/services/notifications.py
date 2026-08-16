@@ -4,7 +4,7 @@ import re
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Notification, User
+from app.models import CompanyUser, Notification, User
 
 ACTIVE_STATUSES = {"Unread", "Read"}
 
@@ -81,7 +81,19 @@ def notify_roles(
     message_key: str | None = None,
     message_params: dict | None = None,
 ) -> list[Notification]:
-    users = db.query(User).filter(User.is_active.is_(True), User.role.in_(roles)).all()
+    company_id = db.info.get("company_id")
+    if company_id is None:
+        users = db.query(User).filter(User.is_active.is_(True), User.role.in_(roles)).all()
+    else:
+        member_ids = db.query(CompanyUser.user_id).filter(
+            CompanyUser.company_id == company_id,
+            CompanyUser.is_active.is_(True),
+            CompanyUser.role.in_(roles),
+        )
+        users = db.query(User).execution_options(skip_tenant_scope=True).filter(
+            User.id.in_(member_ids),
+            User.is_active.is_(True),
+        ).all()
     return [
         notify_user(
             db,

@@ -23,6 +23,8 @@ a { color: inherit; text-decoration: none; }
 .navSubmenu { margin: -2px 0 8px 10px; padding-left: 8px; border-left: 1px solid #334155; }
 .navSubLink { font-size: 13px; padding: 8px 10px; margin-bottom: 2px; }
 .userPanel { margin-top: 28px; padding-top: 18px; border-top: 1px solid #293548; }
+.companySwitcher { display: grid; gap: 6px; margin-bottom: 14px; color: #cbd5e1; font-size: 12px; }
+.companySwitcher select { width: 100%; border: 1px solid #475569; border-radius: 6px; background: #111827; color: #f8fafc; padding: 7px; }
 .userName { font-weight: 700; margin-bottom: 4px; }
 .userRole { color: #cbd5e1; font-size: 13px; margin-bottom: 12px; }
 .logoutButton { width: 100%; background: #1f2937; color: white; border: 1px solid #334155; padding: 9px 12px; border-radius: 8px; font-weight: 700; cursor: pointer; }
@@ -209,3 +211,92 @@ a .maintenanceKpi:hover { transform: translateY(-2px); box-shadow: 0 10px 25px r
 @media (max-width: 1200px) { .kpiGrid { grid-template-columns: repeat(3, minmax(160px, 1fr)); } }
 @media (max-width: 900px) { .kpiGrid { grid-template-columns: repeat(2, minmax(150px, 1fr)); } .maintenanceSections, .detailGrid { grid-template-columns: 1fr; } .linkedRecords { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .kpiGrid { grid-template-columns: 1fr; } .pagination { align-items: flex-start; flex-direction: column; } .detailList { grid-template-columns: 1fr; gap: 4px; } .entityPageHeader { align-items: stretch; flex-direction: column; } .entityPageAction { width: 100%; } .dialogOverlay { place-items: end center; padding: 12px; } .dialogPanel { max-height: calc(100vh - 24px); } .dialogHeader, .dialogBody { padding-left: 18px; padding-right: 18px; } }
+
+/* Company settings */
+.companySettingsPage { max-width: 1280px; margin: 0 auto; }
+.companySettingsHeader { margin-bottom: 26px; }
+.companySettingsHeader h1 { margin-bottom: 8px; }
+.companyProfileCard { padding: 0; overflow: hidden; }
+.companyProfileTop { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px 30px; }
+.companyIdentity { min-width: 0; display: flex; align-items: center; gap: 18px; }
+.companyIdentity h2 { margin: 3px 0 5px; font-size: 25px; letter-spacing: -.025em; }
+.companyIdentity p { margin: 0; font-size: 13px; }
+.companyEyebrow { color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.companyLogo { width: 78px; height: 78px; flex: 0 0 auto; display: grid; place-items: center; overflow: hidden; border: 1px solid #cbd8ff; border-radius: 18px; color: #1849c6; background: linear-gradient(145deg, #f4f7ff, #e4ebff); font-size: 24px; font-weight: 800; letter-spacing: .04em; }
+.companyLogo img { width: 100%; height: 100%; display: block; object-fit: contain; background: white; }
+.companyEditButton { display: inline-flex; align-items: center; gap: 8px; }
+.companyProfileDivider { height: 1px; margin: 0 30px; background: var(--border); }
+.companyInfoGrid { display: grid; grid-template-columns: 1.5fr repeat(3, minmax(120px, .75fr)); gap: 0; padding: 26px 30px; }
+.companyInfoItem { min-width: 0; display: grid; align-content: start; gap: 7px; padding: 0 24px; border-left: 1px solid var(--border); }
+.companyInfoItem:first-child { padding-left: 0; border-left: 0; }
+.companyInfoItem:last-child { padding-right: 0; }
+.companyInfoItem span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.companyInfoItem strong { line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+.companyNotificationSummary { display: grid; grid-template-columns: minmax(210px, .7fr) 2fr; gap: 30px; align-items: start; padding: 24px 30px 28px; border-top: 1px solid var(--border); background: #fafbfc; }
+.companyNotificationSummary h3, .companyNotificationSummary p { margin: 0; }
+.companyNotificationSummary p { margin-top: 6px; font-size: 13px; line-height: 1.45; }
+.notificationRuleList { display: grid; grid-template-columns: repeat(2, minmax(190px, 1fr)); gap: 10px; }
+.notificationRule { min-width: 0; display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; color: #475467; background: white; font-size: 13px; font-weight: 700; }
+.notificationRule i { width: 8px; height: 8px; border-radius: 50%; background: #98a2b3; }
+.notificationRule small { color: var(--muted); font-size: 11px; font-weight: 700; }
+.notificationRule.enabled { color: #05603a; border-color: #b7e4c7; background: #f6fef9; }
+.notificationRule.enabled i { background: #12b76a; box-shadow: 0 0 0 3px #d1fadf; }
+.notificationRule.enabled small { color: #027a48; }
+.companyEditCard { padding: 28px 30px; }
+.companyEditHeading h2, .companyEditHeading p { margin: 0; }
+.companyEditHeading p { margin-top: 6px; }
+.companyEditLayout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px; padding: 26px 0; }
+.companyLogoEditor { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.companyLogo.editing { width: 110px; height: 110px; border-radius: 22px; font-size: 30px; }
+.logoUploadButton { position: relative; display: inline-flex; justify-content: center; overflow: hidden; cursor: pointer; }
+.logoUploadButton input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.companyLogoEditor small { max-width: 155px; line-height: 1.4; }
+.companyEditFields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.companyEditFields label, .companySettingForm > label { display: grid; align-content: start; gap: 7px; color: #344054; font-size: 13px; font-weight: 700; }
+.companyEditFields label:first-child, .companyAddressField { grid-column: span 2; }
+.companyNotificationEditor { margin: 0; padding: 22px; border: 1px solid var(--border); border-radius: 12px; }
+.companyNotificationEditor legend { padding: 0 7px; font-weight: 800; }
+.companyNotificationEditor > p { margin: -2px 0 16px; font-size: 13px; }
+.notificationCheckboxGrid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 10px; }
+.notificationCheckbox { display: flex; gap: 11px; align-items: flex-start; padding: 13px; border: 1px solid var(--border); border-radius: 9px; background: #fafbfc; cursor: pointer; }
+.notificationCheckbox input { margin-top: 3px; accent-color: var(--accent); }
+.notificationCheckbox span { display: grid; gap: 3px; }
+.notificationCheckbox strong { font-size: 13px; }
+.notificationCheckbox small { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.35; }
+.companyEditActions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 20px; }
+.companyStructureSection { margin-top: 34px; }
+.companySectionHeading h2, .companySectionHeading p { margin: 0; }
+.companySectionHeading p { margin-top: 6px; }
+.companyStructureSection .maintenanceTabs { margin: 18px 0; }
+.companyListHeading { justify-content: space-between; margin-bottom: 8px; }
+.companyListHeading h3, .companySettingForm h3 { margin: 0; font-size: 18px; }
+.companySettingForm { align-content: start; }
+.companySettingForm h3, .companySettingActions { grid-column: 1 / -1; }
+.companySettingActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.companyEmptyState { padding: 34px 12px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); background: #fafbfc; text-align: center; font-size: 13px; }
+
+@media (max-width: 1050px) {
+  .companyInfoGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+  .companyInfoItem, .companyInfoItem:first-child { padding: 0; border-left: 0; }
+  .companyNotificationSummary { grid-template-columns: 1fr; gap: 18px; }
+  .companyEditFields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .companyProfileTop { align-items: flex-start; padding: 22px; }
+  .companyProfileDivider { margin: 0 22px; }
+  .companyInfoGrid, .companyNotificationSummary { padding: 22px; }
+  .companyProfileTop, .companyIdentity { align-items: flex-start; }
+  .companyEditButton { padding: 9px; }
+  .companyEditButton svg { width: 18px; height: 18px; }
+  .companyEditCard { padding: 22px; }
+  .companyEditLayout { grid-template-columns: 1fr; gap: 24px; }
+  .companyEditFields, .notificationCheckboxGrid, .notificationRuleList { grid-template-columns: 1fr; }
+  .companyEditFields label:first-child, .companyAddressField { grid-column: auto; }
+}
+@media (max-width: 460px) {
+  .companyProfileTop { flex-direction: column; }
+  .companyEditButton { width: 100%; justify-content: center; }
+  .companyInfoGrid { grid-template-columns: 1fr; }
+  .companyInfoItem { padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .companyInfoItem:last-child { padding-bottom: 0; border-bottom: 0; }
+}

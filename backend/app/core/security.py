@@ -8,8 +8,8 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.session import get_db
-from app.models import User
+from app.db.session import get_db, set_tenant_context
+from app.models import Company, CompanyUser, User
 from app.schemas import UserRole
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -29,12 +29,15 @@ def create_access_token(
     expires_delta: timedelta | None = None,
     *,
     session_version: int = 0,
+    company_id: int | None = None,
 ) -> str:
     settings = get_settings()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     payload: dict[str, Any] = {"sub": str(subject), "exp": expire, "sv": session_version}
+    if company_id is not None:
+        payload["cid"] = company_id
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
@@ -52,6 +55,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_error
         user_id = int(subject)
         token_session_version = int(payload.get("sv", 0))
+        token_company_id = int(payload["cid"]) if payload.get("cid") is not None else None
     except (JWTError, ValueError) as exc:
         raise credentials_error from exc
 
@@ -62,14 +66,31 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session has been revoked.")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive.")
+    company_id = token_company_id or user.company_id
+    membership = db.query(CompanyUser).filter(
+        CompanyUser.user_id == user.id,
+        CompanyUser.company_id == company_id,
+        CompanyUser.is_active.is_(True),
+    ).first()
+    # Membership rows are mandatory after the multi-company migration. The
+    # fallback keeps pre-migration test databases and rolling deployments valid.
+    if membership is None and company_id != user.company_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Company access is not available.")
+    company = db.query(Company).filter(Company.id == company_id, Company.is_active.is_(True)).first()
+    if company is None and membership is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Company is inactive.")
+    set_tenant_context(db, company_id)
+    db.info["user_id"] = user.id
+    db.info["company_role"] = membership.role if membership is not None else user.role
     return user
 
 
 def require_roles(*roles: UserRole):
     allowed = {role.value for role in roles}
 
-    def dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role not in allowed:
+    def dependency(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+        from app.core.authorization import active_role
+        if active_role(db, current_user) not in allowed:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions.")
         return current_user
 

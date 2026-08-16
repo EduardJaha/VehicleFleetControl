@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,7 +24,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       if (mode === "register") {
-        await registerFirstAdmin({ email, full_name: fullName, password });
+        await registerFirstAdmin({ company_name: companyName, email, full_name: fullName, password });
       } else {
         await login(email, password);
       }
@@ -47,6 +48,12 @@ export default function LoginPage() {
         {error && <div className="error">{error}</div>}
 
         <form className="form fullWidthForm" onSubmit={submit}>
+          {mode === "register" && (
+            <div className="formRow">
+              <label htmlFor="company-name">{t("modules:admin.companyName")}</label>
+              <input id="company-name" className="input" value={companyName} onChange={(event) => setCompanyName(event.target.value)} required />
+            </div>
+          )}
           {mode === "register" && (
             <div className="formRow">
               <label htmlFor="full-name">{t("common:labels.fullName")}</label>

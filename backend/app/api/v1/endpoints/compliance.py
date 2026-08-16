@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.authorization import own_records_only, require_permission
+from app.core.authorization import active_role, own_records_only, require_permission
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import (
@@ -76,7 +76,7 @@ def version_out(row: DocumentVersion) -> DocumentVersionOut:
 
 
 def _authorize_document(db: Session, current_user: User, document: VehiclePaper) -> None:
-    if current_user.role != UserRole.driver.value and not own_records_only(db, current_user, "documents.view"):
+    if active_role(db, current_user) != UserRole.driver.value and not own_records_only(db, current_user, "documents.view"):
         return
     profile = current_user.driver_profile
     if not profile or document.driver_id != profile.id:
@@ -101,7 +101,7 @@ def _owner_and_requirement(
             raise HTTPException(status_code=404, detail="Vehicle not found.")
         if not requirement_applies_to_vehicle(requirement, owner):
             raise HTTPException(status_code=422, detail="This Requirement does not apply to the selected Vehicle.")
-        if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "documents.upload"):
+        if active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "documents.upload"):
             raise HTTPException(status_code=403, detail="Drivers cannot upload Vehicle Documents.")
         return owner, requirement
     if normalized == "driver":
@@ -110,7 +110,7 @@ def _owner_and_requirement(
             raise HTTPException(status_code=404, detail="Driver not found.")
         if not requirement_applies_to_driver(requirement, owner):
             raise HTTPException(status_code=422, detail="This Requirement does not apply to Drivers.")
-        if (current_user.role == UserRole.driver.value or own_records_only(db, current_user, "documents.upload")) and (
+        if (active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "documents.upload")) and (
             not current_user.driver_profile or current_user.driver_profile.id != owner.id
         ):
             raise HTTPException(status_code=403, detail="Drivers can only upload their own Documents.")
@@ -193,7 +193,7 @@ def get_document_compliance(
     current_user: User = Depends(get_current_user),
 ):
     result = compliance_dashboard(db)
-    if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "documents.view"):
+    if active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "documents.view"):
         driver_id = current_user.driver_profile.id if current_user.driver_profile else None
         result["items"] = [
             item for item in result["items"]

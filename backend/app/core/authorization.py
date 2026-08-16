@@ -85,6 +85,10 @@ DEFAULT_ROLE_NAMES = {
 }
 
 
+def active_role(db: Session | None, user: User) -> str:
+    return str(db.info.get("company_role", user.role)) if isinstance(db, Session) else user.role
+
+
 def seed_authorization_defaults(db: Session, *, migrate_users: bool = True, commit: bool = True) -> None:
     permissions = {row.code: row for row in db.query(Permission).all()}
     for code, (module, description) in PERMISSION_CATALOG.items():
@@ -139,7 +143,7 @@ def get_user_permissions(db: Session | None, user: User) -> set[str]:
                 for assignment in assignments
                 for grant in assignment.role.role_permissions
             }
-    return set(DEFAULT_ROLE_PERMISSIONS.get(user.role, frozenset()))
+    return set(DEFAULT_ROLE_PERMISSIONS.get(active_role(db, user), frozenset()))
 
 
 def has_permission(db: Session | None, user: User, permission: str) -> bool:

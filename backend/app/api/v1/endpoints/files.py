@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.core.authorization import has_permission, own_records_only
+from app.core.authorization import active_role, has_permission, own_records_only
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import (
@@ -41,13 +41,13 @@ ENTITY_MODELS = {
 
 
 def authorize_entity_access(db: Session, current_user: User, entity_type: str, entity) -> None:
-    if entity_type == "VehicleAccident" and (current_user.role == UserRole.driver.value or own_records_only(db, current_user, "accidents.view")):
+    if entity_type == "VehicleAccident" and (active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "accidents.view")):
         if not current_user.driver_profile or current_user.driver_profile.id != entity.driver_id:
             raise HTTPException(
                 status_code=403,
                 detail="Drivers can only access attachments for their own Accident records.",
             )
-    if entity_type == "VehicleConditionRecord" and (current_user.role == UserRole.driver.value or own_records_only(db, current_user, "assignments.view")):
+    if entity_type == "VehicleConditionRecord" and (active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "assignments.view")):
         if not current_user.driver_profile or current_user.driver_profile.id != entity.driver_id:
             raise HTTPException(
                 status_code=403,
@@ -61,7 +61,7 @@ def authorize_entity_access(db: Session, current_user: User, entity_type: str, e
     if document is not None:
         if document.archived:
             raise HTTPException(status_code=404, detail="Related record not found.")
-        if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "documents.view"):
+        if active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "documents.view"):
             if not current_user.driver_profile or current_user.driver_profile.id != document.driver_id:
                 raise HTTPException(status_code=403, detail="Drivers can only access their own Documents.")
 

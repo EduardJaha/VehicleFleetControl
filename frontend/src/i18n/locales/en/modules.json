@@ -1,9 +1,9 @@
 {
   "auth": {
     "signIn": "Sign in to continue.",
-    "firstAdminDescription": "Create the first Administrator user for this local database.",
-    "createAdmin": "Create Administrator",
-    "createFirstAdmin": "Create first Administrator user",
+    "firstAdminDescription": "Create a company and its Administrator account.",
+    "createAdmin": "Create company account",
+    "createFirstAdmin": "Create a company account",
     "backToLogin": "Back to login",
     "authenticationFailed": "Authentication failed."
   },
@@ -1063,12 +1063,16 @@
   "admin": {
     "usersTitle": "User Administration", "usersDescription": "Manage accounts, roles, scopes, language, driver links, and active sessions.",
     "rolesTitle": "Roles and Permissions", "rolesDescription": "Keep the default fleet roles or create granular roles for your organization.",
-    "settingsTitle": "Organization Settings", "settingsDescription": "Maintain controlled locations, departments, and cost centers while legacy text fields remain compatible.",
+    "settingsTitle": "Company Settings", "settingsDescription": "Manage your company profile, regional defaults, notifications, locations, departments, and cost centers.",
     "createUser": "Create user", "editUser": "Edit user", "user": "User", "role": "Role", "roles": "Roles", "status": "Status", "lastLogin": "Last login", "never": "Never",
     "fullName": "Full name", "email": "Email", "password": "Password", "temporaryPassword": "Temporary password", "language": "Preferred language", "driverProfile": "Driver profile",
     "locationScope": "Location scope", "departmentScope": "Department scope", "costCenterScope": "Cost center scope", "ownRecordsOnly": "Own records only", "all": "All (unrestricted)",
     "active": "Active", "inactive": "Inactive", "forceLogout": "Force logout", "resetPassword": "Reset password", "saved": "Changes saved.", "passwordReset": "Password reset and existing sessions revoked.", "sessionsRevoked": "All sessions revoked.",
     "createRole": "Create role", "editRole": "Edit role", "roleCode": "Role code", "roleName": "Role name", "description": "Description", "permissions": "Permissions", "userCount": "{{count}} users",
+    "company": "Company", "companyProfile": "Company profile", "companyName": "Company name", "logo": "Logo", "address": "Address", "defaultLanguage": "Default language", "timezone": "Timezone", "currency": "Currency", "settingsSaved": "Company settings saved.",
+    "companyLogoAlt": "{{name}} logo", "companyId": "Company ID #{{id}}", "editCompany": "Edit company", "editCompanyDescription": "Update the identity, regional defaults, and notifications shown across your workspace.", "changeLogo": "Change logo", "logoHelp": "PNG, JPEG, or WebP. Up to 8 MB.", "saveCompany": "Save changes",
+    "notificationRules": "Notification rules", "notificationRulesDescription": "Choose which operational alerts are generated for your company.", "enabled": "Enabled", "disabled": "Disabled", "service_reminders": "Service reminders", "service_remindersHelp": "Alert the team when scheduled vehicle service is approaching.", "document_expiry": "Document expiry", "document_expiryHelp": "Notify the team before vehicle documents expire.", "driver_license_expiry": "Driver licence expiry", "driver_license_expiryHelp": "Notify the team before a driver's licence expires.", "overdue_assignments": "Overdue assignments", "overdue_assignmentsHelp": "Flag vehicle assignments that pass their expected return time.",
+    "companyStructure": "Company structure", "companyStructureDescription": "Organize the locations, departments, and cost centers used throughout your fleet.", "noSettings": "No {{type}} have been added yet.",
     "locations": "Locations", "departments": "Departments", "costcenters": "Cost Centers", "editSetting": "Edit setting", "createSetting": "Create setting", "code": "Code", "name": "Name", "requestFailed": "The administration data could not be loaded. Please try again.", "noAccess": "You do not have permission to view this page.",
     "changePassword": "Change password", "currentPassword": "Current password", "newPassword": "New password", "confirmPassword": "Confirm password", "passwordChangeRequired": "You must change your temporary password.", "passwordsDoNotMatch": "The new passwords do not match.", "passwordChangeFailed": "The password could not be changed."
   },

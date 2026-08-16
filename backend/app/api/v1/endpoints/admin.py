@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,9 @@ from app.core.security import hash_password
 from app.db.session import get_db
 from app.models import (
     CostCenter,
+    Company,
+    CompanySettings,
+    CompanyUser,
     Department,
     Driver,
     Location,
@@ -32,8 +36,11 @@ from app.schemas import (
     RoleUpdate,
     ScopeAssignmentIn,
     UserOut,
+    CompanySettingsOut,
+    CompanySettingsUpdate,
 )
 from app.services.audit import record_audit
+from app.utils.files import attachment_path, store_upload
 
 router = APIRouter()
 
@@ -106,6 +113,12 @@ def replace_assignments(db: Session, user: User, assignments: list[ScopeAssignme
             own_records_only=scope.own_records_only,
         ))
     user.role = validated[0][0].code
+    membership = db.query(CompanyUser).filter(
+        CompanyUser.company_id == db.info.get("company_id", user.company_id),
+        CompanyUser.user_id == user.id,
+    ).first()
+    if membership:
+        membership.role = user.role
 
 
 def link_driver(db: Session, user: User, driver_id: int | None) -> None:
@@ -184,6 +197,13 @@ def create_user(payload: AdminUserCreate, db: Session = Depends(get_db), current
     db.add(user)
     try:
         db.flush()
+        db.add(CompanyUser(
+            company_id=db.info["company_id"],
+            user_id=user.id,
+            role=user.role,
+            is_active=True,
+            is_default=True,
+        ))
         replace_assignments(db, user, payload.role_assignments)
         link_driver(db, user, payload.driver_id)
         record_audit(db, action="User created", entity_type="User", entity_id=user.id, user=current_user, new_values={"email": user.email, "roles": [row[0].code for row in validated], "is_active": user.is_active})
@@ -242,6 +262,102 @@ def revoke_sessions(user_id: int, db: Session = Depends(get_db), current_user: U
 
 
 MASTER_MODELS = {"locations": Location, "departments": Department, "cost-centers": CostCenter}
+
+
+def company_settings_out(company: Company, settings: CompanySettings) -> CompanySettingsOut:
+    return CompanySettingsOut(
+        company_id=company.id,
+        company_name=company.name,
+        logo_path=settings.logo_path,
+        address=settings.address,
+        default_language=settings.default_language,
+        timezone=settings.timezone,
+        currency=settings.currency,
+        notification_rules=settings.notification_rules or {},
+    )
+
+
+@router.get("/company-settings", response_model=CompanySettingsOut)
+def get_company_settings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_any_permission("settings.manage", "users.manage")),
+):
+    company = db.get(Company, db.info["company_id"])
+    if company is None:
+        raise HTTPException(404, detail="Company was not found.")
+    settings = db.query(CompanySettings).filter(CompanySettings.company_id == company.id).first()
+    if settings is None:
+        settings = CompanySettings(company_id=company.id)
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return company_settings_out(company, settings)
+
+
+@router.put("/company-settings", response_model=CompanySettingsOut)
+def update_company_settings(
+    payload: CompanySettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("settings.manage")),
+):
+    company = db.get(Company, db.info["company_id"])
+    if company is None:
+        raise HTTPException(404, detail="Company was not found.")
+    settings = db.query(CompanySettings).filter(CompanySettings.company_id == company.id).first()
+    if settings is None:
+        settings = CompanySettings(company_id=company.id)
+        db.add(settings)
+    old = company_settings_out(company, settings).model_dump()
+    company.name = payload.company_name.strip()
+    settings.logo_path = payload.logo_path
+    settings.address = payload.address
+    settings.default_language = payload.default_language.value
+    settings.timezone = payload.timezone
+    settings.currency = payload.currency
+    settings.notification_rules = payload.notification_rules
+    record_audit(
+        db, action="Company settings updated", entity_type="CompanySettings", entity_id=settings.id,
+        user=current_user, old_values=old, new_values=payload.model_dump(mode="json"),
+    )
+    db.commit()
+    db.refresh(settings)
+    return company_settings_out(company, settings)
+
+
+@router.post("/company-settings/logo", response_model=CompanySettingsOut)
+async def upload_company_logo(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("settings.manage")),
+):
+    company = db.get(Company, db.info["company_id"])
+    if company is None:
+        raise HTTPException(404, detail="Company was not found.")
+    stored = await store_upload(file, f"company-{company.id}-logos", "image")
+    settings = db.query(CompanySettings).filter(CompanySettings.company_id == company.id).first()
+    if settings is None:
+        settings = CompanySettings(company_id=company.id)
+        db.add(settings)
+    settings.logo_path = stored.storage_path
+    record_audit(db, action="Company logo updated", entity_type="CompanySettings", entity_id=settings.id, user=current_user)
+    db.commit()
+    db.refresh(settings)
+    return company_settings_out(company, settings)
+
+
+@router.get("/company-settings/logo")
+def get_company_logo(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_any_permission("settings.manage", "users.manage")),
+):
+    settings = db.query(CompanySettings).filter(CompanySettings.company_id == db.info["company_id"]).first()
+    if settings is None or not settings.logo_path:
+        raise HTTPException(404, detail="Company logo was not found.")
+    return FileResponse(
+        attachment_path(settings.logo_path),
+        content_disposition_type="inline",
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
+    )
 
 
 @router.get("/{kind}", response_model=list[MasterDataOut])

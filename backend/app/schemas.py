@@ -257,6 +257,7 @@ class UserCreate(UserBase):
 
 
 class FirstAdminCreate(BaseModel):
+    company_name: str = Field(default="My Company", min_length=1, max_length=255)
     email: str = Field(min_length=3, max_length=255)
     full_name: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=8, max_length=128)
@@ -280,6 +281,16 @@ class ScopeAssignmentIn(BaseModel):
     own_records_only: bool = False
 
 
+class CompanySummaryOut(BaseModel):
+    id: int
+    name: str
+    role: str
+
+
+class CompanySwitchRequest(BaseModel):
+    company_id: int
+
+
 class UserOut(UserBase):
     id: int
     roles: list[str] = Field(default_factory=list)
@@ -288,6 +299,8 @@ class UserOut(UserBase):
     password_reset_required: bool = False
     driver_id: int | None = None
     role_assignments: list[ScopeAssignmentIn] = Field(default_factory=list)
+    company_id: int
+    companies: list[CompanySummaryOut] = Field(default_factory=list)
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -386,6 +399,20 @@ class MasterDataUpdate(MasterDataCreate):
 class MasterDataOut(MasterDataUpdate):
     id: int
     model_config = ConfigDict(from_attributes=True)
+
+
+class CompanySettingsUpdate(BaseModel):
+    company_name: str = Field(min_length=1, max_length=255)
+    logo_path: str | None = Field(default=None, max_length=500)
+    address: str | None = Field(default=None, max_length=2000)
+    default_language: LanguageCode = LanguageCode.en
+    timezone: str = Field(default="UTC", min_length=1, max_length=100)
+    currency: str = Field(default="EUR", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
+    notification_rules: dict = Field(default_factory=dict)
+
+
+class CompanySettingsOut(CompanySettingsUpdate):
+    company_id: int
 
 
 class LoginRequest(BaseModel):

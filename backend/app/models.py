@@ -17,10 +17,59 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import relationship
-from app.db.session import Base
+from app.db.session import Base, TenantMixin
 
 
-class User(Base):
+class Company(Base):
+    __tablename__ = "Companies"
+    __table_args__ = (UniqueConstraint("Slug", name="uq_companies_slug"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    name = Column("Name", String(255), nullable=False)
+    slug = Column("Slug", String(100), nullable=False, index=True)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    settings = relationship("CompanySettings", back_populates="company", uselist=False, cascade="all, delete-orphan")
+    memberships = relationship("CompanyUser", back_populates="company", cascade="all, delete-orphan")
+
+
+class CompanySettings(TenantMixin, Base):
+    __tablename__ = "CompanySettings"
+    __table_args__ = (UniqueConstraint("CompanyId", name="uq_company_settings_company"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    company_id = Column("CompanyId", Integer, ForeignKey("Companies.Id", ondelete="CASCADE"), nullable=False, index=True)
+    logo_path = Column("LogoPath", String(500), nullable=True)
+    address = Column("Address", Text, nullable=True)
+    default_language = Column("DefaultLanguage", String(5), nullable=False, default="en")
+    timezone = Column("Timezone", String(100), nullable=False, default="UTC")
+    currency = Column("Currency", String(3), nullable=False, default="EUR")
+    notification_rules = Column("NotificationRules", JSON, nullable=False, default=dict)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    company = relationship("Company", back_populates="settings")
+
+
+class CompanyUser(TenantMixin, Base):
+    __tablename__ = "CompanyUsers"
+    __table_args__ = (UniqueConstraint("CompanyId", "UserId", name="uq_company_users_company_user"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    company_id = Column("CompanyId", Integer, ForeignKey("Companies.Id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column("Role", String(50), nullable=False, default="viewer")
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    is_default = Column("IsDefault", Boolean, nullable=False, default=False)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    company = relationship("Company", back_populates="memberships")
+    user = relationship("User", back_populates="company_memberships", foreign_keys=[user_id])
+
+
+class User(TenantMixin, Base):
     __tablename__ = "Users"
     __table_args__ = (UniqueConstraint("Email", name="uq_users_email"),)
 
@@ -49,6 +98,8 @@ class User(Base):
         back_populates="ended_by_user",
         foreign_keys="VehicleAssignment.ended_by_user_id",
     )
+    default_company = relationship("Company", foreign_keys="User.company_id")
+    company_memberships = relationship("CompanyUser", back_populates="user", cascade="all, delete-orphan", foreign_keys="CompanyUser.user_id")
 
 
 class Permission(Base):
@@ -94,9 +145,9 @@ class RolePermission(Base):
     permission = relationship("Permission", back_populates="role_permissions")
 
 
-class Location(Base):
+class Location(TenantMixin, Base):
     __tablename__ = "Locations"
-    __table_args__ = (UniqueConstraint("Code", name="uq_locations_code"),)
+    __table_args__ = (UniqueConstraint("CompanyId", "Code", name="uq_locations_company_code"),)
 
     id = Column("Id", Integer, primary_key=True)
     code = Column("Code", String(50), nullable=False, index=True)
@@ -106,9 +157,9 @@ class Location(Base):
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class Department(Base):
+class Department(TenantMixin, Base):
     __tablename__ = "Departments"
-    __table_args__ = (UniqueConstraint("Code", name="uq_departments_code"),)
+    __table_args__ = (UniqueConstraint("CompanyId", "Code", name="uq_departments_company_code"),)
 
     id = Column("Id", Integer, primary_key=True)
     code = Column("Code", String(50), nullable=False, index=True)
@@ -118,9 +169,9 @@ class Department(Base):
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class CostCenter(Base):
+class CostCenter(TenantMixin, Base):
     __tablename__ = "CostCenters"
-    __table_args__ = (UniqueConstraint("Code", name="uq_cost_centers_code"),)
+    __table_args__ = (UniqueConstraint("CompanyId", "Code", name="uq_cost_centers_company_code"),)
 
     id = Column("Id", Integer, primary_key=True)
     code = Column("Code", String(50), nullable=False, index=True)
@@ -130,9 +181,9 @@ class CostCenter(Base):
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class UserRole(Base):
+class UserRole(TenantMixin, Base):
     __tablename__ = "UserRoles"
-    __table_args__ = (UniqueConstraint("UserId", "RoleId", name="uq_user_roles_user_role"),)
+    __table_args__ = (UniqueConstraint("CompanyId", "UserId", "RoleId", name="uq_user_roles_company_user_role"),)
 
     id = Column("Id", Integer, primary_key=True)
     user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="CASCADE"), nullable=False, index=True)
@@ -184,13 +235,14 @@ class VehicleModel(Base):
     vehicles = relationship("Vehicle", back_populates="catalog_model", foreign_keys="Vehicle.model_id")
 
 
-class Supplier(Base):
+class Supplier(TenantMixin, Base):
     """Minimal supplier master used by vehicle acquisition records."""
 
     __tablename__ = "Suppliers"
+    __table_args__ = (UniqueConstraint("CompanyId", "Name", name="uq_suppliers_company_name"),)
 
     id = Column("Id", Integer, primary_key=True, index=True)
-    name = Column("Name", String(255), nullable=False, unique=True)
+    name = Column("Name", String(255), nullable=False)
     is_active = Column("IsActive", Boolean, nullable=False, default=True)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -198,13 +250,14 @@ class Supplier(Base):
     vehicles = relationship("Vehicle", back_populates="supplier")
 
 
-class Vehicle(Base):
+class Vehicle(TenantMixin, Base):
     __tablename__ = "Vehicles"
     __table_args__ = (
         UniqueConstraint(
+            "CompanyId",
             "RegistrationCountry",
             "LicensePlateNormalized",
-            name="uq_vehicles_registration_country_license_plate_normalized",
+            name="uq_vehicles_company_registration_country_license_plate_normalized",
         ),
         Index("ix_vehicles_brand_id", "BrandId"),
         Index("ix_vehicles_model_id", "ModelId"),
@@ -271,12 +324,13 @@ class Vehicle(Base):
     operating_costs = relationship("VehicleOperatingCost", back_populates="vehicle", cascade="all, delete-orphan")
 
 
-class Driver(Base):
+class Driver(TenantMixin, Base):
     __tablename__ = "Drivers"
     __table_args__ = (
-        UniqueConstraint("Email", name="uq_drivers_email"),
-        UniqueConstraint("EmployeeNumber", name="uq_drivers_employee_number"),
-        UniqueConstraint("LicenseNumber", name="uq_drivers_license_number"),
+        UniqueConstraint("CompanyId", "Email", name="uq_drivers_company_email"),
+        UniqueConstraint("CompanyId", "EmployeeNumber", name="uq_drivers_company_employee_number"),
+        UniqueConstraint("CompanyId", "LicenseNumber", name="uq_drivers_company_license_number"),
+        UniqueConstraint("CompanyId", "UserId", name="uq_drivers_company_user"),
     )
 
     id = Column("Id", Integer, primary_key=True, index=True)
@@ -291,7 +345,7 @@ class Driver(Base):
     license_category = Column("LicenseCategory", String(50), nullable=False)
     license_expiry_date = Column("LicenseExpiryDate", DateTime, nullable=False)
     assigned_vehicle_id = Column("AssignedVehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="SET NULL"), nullable=True)
-    user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True, unique=True)
+    user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
     status = Column("Status", String(50), nullable=False, default="Active")
     notes = Column("Notes", Text, nullable=True)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
@@ -310,7 +364,7 @@ class Driver(Base):
     accidents = relationship("VehicleAccident", back_populates="driver")
 
 
-class VehicleAssignment(Base):
+class VehicleAssignment(TenantMixin, Base):
     __tablename__ = "VehicleAssignments"
     __table_args__ = (
         CheckConstraint(
@@ -342,6 +396,7 @@ class VehicleAssignment(Base):
         Index("ix_vehicle_assignments_archived", "Archived"),
         Index(
             "uq_vehicle_assignments_active_vehicle",
+            "CompanyId",
             "VehicleId",
             unique=True,
             sqlite_where=text('"Status" IN (\'Active\', \'Overdue\') AND "Archived" = 0'),
@@ -349,6 +404,7 @@ class VehicleAssignment(Base):
         ),
         Index(
             "uq_vehicle_assignments_active_driver",
+            "CompanyId",
             "DriverId",
             unique=True,
             sqlite_where=text('"Status" IN (\'Active\', \'Overdue\') AND "Archived" = 0'),
@@ -412,7 +468,7 @@ class VehicleAssignment(Base):
     )
 
 
-class VehicleConditionRecord(Base):
+class VehicleConditionRecord(TenantMixin, Base):
     __tablename__ = "VehicleConditionRecords"
     __table_args__ = (
         CheckConstraint(
@@ -455,7 +511,7 @@ class VehicleConditionRecord(Base):
     recorded_by_user = relationship("User", foreign_keys=[recorded_by_user_id])
 
 
-class Inspection(Base):
+class Inspection(TenantMixin, Base):
     __tablename__ = "Inspections"
     __table_args__ = (
         Index("ix_inspections_vehicle_assignment_id", "VehicleAssignmentId"),
@@ -488,7 +544,7 @@ class Inspection(Base):
     work_orders = relationship("WorkOrder", back_populates="inspection")
 
 
-class InspectionItem(Base):
+class InspectionItem(TenantMixin, Base):
     __tablename__ = "InspectionItems"
 
     id = Column("Id", Integer, primary_key=True, index=True)
@@ -500,7 +556,7 @@ class InspectionItem(Base):
     inspection = relationship("Inspection", back_populates="items")
 
 
-class WorkOrder(Base):
+class WorkOrder(TenantMixin, Base):
     __tablename__ = "WorkOrders"
     __table_args__ = (
         Index("ix_work_orders_reminder_service", "ReminderServiceId"),
@@ -546,7 +602,7 @@ class WorkOrder(Base):
     accident = relationship("VehicleAccident", back_populates="work_orders")
 
 
-class DocumentRequirement(Base):
+class DocumentRequirement(TenantMixin, Base):
     __tablename__ = "DocumentRequirements"
     __table_args__ = (
         CheckConstraint('"WarningDays" >= 0', name="ck_document_requirements_warning_days"),
@@ -573,7 +629,7 @@ class DocumentRequirement(Base):
     documents = relationship("VehiclePaper", back_populates="requirement")
 
 
-class VehiclePaper(Base):
+class VehiclePaper(TenantMixin, Base):
     __tablename__ = "VehiclePapers"
     __table_args__ = (
         CheckConstraint(
@@ -618,7 +674,7 @@ class VehiclePaper(Base):
     )
 
 
-class DocumentVersion(Base):
+class DocumentVersion(TenantMixin, Base):
     __tablename__ = "DocumentVersions"
     __table_args__ = (
         UniqueConstraint("DocumentId", "VersionNumber", name="uq_document_versions_number"),
@@ -664,7 +720,7 @@ class DocumentVersion(Base):
     verifier = relationship("User", foreign_keys=[verified_by])
 
 
-class VehicleService(Base):
+class VehicleService(TenantMixin, Base):
     __tablename__ = "VehicleServices"
     __table_args__ = (
         Index("uq_vehicle_services_work_order", "WorkOrderId", unique=True),
@@ -699,7 +755,7 @@ class VehicleService(Base):
     reminder_work_orders = relationship("WorkOrder", foreign_keys="WorkOrder.reminder_service_id", back_populates="reminder_service")
 
 
-class ServiceBill(Base):
+class ServiceBill(TenantMixin, Base):
     __tablename__ = "ServiceBills"
 
     id = Column("Id", Integer, primary_key=True, index=True)
@@ -710,7 +766,7 @@ class ServiceBill(Base):
     service = relationship("VehicleService", back_populates="bills")
 
 
-class VehicleFuel(Base):
+class VehicleFuel(TenantMixin, Base):
     __tablename__ = "VehicleFuels"
     __table_args__ = (
         CheckConstraint('"Quantity" >= 0', name="ck_vehicle_fuels_quantity_nonnegative"),
@@ -751,7 +807,7 @@ class VehicleFuel(Base):
     vehicle_assignment = relationship("VehicleAssignment", back_populates="fuel_records")
 
 
-class VehicleOperatingCost(Base):
+class VehicleOperatingCost(TenantMixin, Base):
     """Costs not represented by fuel, maintenance, accidents, leases, or depreciation."""
 
     __tablename__ = "VehicleOperatingCosts"
@@ -779,7 +835,7 @@ class VehicleOperatingCost(Base):
     supplier = relationship("Supplier")
 
 
-class VehicleAccident(Base):
+class VehicleAccident(TenantMixin, Base):
     __tablename__ = "VehicleAccidents"
     __table_args__ = (
         Index("ix_vehicleaccidents_vehicle_assignment_id", "VehicleAssignmentId"),
@@ -830,11 +886,11 @@ class VehicleAccident(Base):
     work_orders = relationship("WorkOrder", back_populates="accident")
 
 
-class AccidentClaim(Base):
+class AccidentClaim(TenantMixin, Base):
     __tablename__ = "AccidentClaims"
     __table_args__ = (
         UniqueConstraint("AccidentId", name="uq_accident_claims_accident_id"),
-        UniqueConstraint("ClaimNumber", name="uq_accident_claims_claim_number"),
+        UniqueConstraint("CompanyId", "ClaimNumber", name="uq_accident_claims_company_claim_number"),
         Index("ix_accident_claims_status", "ClaimStatus"),
     )
 
@@ -860,7 +916,7 @@ class AccidentClaim(Base):
     insurance_document = relationship("VehiclePaper")
 
 
-class AccidentParty(Base):
+class AccidentParty(TenantMixin, Base):
     __tablename__ = "AccidentParties"
     __table_args__ = (Index("ix_accident_parties_accident_id", "AccidentId"),)
 
@@ -881,7 +937,7 @@ class AccidentParty(Base):
     injuries = relationship("AccidentInjury", back_populates="party")
 
 
-class AccidentInjury(Base):
+class AccidentInjury(TenantMixin, Base):
     __tablename__ = "AccidentInjuries"
     __table_args__ = (Index("ix_accident_injuries_accident_id", "AccidentId"),)
 
@@ -900,7 +956,7 @@ class AccidentInjury(Base):
     party = relationship("AccidentParty", back_populates="injuries")
 
 
-class AccidentFile(Base):
+class AccidentFile(TenantMixin, Base):
     __tablename__ = "AccidentFiles"
 
     id = Column("Id", Integer, primary_key=True, index=True)
@@ -910,7 +966,7 @@ class AccidentFile(Base):
     accident = relationship("VehicleAccident", back_populates="files")
 
 
-class VehicleReservation(Base):
+class VehicleReservation(TenantMixin, Base):
     __tablename__ = "VehicleReservations"
 
     id = Column("Id", Integer, primary_key=True, index=True)
@@ -930,7 +986,7 @@ class VehicleReservation(Base):
     accidents = relationship("VehicleAccident", back_populates="reservation")
 
 
-class AuditLog(Base):
+class AuditLog(TenantMixin, Base):
     __tablename__ = "AuditLogs"
     __table_args__ = (
         Index("ix_audit_logs_created_at", "CreatedAt"),
@@ -956,7 +1012,7 @@ class AuditLog(Base):
     user = relationship("User")
 
 
-class ImportJob(Base):
+class ImportJob(TenantMixin, Base):
     """A retained, auditable CSV/XLSX import attempt.
 
     Source files and row results are intentionally kept separate from the
@@ -998,7 +1054,7 @@ class ImportJob(Base):
     )
 
 
-class ImportRowResult(Base):
+class ImportRowResult(TenantMixin, Base):
     __tablename__ = "ImportRowResults"
     __table_args__ = (
         UniqueConstraint("ImportJobId", "RowNumber", name="uq_import_row_results_job_row"),
@@ -1020,10 +1076,10 @@ class ImportRowResult(Base):
     job = relationship("ImportJob", back_populates="row_results")
 
 
-class Notification(Base):
+class Notification(TenantMixin, Base):
     __tablename__ = "Notifications"
     __table_args__ = (
-        UniqueConstraint("DeduplicationKey", name="uq_notifications_deduplication_key"),
+        UniqueConstraint("CompanyId", "DeduplicationKey", name="uq_notifications_company_deduplication_key"),
         Index("ix_notifications_user_status", "UserId", "Status"),
         Index("ix_notifications_created_at", "CreatedAt"),
     )
@@ -1049,7 +1105,7 @@ class Notification(Base):
     user = relationship("User")
 
 
-class Attachment(Base):
+class Attachment(TenantMixin, Base):
     __tablename__ = "Attachments"
     __table_args__ = (
         Index("ix_attachments_entity", "EntityType", "EntityId"),

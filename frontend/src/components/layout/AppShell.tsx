@@ -35,11 +35,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function ProtectedShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, ready, logout, can } = useAuth();
+  const { user, ready, logout, can, switchCompany } = useAuth();
   const { t } = useTranslation(["common", "navigation", "modules"]);
   const { formatDateTime } = useLanguage();
   const isLoginPage = pathname === "/login";
   const maintenanceActive = pathname === "/maintenance" || pathname.startsWith("/work-orders") || pathname.startsWith("/services") || pathname.startsWith("/inspections");
+  const administrationActive = pathname === "/audit-logs" || pathname.startsWith("/admin/users") || pathname.startsWith("/admin/roles");
+  const administrationVisible = can("audit_logs.view") || can("users.manage") || can("roles.manage");
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentNotifications, setRecentNotifications] = useState<Notification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -100,12 +102,27 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
           {navItems.slice(3).filter((item) => can(item.permission)).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
           {can("imports.manage") && <Link href="/imports" className={pathname === "/imports" ? "navLink active" : "navLink"}>{t("navigation:imports")}</Link>}
           <Link href="/notifications" className={pathname === "/notifications" ? "navLink active" : "navLink"}>{t("navigation:notifications")}</Link>
-          {can("audit_logs.view") && <Link href="/audit-logs" className={pathname === "/audit-logs" ? "navLink active" : "navLink"}>{t("navigation:auditLogs")}</Link>}
-          {can("users.manage") && <Link href="/admin/users" className={pathname.startsWith("/admin/users") ? "navLink active" : "navLink"}>{t("navigation:users")}</Link>}
-          {can("roles.manage") && <Link href="/admin/roles" className={pathname.startsWith("/admin/roles") ? "navLink active" : "navLink"}>{t("navigation:rolesPermissions")}</Link>}
+          {administrationVisible && <details className="navGroup" open={administrationActive}>
+            <summary className={administrationActive ? "navLink active" : "navLink"}>{t("navigation:administrationSecurity")}</summary>
+            <div className="navSubmenu">
+              {can("audit_logs.view") && <Link href="/audit-logs" className={pathname === "/audit-logs" ? "navLink navSubLink active" : "navLink navSubLink"}>{t("navigation:auditLogs")}</Link>}
+              {can("users.manage") && <Link href="/admin/users" className={pathname.startsWith("/admin/users") ? "navLink navSubLink active" : "navLink navSubLink"}>{t("navigation:users")}</Link>}
+              {can("roles.manage") && <Link href="/admin/roles" className={pathname.startsWith("/admin/roles") ? "navLink navSubLink active" : "navLink navSubLink"}>{t("navigation:rolesPermissions")}</Link>}
+            </div>
+          </details>}
           {can("settings.manage") && <Link href="/admin/settings" className={pathname.startsWith("/admin/settings") ? "navLink active" : "navLink"}>{t("navigation:organizationSettings")}</Link>}
         </nav>
         <div className="userPanel">
+          {user.companies?.length > 1 && <label className="companySwitcher">
+            <span>{t("modules:admin.company")}</span>
+            <select value={user.company_id} onChange={async (event) => {
+              await switchCompany(Number(event.target.value));
+              router.replace("/dashboard");
+              router.refresh();
+            }}>
+              {user.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+            </select>
+          </label>}
           <div className="userName">{user.full_name}</div>
           <div className="userRole">{t(`common:roles.${user.role}`, { defaultValue: user.role.replaceAll("_", " ") })}</div>
           <button className="logoutButton" type="button" onClick={logout}>{t("common:actions.logout")}</button>

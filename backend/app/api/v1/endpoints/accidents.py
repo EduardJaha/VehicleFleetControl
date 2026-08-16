@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.authorization import has_permission, own_records_only, require_permission
+from app.core.authorization import active_role, has_permission, own_records_only, require_permission
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models import (
@@ -95,7 +95,7 @@ def get_accident(db: Session, accident_id: int, *, include_archived: bool = Fals
 
 
 def authorize_driver(db: Session, current_user: User, accident: VehicleAccident) -> None:
-    if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "accidents.view"):
+    if active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "accidents.view"):
         if not current_user.driver_profile or current_user.driver_profile.id != accident.driver_id:
             raise HTTPException(status_code=403, detail="Drivers can only access their own Accident records.")
 
@@ -294,7 +294,7 @@ def all_accidents(
     )
     if not include_archived:
         query = query.filter(VehicleAccident.archived.is_(False))
-    if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "accidents.view"):
+    if active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "accidents.view"):
         if not current_user.driver_profile:
             return []
         query = query.filter(VehicleAccident.driver_id == current_user.driver_profile.id)
@@ -744,7 +744,7 @@ def accidents_by_plate(
     query = db.query(VehicleAccident).options(
         joinedload(VehicleAccident.vehicle), joinedload(VehicleAccident.driver), joinedload(VehicleAccident.files)
     ).filter(VehicleAccident.vehicle_id == vehicle.id, VehicleAccident.archived.is_(False))
-    if current_user.role == UserRole.driver.value or own_records_only(db, current_user, "accidents.view"):
+    if active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "accidents.view"):
         if not current_user.driver_profile:
             return []
         query = query.filter(VehicleAccident.driver_id == current_user.driver_profile.id)

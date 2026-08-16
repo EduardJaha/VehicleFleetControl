@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.v1.endpoints.services import current_reminder_status
-from app.models import Driver, Notification, VehicleAssignment, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
+from app.models import CompanySettings, Driver, Notification, VehicleAssignment, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
 from app.schemas import ReminderStatus
 from app.services.audit import record_audit
 from app.services.notifications import ACTIVE_STATUSES, notify_roles, resolve_by_prefix, transition
@@ -15,11 +15,18 @@ RECIPIENT_ROLES = {"admin", "fleet_manager"}
 def generate_time_based_notifications(db: Session, now: datetime | None = None) -> int:
     now = now or datetime.utcnow()
     notification_count_before = db.query(Notification).count()
+    settings = None
+    if db.info.get("company_id") is not None:
+        settings = db.query(CompanySettings).filter(CompanySettings.company_id == db.info["company_id"]).first()
+    rules = settings.notification_rules if settings and settings.notification_rules else {}
+
+    def enabled(name: str) -> bool:
+        return rules.get(name, True) is not False
 
     reminders = db.query(VehicleService).options(joinedload(VehicleService.vehicle)).filter(
         VehicleService.archived.is_(False),
         (VehicleService.next_service_date.isnot(None) | VehicleService.next_service_odometer_km.isnot(None)),
-    ).all()
+    ).all() if enabled("service_reminders") else []
     for reminder in reminders:
         status = current_reminder_status(reminder)
         prefix = f"service-reminder:{reminder.id}:"
@@ -40,7 +47,7 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
             message_params={"service_type": reminder.service_type, "status": status.value, "plate": reminder.vehicle.license_plate},
         )
 
-    compliance = compliance_dashboard(db, today=now.date())
+    compliance = compliance_dashboard(db, today=now.date()) if enabled("document_expiry") else {"items": []}
     active_compliance_keys: set[str] = set()
     for item in compliance["items"]:
         prefix = (
@@ -79,7 +86,7 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
         if not any(notification.deduplication_key.startswith(key) for key in active_compliance_keys):
             transition(notification, "Resolved")
 
-    for driver in db.query(Driver).filter(Driver.archived.is_(False)).all():
+    for driver in (db.query(Driver).filter(Driver.archived.is_(False)).all() if enabled("driver_license_expiry") else []):
         days = (driver.license_expiry_date.date() - now.date()).days
         if days > 30:
             resolve_by_prefix(db, f"driver-license:{driver.id}:")
@@ -102,7 +109,7 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
         WorkOrder.archived.is_(False),
         WorkOrder.expected_completion_date < now,
         WorkOrder.status.in_(["Open", "Assigned", "In Progress", "Waiting for Parts"]),
-    ).all()
+    ).all() if enabled("work_order_overdue") else []
     active_order_ids = {order.id for order in active_orders}
     for order in active_orders:
         notify_roles(
@@ -126,7 +133,7 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
         VehicleAssignment.archived.is_(False),
         VehicleAssignment.status == "Active",
         VehicleReservation.end_date < now,
-    ).all()
+    ).all() if enabled("overdue_assignments") else []
     for assignment in overdue_assignments:
         assignment.status = "Overdue"
         assignment.updated_at = now
@@ -159,7 +166,7 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
 
     reservations = db.query(VehicleReservation).options(joinedload(VehicleReservation.vehicle)).filter(
         VehicleReservation.archived.is_(False)
-    ).all()
+    ).all() if enabled("reservations") else []
     for reservation in reservations:
         if reservation.status == 0:
             notify_roles(

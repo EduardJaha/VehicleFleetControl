@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { WorkOrderWorkspace } from "@/components/supply/WorkOrderWorkspace";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { maintenanceApi } from "@/lib/api";
@@ -44,9 +45,10 @@ export default function WorkOrderDetailsPage({ params }: { params: { id: string 
         <MaintenancePriorityBadge priority={order.priority} />
         <span className="badge">{t("common:labels.source")}: {translateType(order.source)}</span>
       </div>
-      {can("workOrdersWrite") && !["Completed", "Cancelled"].includes(order.status) && (
+      {can("maintenance.complete_work_order") && !order.archived && !["Completed", "Cancelled"].includes(order.status) && (
         <div className="actions spaced"><button className="button" type="button" onClick={() => setCompletionOpen(true)}>{t("modules:workOrders.complete")}</button></div>
       )}
+      <WorkOrderWorkspace order={order} onChange={load}>
       <div className="detailGrid spaced">
         <section className="card detailCard">
           <h2>{t("modules:workOrders.information")}</h2>
@@ -78,6 +80,10 @@ export default function WorkOrderDetailsPage({ params }: { params: { id: string 
           <Details values={[
             [t("modules:workOrders.laborCost"), formatCurrency(order.labor_cost)],
             [t("modules:workOrders.partsCost"), formatCurrency(order.parts_cost)],
+            [t("modules:supply.external_vendor_cost"), formatCurrency(order.external_vendor_cost)],
+            [t("modules:supply.other_cost"), formatCurrency(order.other_cost)],
+            [t("modules:supply.tax_amount"), formatCurrency(order.tax_amount)],
+            [t("modules:supply.discount_amount"), formatCurrency(order.discount_amount)],
             [t("common:labels.totalCost"), formatCurrency(order.total_cost)]
           ]} />
         </section>
@@ -121,6 +127,7 @@ export default function WorkOrderDetailsPage({ params }: { params: { id: string 
           </div>
         )}
       </section>
+      </WorkOrderWorkspace>
       <CompleteWorkOrderDialog
         order={order}
         open={completionOpen}

@@ -21,5 +21,15 @@
   "imports": "Importet",
   "users": "Administrimi i Përdoruesve",
   "rolesPermissions": "Rolet dhe Lejet",
-  "organizationSettings": "Cilësimet e Organizatës"
+  "organizationSettings": "Cilësimet e Organizatës",
+  "maintenanceSupply": "Furnizimi dhe Puna",
+  "partsInventory": "Inventari i Pjesëve",
+  "vendorsWorkshops": "Furnitorët dhe Serviset",
+  "purchaseOrders": "Porositë e blerjes",
+  "techniciansLabor": "Teknikët dhe Puna",
+  "parts": "Katalogu i pjesëve",
+  "inventory": "Stoku i pjesëve",
+  "vendors": "Furnitorët",
+  "technicians": "Teknikët",
+  "supplyReports": "Raportet e furnizimeve të mirëmbajtjes"
 }

@@ -580,6 +580,11 @@ class WorkOrder(TenantMixin, Base):
     workshop = Column("Workshop", String(150), nullable=True)
     expected_completion_date = Column("ExpectedCompletionDate", DateTime, nullable=True)
     actual_completion_date = Column("ActualCompletionDate", DateTime, nullable=True)
+    vendor_id = Column("VendorId", Integer, ForeignKey("Vendors.Id", ondelete="SET NULL"), nullable=True)
+    external_vendor_cost = Column("ExternalVendorCost", Numeric(12, 2), nullable=False, default=0)
+    tax_amount = Column("TaxAmount", Numeric(12, 2), nullable=False, default=0)
+    discount_amount = Column("DiscountAmount", Numeric(12, 2), nullable=False, default=0)
+    other_cost = Column("OtherCost", Numeric(12, 2), nullable=False, default=0)
     labor_cost = Column("LaborCost", Numeric(12, 2), nullable=True)
     parts_cost = Column("PartsCost", Numeric(12, 2), nullable=True)
     total_cost = Column("TotalCost", Numeric(12, 2), nullable=True)
@@ -600,6 +605,312 @@ class WorkOrder(TenantMixin, Base):
     reminder_service = relationship("VehicleService", foreign_keys=[reminder_service_id], back_populates="reminder_work_orders")
     linked_service = relationship("VehicleService", foreign_keys="VehicleService.work_order_id", back_populates="work_order", uselist=False)
     accident = relationship("VehicleAccident", back_populates="work_orders")
+    vendor = relationship("Vendor", foreign_keys=[vendor_id], back_populates="work_orders")
+    part_lines = relationship("WorkOrderPart", back_populates="work_order")
+    technician_assignments = relationship("WorkOrderTechnician", back_populates="work_order")
+    labor_entries = relationship("LaborEntry", back_populates="work_order")
+    vendor_charges = relationship("WorkOrderVendorCharge", back_populates="work_order")
+
+
+class Vendor(TenantMixin, Base):
+    __tablename__ = "Vendors"
+    __table_args__ = (
+        UniqueConstraint("CompanyId", "Name", name="uq_vendors_company_name"),
+        CheckConstraint('"Rating" IS NULL OR ("Rating" >= 0 AND "Rating" <= 5)', name="ck_vendors_rating"),
+    )
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    name = Column("Name", String(200), nullable=False, index=True)
+    vendor_type = Column("VendorType", String(50), nullable=False, index=True)
+    city = Column("City", String(150))
+    country = Column("Country", String(100))
+    notes = Column("Notes", Text)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    contact_name = Column("ContactName", String(150), nullable=True)
+    email = Column("Email", String(255), nullable=True)
+    phone = Column("Phone", String(50), nullable=True)
+    address = Column("Address", Text, nullable=True)
+    payment_terms = Column("PaymentTerms", String(150), nullable=True)
+    tax_number = Column("TaxNumber", String(100), nullable=True, index=True)
+    supported_services = Column("SupportedServices", JSON, nullable=False, default=list)
+    status = Column("Status", String(30), nullable=False, default="Active", index=True)
+    rating = Column("Rating", Numeric(3, 2), nullable=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    supplied_parts = relationship("Part", back_populates="supplier")
+    purchase_orders = relationship("PurchaseOrder", back_populates="vendor")
+    work_orders = relationship("WorkOrder", foreign_keys="WorkOrder.vendor_id", back_populates="vendor")
+    service_records = relationship("VehicleService", foreign_keys="VehicleService.vendor_id", back_populates="vendor")
+    charges = relationship("WorkOrderVendorCharge", back_populates="vendor")
+
+
+class PartCategory(TenantMixin, Base):
+    __tablename__ = "PartCategories"
+    __table_args__ = (UniqueConstraint("CompanyId", "Name", name="uq_part_categories_company_name"),)
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    name = Column("Name", String(150), nullable=False)
+    description = Column("Description", Text, nullable=True)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    parts = relationship("Part", back_populates="category")
+
+
+class Part(TenantMixin, Base):
+    __tablename__ = "Parts"
+    __table_args__ = (
+        UniqueConstraint("CompanyId", "PartNumber", name="uq_parts_company_number"),
+        UniqueConstraint("CompanyId", "Barcode", name="uq_parts_company_barcode"),
+        CheckConstraint('"UnitCost" >= 0', name="ck_parts_unit_cost"),
+        CheckConstraint('"MinimumStock" >= 0', name="ck_parts_minimum_stock"),
+    )
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    part_number = Column("PartNumber", String(100), nullable=False, index=True)
+    name = Column("Name", String(200), nullable=False, index=True)
+    manufacturer = Column("Manufacturer", String(200))
+    description = Column("Description", Text, nullable=True)
+    category_id = Column("CategoryId", Integer, ForeignKey("PartCategories.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    unit = Column("Unit", String(30), nullable=False)
+    unit_cost = Column("UnitCost", Numeric(14, 4), nullable=False, default=0)
+    supplier_id = Column("SupplierId", Integer, ForeignKey("Vendors.Id", ondelete="SET NULL"), nullable=True, index=True)
+    barcode = Column("Barcode", String(100), nullable=True)
+    minimum_stock = Column("MinimumStock", Numeric(14, 3), nullable=False, default=0)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    category = relationship("PartCategory", back_populates="parts")
+    supplier = relationship("Vendor", back_populates="supplied_parts")
+    inventories = relationship("PartInventory", back_populates="part")
+    transactions = relationship("InventoryTransaction", back_populates="part")
+    work_order_lines = relationship("WorkOrderPart", back_populates="part")
+    purchase_order_items = relationship("PurchaseOrderItem", back_populates="part")
+
+
+class PartInventory(TenantMixin, Base):
+    __tablename__ = "PartInventories"
+    __table_args__ = (
+        UniqueConstraint("PartId", "LocationId", name="uq_part_inventory_part_location"),
+        CheckConstraint('"QuantityOnHand" >= 0', name="ck_part_inventory_nonnegative"),
+        CheckConstraint('"ReservedQuantity" >= 0 AND "ReservedQuantity" <= "QuantityOnHand"', name="ck_inventory_reserved"),
+        CheckConstraint('"MinimumStock" IS NULL OR "MinimumStock" >= 0', name="ck_inventory_minimum"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    part_id = Column("PartId", Integer, ForeignKey("Parts.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    location_id = Column("LocationId", Integer, ForeignKey("Locations.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    reserved_quantity = Column("ReservedQuantity", Numeric(14, 3), nullable=False, default=0)
+    minimum_stock = Column("MinimumStock", Numeric(14, 3), nullable=True)
+    quantity_on_hand = Column("QuantityOnHand", Numeric(14, 3), nullable=False, default=0)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    part = relationship("Part", back_populates="inventories")
+    location = relationship("Location")
+
+
+class PurchaseOrder(TenantMixin, Base):
+    __tablename__ = "PurchaseOrders"
+    __table_args__ = (UniqueConstraint("CompanyId", "OrderNumber", name="uq_purchase_orders_company_number"),)
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    order_number = Column("OrderNumber", String(100), nullable=False, index=True)
+    vendor_id = Column("VendorId", Integer, ForeignKey("Vendors.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    storage_location_id = Column("StorageLocationId", Integer, ForeignKey("Locations.Id", ondelete="RESTRICT"), nullable=False)
+    status = Column("Status", String(40), nullable=False, default="Draft", index=True)
+    order_date = Column("OrderDate", DateTime, nullable=True)
+    expected_date = Column("ExpectedDate", DateTime, nullable=True)
+    notes = Column("Notes", Text, nullable=True)
+    subtotal = Column("Subtotal", Numeric(14, 2), nullable=False, default=0)
+    tax_amount = Column("TaxAmount", Numeric(14, 2), nullable=False, default=0)
+    discount_amount = Column("DiscountAmount", Numeric(14, 2), nullable=False, default=0)
+    total_amount = Column("TotalAmount", Numeric(14, 2), nullable=False, default=0)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    created_by = Column("CreatedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    approved_by = Column("ApprovedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    approved_at = Column("ApprovedAt", DateTime, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    vendor = relationship("Vendor", back_populates="purchase_orders")
+    storage_location = relationship("Location")
+    items = relationship("PurchaseOrderItem", back_populates="purchase_order", cascade="all, delete-orphan")
+
+
+class PurchaseOrderItem(TenantMixin, Base):
+    __tablename__ = "PurchaseOrderItems"
+    __table_args__ = (
+        UniqueConstraint("PurchaseOrderId", "PartId", name="uq_purchase_order_items_part"),
+        CheckConstraint('"QuantityOrdered" > 0', name="ck_purchase_order_items_ordered_positive"),
+        CheckConstraint('"QuantityReceived" >= 0 AND "QuantityReceived" <= "QuantityOrdered"', name="ck_purchase_order_items_received"),
+        CheckConstraint('"UnitCost" >= 0', name="ck_purchase_order_items_unit_cost"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    purchase_order_id = Column("PurchaseOrderId", Integer, ForeignKey("PurchaseOrders.Id", ondelete="CASCADE"), nullable=False, index=True)
+    part_id = Column("PartId", Integer, ForeignKey("Parts.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    quantity_ordered = Column("QuantityOrdered", Numeric(14, 3), nullable=False)
+    quantity_received = Column("QuantityReceived", Numeric(14, 3), nullable=False, default=0)
+    unit_cost = Column("UnitCost", Numeric(14, 4), nullable=False)
+    line_total = Column("LineTotal", Numeric(14, 2), nullable=False)
+
+    purchase_order = relationship("PurchaseOrder", back_populates="items")
+    part = relationship("Part", back_populates="purchase_order_items")
+    inventory_transactions = relationship("InventoryTransaction", back_populates="purchase_order_item")
+
+
+class InventoryTransaction(TenantMixin, Base):
+    __tablename__ = "InventoryTransactions"
+    __table_args__ = (
+        CheckConstraint('"Quantity" <> 0', name="ck_inventory_transactions_quantity_nonzero"),
+        Index("ix_inventory_transactions_part_created", "PartId", "CreatedAt"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    part_id = Column("PartId", Integer, ForeignKey("Parts.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    transaction_type = Column("TransactionType", String(40), nullable=False, index=True)
+    quantity = Column("Quantity", Numeric(14, 3), nullable=False)
+    unit_cost = Column("UnitCost", Numeric(14, 4), nullable=True)
+    from_location_id = Column("FromLocationId", Integer, ForeignKey("Locations.Id", ondelete="RESTRICT"), nullable=True)
+    to_location_id = Column("ToLocationId", Integer, ForeignKey("Locations.Id", ondelete="RESTRICT"), nullable=True)
+    work_order_id = Column("WorkOrderId", Integer, ForeignKey("WorkOrders.Id", ondelete="RESTRICT"), nullable=True, index=True)
+    purchase_order_item_id = Column("PurchaseOrderItemId", Integer, ForeignKey("PurchaseOrderItems.Id", ondelete="RESTRICT"), nullable=True, index=True)
+    notes = Column("Notes", Text, nullable=True)
+    performed_by = Column("PerformedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    part = relationship("Part", back_populates="transactions")
+    from_location = relationship("Location", foreign_keys=[from_location_id])
+    to_location = relationship("Location", foreign_keys=[to_location_id])
+    work_order = relationship("WorkOrder")
+    purchase_order_item = relationship("PurchaseOrderItem", back_populates="inventory_transactions")
+
+
+class WorkOrderPart(TenantMixin, Base):
+    __tablename__ = "WorkOrderParts"
+    __table_args__ = (
+        CheckConstraint('"QuantityReturned" >= 0 AND "QuantityReturned" <= "Quantity"', name="ck_work_order_parts_returned"),
+        CheckConstraint('"Quantity" > 0', name="ck_work_order_parts_quantity_positive"),
+        CheckConstraint('"UnitCost" >= 0', name="ck_work_order_parts_unit_cost"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    work_order_id = Column("WorkOrderId", Integer, ForeignKey("WorkOrders.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    part_id = Column("PartId", Integer, ForeignKey("Parts.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    location_id = Column("LocationId", Integer, ForeignKey("Locations.Id", ondelete="RESTRICT"), nullable=False)
+    inventory_transaction_id = Column("InventoryTransactionId", Integer, ForeignKey("InventoryTransactions.Id", ondelete="RESTRICT"), nullable=False, unique=True)
+    quantity_returned = Column("QuantityReturned", Numeric(14, 3), nullable=False, default=0)
+    quantity = Column("Quantity", Numeric(14, 3), nullable=False)
+    unit_cost = Column("UnitCost", Numeric(14, 4), nullable=False)
+    total_cost = Column("TotalCost", Numeric(14, 2), nullable=False)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    work_order = relationship("WorkOrder", back_populates="part_lines")
+    part = relationship("Part", back_populates="work_order_lines")
+    location = relationship("Location")
+    inventory_transaction = relationship("InventoryTransaction", foreign_keys=[inventory_transaction_id])
+
+
+class Technician(TenantMixin, Base):
+    __tablename__ = "Technicians"
+    __table_args__ = (UniqueConstraint("CompanyId", "EmployeeNumber", name="uq_technicians_company_number"),)
+
+    id = Column("Id", Integer, primary_key=True, index=True)
+    user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="SET NULL"))
+    specialization = Column("Specialization", String(200))
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    employee_number = Column("EmployeeNumber", String(100), nullable=False, index=True)
+    full_name = Column("FullName", String(200), nullable=False, index=True)
+    email = Column("Email", String(255), nullable=True)
+    phone = Column("Phone", String(50), nullable=True)
+    hourly_rate = Column("HourlyRate", Numeric(12, 2), nullable=False, default=0)
+    status = Column("Status", String(30), nullable=False, default="Active", index=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    archived_at = Column("ArchivedAt", DateTime, nullable=True)
+    archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    work_orders = relationship("WorkOrderTechnician", back_populates="technician")
+    labor_entries = relationship("LaborEntry", back_populates="technician")
+
+
+class WorkOrderTechnician(TenantMixin, Base):
+    __tablename__ = "WorkOrderTechnicians"
+    __table_args__ = (
+        UniqueConstraint("WorkOrderId", "TechnicianId", name="uq_work_order_technicians_assignment"),
+        CheckConstraint('"EstimatedHours" >= 0', name="ck_work_order_technicians_estimated_hours"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    work_order_id = Column("WorkOrderId", Integer, ForeignKey("WorkOrders.Id", ondelete="CASCADE"), nullable=False, index=True)
+    technician_id = Column("TechnicianId", Integer, ForeignKey("Technicians.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    estimated_hours = Column("EstimatedHours", Numeric(10, 2), nullable=False, default=0)
+    task_description = Column("TaskDescription", Text, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    work_order = relationship("WorkOrder", back_populates="technician_assignments")
+    technician = relationship("Technician", back_populates="work_orders")
+
+
+class LaborEntry(TenantMixin, Base):
+    __tablename__ = "LaborEntries"
+    __table_args__ = (
+        CheckConstraint('"ActualHours" >= 0', name="ck_labor_entries_actual_hours"),
+        CheckConstraint('"HourlyRate" >= 0', name="ck_labor_entries_hourly_rate"),
+        CheckConstraint('"LaborCost" >= 0', name="ck_labor_entries_labor_cost"),
+        Index("uq_labor_active_clock", "CompanyId", "TechnicianId", unique=True, sqlite_where=text('"ClockIn" IS NOT NULL AND "ClockOut" IS NULL AND "Archived" = false'), postgresql_where=text('"ClockIn" IS NOT NULL AND "ClockOut" IS NULL AND "Archived" = false')),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    work_order_id = Column("WorkOrderId", Integer, ForeignKey("WorkOrders.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    technician_id = Column("TechnicianId", Integer, ForeignKey("Technicians.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    notes = Column("Notes", Text)
+    actual_hours = Column("ActualHours", Numeric(10, 2), nullable=False)
+    clock_in = Column("ClockIn", DateTime, nullable=True)
+    clock_out = Column("ClockOut", DateTime, nullable=True)
+    hourly_rate = Column("HourlyRate", Numeric(12, 2), nullable=False)
+    labor_cost = Column("LaborCost", Numeric(14, 2), nullable=False)
+    task_description = Column("TaskDescription", Text, nullable=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    work_order = relationship("WorkOrder", back_populates="labor_entries")
+    technician = relationship("Technician", back_populates="labor_entries")
+
+
+class WorkOrderVendorCharge(TenantMixin, Base):
+    __tablename__ = "WorkOrderVendorCharges"
+    __table_args__ = (CheckConstraint('"Amount" >= 0', name="ck_work_order_vendor_charges_amount"),)
+
+    id = Column("Id", Integer, primary_key=True)
+    work_order_id = Column("WorkOrderId", Integer, ForeignKey("WorkOrders.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    vendor_id = Column("VendorId", Integer, ForeignKey("Vendors.Id", ondelete="RESTRICT"), nullable=False, index=True)
+    description = Column("Description", String(255), nullable=False)
+    invoice_number = Column("InvoiceNumber", String(150))
+    attachment_id = Column("AttachmentId", Integer, ForeignKey("Attachments.Id", ondelete="SET NULL"))
+    amount = Column("Amount", Numeric(14, 2), nullable=False)
+    archived = Column("Archived", Boolean, nullable=False, default=False, index=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+    work_order = relationship("WorkOrder", back_populates="vendor_charges")
+    vendor = relationship("Vendor", back_populates="charges")
 
 
 class DocumentRequirement(TenantMixin, Base):
@@ -733,6 +1044,8 @@ class VehicleService(TenantMixin, Base):
     description = Column("Description", Text, nullable=True)
     service_date = Column("ServiceDate", DateTime, nullable=False)
     odometer_km = Column("OdometerKm", Integer, nullable=True)
+    vendor_id = Column("VendorId", Integer, ForeignKey("Vendors.Id", ondelete="SET NULL"), nullable=True)
+    vendor = relationship("Vendor", foreign_keys=[vendor_id], back_populates="service_records")
     cost = Column("Cost", Numeric(12, 2), nullable=True)
     labor_cost = Column("LaborCost", Numeric(12, 2), nullable=True)
     parts_cost = Column("PartsCost", Numeric(12, 2), nullable=True)

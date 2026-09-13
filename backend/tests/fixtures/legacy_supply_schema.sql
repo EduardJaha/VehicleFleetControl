@@ -1,0 +1,252 @@
+-- Schema-only fixture captured before restoration; contains no customer records.
+CREATE TABLE "Vendors" (
+	"Id" INTEGER NOT NULL, 
+	"Name" VARCHAR(200) NOT NULL, 
+	"VendorType" VARCHAR(50) NOT NULL, 
+	"ContactName" VARCHAR(150), 
+	"Email" VARCHAR(255), 
+	"Phone" VARCHAR(50), 
+	"Address" TEXT, 
+	"PaymentTerms" VARCHAR(150), 
+	"TaxNumber" VARCHAR(100), 
+	"SupportedServices" JSON NOT NULL, 
+	"Status" VARCHAR(30) NOT NULL, 
+	"Rating" NUMERIC(3, 2), 
+	"Archived" BOOLEAN NOT NULL, 
+	"ArchivedAt" DATETIME, 
+	"ArchivedBy" INTEGER, 
+	"CreatedAt" DATETIME NOT NULL, 
+	"UpdatedAt" DATETIME NOT NULL, 
+	"CompanyId" INTEGER NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT uq_vendors_name_type UNIQUE ("Name", "VendorType"), 
+	CONSTRAINT ck_vendors_rating CHECK ("Rating" IS NULL OR ("Rating" >= 0 AND "Rating" <= 5)), 
+	CONSTRAINT fk_vendors_company_id FOREIGN KEY("CompanyId") REFERENCES "Companies" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("ArchivedBy") REFERENCES "Users" ("Id") ON DELETE SET NULL
+);
+
+CREATE TABLE "PartCategories" (
+	"Id" INTEGER NOT NULL, 
+	"Name" VARCHAR(150) NOT NULL, 
+	"Description" TEXT, 
+	"IsActive" BOOLEAN NOT NULL, 
+	"Archived" BOOLEAN NOT NULL, 
+	"ArchivedAt" DATETIME, 
+	"ArchivedBy" INTEGER, 
+	"CreatedAt" DATETIME NOT NULL, 
+	"UpdatedAt" DATETIME NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT uq_part_categories_name UNIQUE ("Name"), 
+	FOREIGN KEY("ArchivedBy") REFERENCES "Users" ("Id") ON DELETE SET NULL
+);
+
+CREATE TABLE "Parts" (
+	"Id" INTEGER NOT NULL, 
+	"PartNumber" VARCHAR(100) NOT NULL, 
+	"Name" VARCHAR(200) NOT NULL, 
+	"Description" TEXT, 
+	"CategoryId" INTEGER NOT NULL, 
+	"Unit" VARCHAR(30) NOT NULL, 
+	"UnitCost" NUMERIC(14, 4) NOT NULL, 
+	"SupplierId" INTEGER, 
+	"Barcode" VARCHAR(100), 
+	"MinimumStock" NUMERIC(14, 3) NOT NULL, 
+	"IsActive" BOOLEAN NOT NULL, 
+	"Archived" BOOLEAN NOT NULL, 
+	"ArchivedAt" DATETIME, 
+	"ArchivedBy" INTEGER, 
+	"CreatedAt" DATETIME NOT NULL, 
+	"UpdatedAt" DATETIME NOT NULL, 
+	"CompanyId" INTEGER NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT uq_parts_barcode UNIQUE ("Barcode"), 
+	CONSTRAINT ck_parts_minimum_stock CHECK ("MinimumStock" >= 0), 
+	CONSTRAINT uq_parts_part_number UNIQUE ("PartNumber"), 
+	CONSTRAINT ck_parts_unit_cost CHECK ("UnitCost" >= 0), 
+	CONSTRAINT fk_parts_company_id FOREIGN KEY("CompanyId") REFERENCES "Companies" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("CategoryId") REFERENCES "PartCategories" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("ArchivedBy") REFERENCES "Users" ("Id") ON DELETE SET NULL, 
+	FOREIGN KEY("SupplierId") REFERENCES "Vendors" ("Id") ON DELETE SET NULL
+);
+
+CREATE TABLE "PartInventories" (
+	"Id" INTEGER NOT NULL, 
+	"PartId" INTEGER NOT NULL, 
+	"LocationId" INTEGER NOT NULL, 
+	"QuantityOnHand" NUMERIC(14, 3) NOT NULL, 
+	"UpdatedAt" DATETIME NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT uq_part_inventory_part_location UNIQUE ("PartId", "LocationId"), 
+	CONSTRAINT ck_part_inventory_nonnegative CHECK ("QuantityOnHand" >= 0), 
+	FOREIGN KEY("PartId") REFERENCES "Parts" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("LocationId") REFERENCES "Locations" ("Id") ON DELETE RESTRICT
+);
+
+CREATE TABLE "Technicians" (
+	"Id" INTEGER NOT NULL, 
+	"EmployeeNumber" VARCHAR(100) NOT NULL, 
+	"FullName" VARCHAR(200) NOT NULL, 
+	"Email" VARCHAR(255), 
+	"Phone" VARCHAR(50), 
+	"HourlyRate" NUMERIC(12, 2) NOT NULL, 
+	"Status" VARCHAR(30) NOT NULL, 
+	"Archived" BOOLEAN NOT NULL, 
+	"ArchivedAt" DATETIME, 
+	"ArchivedBy" INTEGER, 
+	"CreatedAt" DATETIME NOT NULL, 
+	"UpdatedAt" DATETIME NOT NULL, 
+	"CompanyId" INTEGER NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT uq_technicians_employee_number UNIQUE ("EmployeeNumber"), 
+	CONSTRAINT fk_technicians_company_id FOREIGN KEY("CompanyId") REFERENCES "Companies" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("ArchivedBy") REFERENCES "Users" ("Id") ON DELETE SET NULL
+);
+
+CREATE TABLE "PurchaseOrders" (
+	"Id" INTEGER NOT NULL, 
+	"OrderNumber" VARCHAR(100) NOT NULL, 
+	"VendorId" INTEGER NOT NULL, 
+	"StorageLocationId" INTEGER NOT NULL, 
+	"Status" VARCHAR(40) NOT NULL, 
+	"OrderDate" DATETIME, 
+	"ExpectedDate" DATETIME, 
+	"Notes" TEXT, 
+	"Subtotal" NUMERIC(14, 2) NOT NULL, 
+	"TaxAmount" NUMERIC(14, 2) NOT NULL, 
+	"DiscountAmount" NUMERIC(14, 2) NOT NULL, 
+	"TotalAmount" NUMERIC(14, 2) NOT NULL, 
+	"Archived" BOOLEAN NOT NULL, 
+	"ArchivedAt" DATETIME, 
+	"ArchivedBy" INTEGER, 
+	"CreatedBy" INTEGER, 
+	"ApprovedBy" INTEGER, 
+	"ApprovedAt" DATETIME, 
+	"CreatedAt" DATETIME NOT NULL, 
+	"UpdatedAt" DATETIME NOT NULL, 
+	"CompanyId" INTEGER NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT uq_purchase_orders_order_number UNIQUE ("OrderNumber"), 
+	CONSTRAINT fk_purchaseorders_company_id FOREIGN KEY("CompanyId") REFERENCES "Companies" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("ArchivedBy") REFERENCES "Users" ("Id") ON DELETE SET NULL, 
+	FOREIGN KEY("CreatedBy") REFERENCES "Users" ("Id") ON DELETE SET NULL, 
+	FOREIGN KEY("VendorId") REFERENCES "Vendors" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("ApprovedBy") REFERENCES "Users" ("Id") ON DELETE SET NULL, 
+	FOREIGN KEY("StorageLocationId") REFERENCES "Locations" ("Id") ON DELETE RESTRICT
+);
+
+CREATE TABLE "PurchaseOrderItems" (
+	"Id" INTEGER NOT NULL, 
+	"PurchaseOrderId" INTEGER NOT NULL, 
+	"PartId" INTEGER NOT NULL, 
+	"QuantityOrdered" NUMERIC(14, 3) NOT NULL, 
+	"QuantityReceived" NUMERIC(14, 3) NOT NULL, 
+	"UnitCost" NUMERIC(14, 4) NOT NULL, 
+	"LineTotal" NUMERIC(14, 2) NOT NULL, 
+	"CompanyId" INTEGER NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT ck_purchase_order_items_received CHECK ("QuantityReceived" >= 0 AND "QuantityReceived" <= "QuantityOrdered"), 
+	CONSTRAINT ck_purchase_order_items_ordered_positive CHECK ("QuantityOrdered" > 0), 
+	CONSTRAINT uq_purchase_order_items_part UNIQUE ("PurchaseOrderId", "PartId"), 
+	CONSTRAINT ck_purchase_order_items_unit_cost CHECK ("UnitCost" >= 0), 
+	CONSTRAINT fk_purchaseorderitems_company_id FOREIGN KEY("CompanyId") REFERENCES "Companies" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("PartId") REFERENCES "Parts" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("PurchaseOrderId") REFERENCES "PurchaseOrders" ("Id") ON DELETE CASCADE
+);
+
+CREATE TABLE "InventoryTransactions" (
+	"Id" INTEGER NOT NULL, 
+	"PartId" INTEGER NOT NULL, 
+	"TransactionType" VARCHAR(40) NOT NULL, 
+	"Quantity" NUMERIC(14, 3) NOT NULL, 
+	"UnitCost" NUMERIC(14, 4), 
+	"FromLocationId" INTEGER, 
+	"ToLocationId" INTEGER, 
+	"WorkOrderId" INTEGER, 
+	"PurchaseOrderItemId" INTEGER, 
+	"Notes" TEXT, 
+	"PerformedBy" INTEGER, 
+	"CreatedAt" DATETIME NOT NULL, 
+	"CompanyId" INTEGER NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT ck_inventory_transactions_quantity_nonzero CHECK ("Quantity" <> 0), 
+	CONSTRAINT fk_inventorytransactions_company_id FOREIGN KEY("CompanyId") REFERENCES "Companies" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("PartId") REFERENCES "Parts" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("ToLocationId") REFERENCES "Locations" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("WorkOrderId") REFERENCES "WorkOrders" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("PerformedBy") REFERENCES "Users" ("Id") ON DELETE SET NULL, 
+	FOREIGN KEY("FromLocationId") REFERENCES "Locations" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("PurchaseOrderItemId") REFERENCES "PurchaseOrderItems" ("Id") ON DELETE RESTRICT
+);
+
+CREATE TABLE "WorkOrderParts" (
+	"Id" INTEGER NOT NULL, 
+	"WorkOrderId" INTEGER NOT NULL, 
+	"PartId" INTEGER NOT NULL, 
+	"LocationId" INTEGER NOT NULL, 
+	"InventoryTransactionId" INTEGER NOT NULL, 
+	"Quantity" NUMERIC(14, 3) NOT NULL, 
+	"UnitCost" NUMERIC(14, 4) NOT NULL, 
+	"TotalCost" NUMERIC(14, 2) NOT NULL, 
+	"Archived" BOOLEAN NOT NULL, 
+	"CreatedAt" DATETIME NOT NULL, 
+	"CompanyId" INTEGER NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT ck_work_order_parts_quantity_positive CHECK ("Quantity" > 0), 
+	CONSTRAINT ck_work_order_parts_unit_cost CHECK ("UnitCost" >= 0), 
+	CONSTRAINT fk_workorderparts_company_id FOREIGN KEY("CompanyId") REFERENCES "Companies" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("PartId") REFERENCES "Parts" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("WorkOrderId") REFERENCES "WorkOrders" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("InventoryTransactionId") REFERENCES "InventoryTransactions" ("Id") ON DELETE RESTRICT, 
+	UNIQUE ("InventoryTransactionId"), 
+	FOREIGN KEY("LocationId") REFERENCES "Locations" ("Id") ON DELETE RESTRICT
+);
+
+CREATE TABLE "WorkOrderTechnicians" (
+	"Id" INTEGER NOT NULL, 
+	"WorkOrderId" INTEGER NOT NULL, 
+	"TechnicianId" INTEGER NOT NULL, 
+	"EstimatedHours" NUMERIC(10, 2) NOT NULL, 
+	"TaskDescription" TEXT, 
+	"CreatedAt" DATETIME NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT uq_work_order_technicians_assignment UNIQUE ("WorkOrderId", "TechnicianId"), 
+	CONSTRAINT ck_work_order_technicians_estimated_hours CHECK ("EstimatedHours" >= 0), 
+	FOREIGN KEY("WorkOrderId") REFERENCES "WorkOrders" ("Id") ON DELETE CASCADE, 
+	FOREIGN KEY("TechnicianId") REFERENCES "Technicians" ("Id") ON DELETE RESTRICT
+);
+
+CREATE TABLE "LaborEntries" (
+	"Id" INTEGER NOT NULL, 
+	"WorkOrderId" INTEGER NOT NULL, 
+	"TechnicianId" INTEGER NOT NULL, 
+	"ActualHours" NUMERIC(10, 2) NOT NULL, 
+	"ClockIn" DATETIME, 
+	"ClockOut" DATETIME, 
+	"HourlyRate" NUMERIC(12, 2) NOT NULL, 
+	"LaborCost" NUMERIC(14, 2) NOT NULL, 
+	"TaskDescription" TEXT, 
+	"Archived" BOOLEAN NOT NULL, 
+	"CreatedAt" DATETIME NOT NULL, 
+	"UpdatedAt" DATETIME NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT ck_labor_entries_actual_hours CHECK ("ActualHours" >= 0), 
+	CONSTRAINT ck_labor_entries_hourly_rate CHECK ("HourlyRate" >= 0), 
+	CONSTRAINT ck_labor_entries_labor_cost CHECK ("LaborCost" >= 0), 
+	FOREIGN KEY("WorkOrderId") REFERENCES "WorkOrders" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("TechnicianId") REFERENCES "Technicians" ("Id") ON DELETE RESTRICT
+);
+
+CREATE TABLE "WorkOrderVendorCharges" (
+	"Id" INTEGER NOT NULL, 
+	"WorkOrderId" INTEGER NOT NULL, 
+	"VendorId" INTEGER NOT NULL, 
+	"Description" VARCHAR(255) NOT NULL, 
+	"Amount" NUMERIC(14, 2) NOT NULL, 
+	"Archived" BOOLEAN NOT NULL, 
+	"CreatedAt" DATETIME NOT NULL, 
+	PRIMARY KEY ("Id"), 
+	CONSTRAINT ck_work_order_vendor_charges_amount CHECK ("Amount" >= 0), 
+	FOREIGN KEY("WorkOrderId") REFERENCES "WorkOrders" ("Id") ON DELETE RESTRICT, 
+	FOREIGN KEY("VendorId") REFERENCES "Vendors" ("Id") ON DELETE RESTRICT
+);
+

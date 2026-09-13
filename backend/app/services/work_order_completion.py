@@ -5,7 +5,8 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import User, VehicleService, WorkOrder
+from app.models import LaborEntry, User, VehicleService, WorkOrder
+from app.services.maintenance_supply import lock_row, recalculate_work_order_costs
 from app.schemas import (
     ReminderStatus,
     ServiceSource,
@@ -29,6 +30,7 @@ def complete_work_order_transaction(
     payload: WorkOrderCompletionRequest,
     current_user: User,
 ) -> tuple[WorkOrder, VehicleService | None, bool, bool]:
+    lock_row(db, WorkOrder, work_order_id)
     work_order = (
         db.query(WorkOrder)
         .options(
@@ -69,9 +71,16 @@ def complete_work_order_transaction(
             detail=f"Completed odometer cannot be lower than the vehicle's current odometer ({current_odometer} km).",
         )
 
-    labor = money(payload.labor_cost)
-    parts = money(payload.parts_cost)
-    total = money(labor + parts)
+    if db.query(LaborEntry).filter(LaborEntry.work_order_id == work_order.id, LaborEntry.archived.is_(False), LaborEntry.clock_in.isnot(None), LaborEntry.clock_out.is_(None)).first():
+        raise HTTPException(status_code=409, detail={"code": "supply_clock_active"})
+    # Retain manual legacy completion, but line items always determine their
+    # category subtotal even if the client submits different numbers.
+    if not work_order.labor_entries:
+        work_order.labor_cost = money(payload.labor_cost)
+    if not work_order.part_lines:
+        work_order.parts_cost = money(payload.parts_cost)
+    recalculate_work_order_costs(db, work_order)
+    labor, parts, total = money(work_order.labor_cost or Decimal("0")), money(work_order.parts_cost or Decimal("0")), work_order.total_cost
     old_order = snapshot(work_order)
     old_odometer = work_order.vehicle.odometer_km
 
@@ -106,6 +115,7 @@ def complete_work_order_transaction(
         service = VehicleService(
             vehicle_id=work_order.vehicle_id,
             work_order_id=work_order.id,
+            vendor_id=work_order.vendor_id,
             service_type=payload.service_type,
             description=payload.service_description or payload.completion_notes or work_order.description,
             service_date=completed_at,

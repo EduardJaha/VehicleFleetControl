@@ -10,6 +10,19 @@ from app.models import Permission, Role, RolePermission, User, UserRole as UserR
 
 
 PERMISSION_CATALOG: dict[str, tuple[str, str]] = {
+    "parts.view": ('Parts', 'View parts catalog'),
+    "parts.manage": ('Parts', 'Manage parts catalog'),
+    "inventory.view": ('Inventory', 'View stock and transactions'),
+    "inventory.manage": ('Inventory', 'Move and reserve stock'),
+    "vendors.view": ('Vendors', 'View vendors'),
+    "vendors.manage": ('Vendors', 'Manage vendors'),
+    "purchase_orders.view": ('Purchasing', 'View purchase orders'),
+    "purchase_orders.create": ('Purchasing', 'Create and edit purchase orders'),
+    "purchase_orders.approve": ('Purchasing', 'Approve purchase orders'),
+    "technicians.view": ('Technicians', 'View technicians'),
+    "technicians.manage": ('Technicians', 'Manage technicians'),
+    "labor.manage": ('Maintenance', 'Record and clock labor'),
+    "maintenance.manage_costs": ('Maintenance', 'Manage costs and vendor charges'),
     "dashboard.view": ("Dashboard", "View operational dashboard"),
     "vehicles.view": ("Vehicles", "View vehicles"),
     "vehicles.create": ("Vehicles", "Create vehicles"),
@@ -53,6 +66,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "admin": ALL_PERMISSIONS,
     "fleet_manager": frozenset(p for p in ALL_PERMISSIONS if p not in {"users.manage", "roles.manage", "settings.manage"}),
     "mechanic": frozenset({
+        "parts.view", "inventory.view", "inventory.manage", "vendors.view", "technicians.view", "labor.manage",
         "dashboard.view", "vehicles.view", "drivers.view", "assignments.view",
         "maintenance.view", "maintenance.create_work_order", "maintenance.assign_work_order",
         "maintenance.complete_work_order", "inspections.view", "inspections.create", "inspections.manage",
@@ -64,6 +78,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         "documents.upload", "reservations.view", "reservations.create", "accidents.view",
     }),
     "finance": frozenset({
+        "parts.view", "inventory.view", "vendors.view", "purchase_orders.view", "purchase_orders.approve", "technicians.view", "maintenance.manage_costs",
         "dashboard.view", "vehicles.view", "drivers.view", "fuel.view", "fuel.create", "fuel.edit",
         "fuel.view_cost", "maintenance.view", "documents.view", "reports.view", "reports.export",
         "accidents.view", "claims.manage",

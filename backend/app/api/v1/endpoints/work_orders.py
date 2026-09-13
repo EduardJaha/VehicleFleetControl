@@ -18,6 +18,8 @@ from app.schemas import (
 )
 from app.services.audit import record_audit, snapshot
 from app.services.notifications import notify_roles
+from app.services.maintenance_supply import editable_order, lock_row, recalculate_work_order_costs, require_no_active_clock
+from app.models import Vendor
 from app.services.work_order_completion import complete_work_order_transaction
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
@@ -165,6 +167,8 @@ def work_order_out(work_order: WorkOrder) -> WorkOrderOut:
         workshop=work_order.workshop,
         expected_completion_date=format_date(work_order.expected_completion_date),
         actual_completion_date=format_date(work_order.actual_completion_date),
+        vendor_id=work_order.vendor_id, external_vendor_cost=work_order.external_vendor_cost, tax_amount=work_order.tax_amount, discount_amount=work_order.discount_amount, other_cost=work_order.other_cost,
+        costs_from_parts=bool(work_order.part_lines), costs_from_labor=bool(work_order.labor_entries),
         labor_cost=decimal_from_text(work_order.labor_cost),
         parts_cost=decimal_from_text(work_order.parts_cost),
         total_cost=decimal_from_text(work_order.total_cost),
@@ -205,8 +209,19 @@ def apply_payload(work_order: WorkOrder, payload: WorkOrderCreate | WorkOrderUpd
         db, vehicle_id, payload.driver_id, payload.inspection_id,
         payload.reminder_service_id, payload.accident_id, work_order.id,
     )
-    labor = payload.labor_cost
-    parts = payload.parts_cost
+    if work_order.id:
+        editable_order(db, work_order)
+        if payload.archived or payload.status == WorkOrderStatus.cancelled:
+            require_no_active_clock(db, work_order.id)
+        if vehicle_id != work_order.vehicle_id and (work_order.part_lines or work_order.labor_entries or work_order.vendor_charges):
+            raise HTTPException(status_code=409, detail="A Work Order with cost lines cannot change vehicles.")
+    if payload.vendor_id is not None:
+        vendor = db.query(Vendor).filter(Vendor.id == payload.vendor_id, Vendor.archived.is_(False), Vendor.is_active.is_(True)).first()
+        if not vendor: raise HTTPException(status_code=404, detail="Vendor not found.")
+    if "vendor_id" in payload.model_fields_set:
+        work_order.vendor_id = payload.vendor_id
+    labor = work_order.labor_cost if work_order.id and work_order.labor_entries else payload.labor_cost
+    parts = work_order.parts_cost if work_order.id and work_order.part_lines else payload.parts_cost
     total = total_cost(labor, parts)
     work_order.vehicle_id = vehicle_id
     work_order.driver_id = payload.driver_id
@@ -232,6 +247,8 @@ def apply_payload(work_order: WorkOrder, payload: WorkOrderCreate | WorkOrderUpd
     work_order.completion_notes = payload.completion_notes
     work_order.completed_by = payload.completed_by
     work_order.archived = payload.archived
+    if work_order.id:
+        recalculate_work_order_costs(db, work_order)
 
 
 @router.get("", response_model=WorkOrderPage)
@@ -354,6 +371,9 @@ def update_work_order_status(work_order_id: int, payload: WorkOrderStatusUpdate,
     if not work_order:
         raise HTTPException(status_code=404, detail="Work order not found.")
     prevent_generic_completion(payload.status)
+    editable_order(db, work_order)
+    if payload.status == WorkOrderStatus.cancelled:
+        require_no_active_clock(db, work_order.id)
     old_status = work_order.status
     work_order.status = payload.status.value
     if payload.actual_completion_date:
@@ -381,9 +401,8 @@ def update_work_order_status(work_order_id: int, payload: WorkOrderStatusUpdate,
 
 @router.delete("/{work_order_id}")
 def delete_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
-    work_order = db.get(WorkOrder, work_order_id)
-    if not work_order:
-        raise HTTPException(status_code=404, detail="Work order not found.")
+    work_order = lock_row(db, WorkOrder, work_order_id)
+    require_no_active_clock(db, work_order.id)
     work_order.archived = True
     work_order.archived_at = datetime.utcnow()
     work_order.archived_by = current_user.id
@@ -398,9 +417,8 @@ def delete_work_order(work_order_id: int, db: Session = Depends(get_db), current
 
 @router.put("/{work_order_id}/archive", response_model=WorkOrderOut)
 def archive_work_order(work_order_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("maintenance.assign_work_order"))):
-    work_order = work_order_query(db).filter(WorkOrder.id == work_order_id).first()
-    if not work_order:
-        raise HTTPException(status_code=404, detail="Work order not found.")
+    work_order = lock_row(db, WorkOrder, work_order_id)
+    require_no_active_clock(db, work_order.id)
     work_order.archived = True
     work_order.archived_at = datetime.utcnow()
     work_order.archived_by = current_user.id

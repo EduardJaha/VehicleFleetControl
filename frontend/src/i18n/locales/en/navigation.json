@@ -21,5 +21,15 @@
   "imports": "Imports",
   "users": "User Administration",
   "rolesPermissions": "Roles & Permissions",
-  "organizationSettings": "Organization Settings"
+  "organizationSettings": "Organization Settings",
+  "maintenanceSupply": "Supply & Labor",
+  "partsInventory": "Parts Inventory",
+  "vendorsWorkshops": "Vendors & Workshops",
+  "purchaseOrders": "Purchase Orders",
+  "techniciansLabor": "Technicians & Labor",
+  "parts": "Parts Catalog",
+  "inventory": "Parts Inventory",
+  "vendors": "Vendors",
+  "technicians": "Technicians",
+  "supplyReports": "Maintenance Supply Reports"
 }

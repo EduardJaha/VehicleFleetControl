@@ -56,8 +56,8 @@ export function CompleteWorkOrderDialog({ order, open, onClose, onCompleted }: P
   }, [open, order]);
 
   const total = useMemo(
-    () => (Number(form.labor_cost || 0) + Number(form.parts_cost || 0)).toFixed(2),
-    [form.labor_cost, form.parts_cost]
+    () => (Number(form.labor_cost || 0) + Number(form.parts_cost || 0) + Number(order?.external_vendor_cost ?? 0) + Number(order?.other_cost ?? 0) + Number(order?.tax_amount ?? 0) - Number(order?.discount_amount ?? 0)).toFixed(2),
+    [form.labor_cost, form.parts_cost, order]
   );
   const mileageReminder = ["General Service", "Oil Change"].includes(form.service_type);
   const dateReminder = form.service_type === "Tire Change/Control";
@@ -118,8 +118,8 @@ export function CompleteWorkOrderDialog({ order, open, onClose, onCompleted }: P
         <div className="formRow"><label>{t("modules:workOrders.completedOdometer")}</label><input className="input" type="number" min="0" required value={form.completed_odometer_km} onChange={(e) => setForm({ ...form, completed_odometer_km: e.target.value })} /></div>
         <div className="formRow"><label>{t("common:labels.workshop")}</label><input className="input" value={form.workshop} onChange={(e) => setForm({ ...form, workshop: e.target.value })} /></div>
         <div className="formRow"><label>{t("modules:workOrders.calculatedTotal")}</label><input className="input" readOnly value={formatNumber(total, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /></div>
-        <div className="formRow"><label>{t("modules:workOrders.laborCost")}</label><input className="input" type="number" min="0" step="0.01" required value={form.labor_cost} onChange={(e) => setForm({ ...form, labor_cost: e.target.value })} /></div>
-        <div className="formRow"><label>{t("modules:workOrders.partsCost")}</label><input className="input" type="number" min="0" step="0.01" required value={form.parts_cost} onChange={(e) => setForm({ ...form, parts_cost: e.target.value })} /></div>
+        <div className="formRow"><label>{t("modules:workOrders.laborCost")}</label><input className="input" type="number" min="0" step="0.01" required readOnly={order?.costs_from_labor} value={form.labor_cost} onChange={(e) => setForm({ ...form, labor_cost: e.target.value })} /></div>
+        <div className="formRow"><label>{t("modules:workOrders.partsCost")}</label><input className="input" type="number" min="0" step="0.01" required readOnly={order?.costs_from_parts} value={form.parts_cost} onChange={(e) => setForm({ ...form, parts_cost: e.target.value })} /></div>
         <div className="formRow span2"><label>{t("modules:workOrders.completionNotes")}</label><textarea className="input textarea" value={form.completion_notes} onChange={(e) => setForm({ ...form, completion_notes: e.target.value })} /></div>
         <label className="actions span2"><input type="checkbox" checked={form.create_service_record} onChange={(e) => setForm({ ...form, create_service_record: e.target.checked })} /> {t("modules:workOrders.createService")}</label>
         {form.create_service_record && <>

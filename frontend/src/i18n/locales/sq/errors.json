@@ -50,5 +50,24 @@
     "service_type": "Lloji i servisimit", "service_date": "Data e servisimit", "odometer_km": "Kilometrazhi",
     "quantity": "Sasia", "unit_cost": "Kostoja për njësi", "start_date": "Data e fillimit",
     "end_date": "Data e përfundimit", "expiry_date": "Data e skadimit"
-  }
+  },
+  "negative_stock": "Stoku i disponueshëm në këtë vendndodhje është i pamjaftueshëm.",
+  "clock_overlap": "Ky teknik ka një seancë pune që mbivendoset.",
+  "supply_locked": "Ky urdhër pune është i mbyllur, i arkivuar ose i lidhur; kostot e tij janë të bllokuara.",
+  "supply_inactive": "Regjistrimi i zgjedhur është i arkivuar ose joaktiv.",
+  "supply_missing": "Regjistrimi i zgjedhur nuk u gjet në këtë kompani.",
+  "supply_conflict": "Regjistrimi bie ndesh me të dhënat ekzistuese. Kontrolloni emrin ose numrin unik.",
+  "supply_return_exceeded": "Sasia e kthimit tejkalon sasinë e mbetur të lëshuar.",
+  "supply_receipt_exceeded": "Pranimi tejkalon sasinë e mbetur të porositur.",
+  "supply_clock_active": "Përfundoni punën para mbylljes së këtij urdhri ose çaktivizimit të teknikut.",
+  "supply_clock_interval": "Vendosni një interval të vlefshëm pune pa mbivendosje që përfundon në të kaluarën.",
+  "supply_clock_inactive": "Kjo seancë pune nuk është më aktive.",
+  "supply_discount": "Zbritja nuk mund të tejkalojë koston totale.",
+  "supply_stock_archive": "Një pjesë me stok të disponueshëm nuk mund të arkivohet.",
+  "supply_reservation": "Rezervimi tejkalon stokun e disponueshëm.",
+  "supply_receipt_status": "Vetëm blerjet e miratuara, të porositura ose të pranuara pjesërisht mund të pranojnë stok.",
+  "supply_status": "Ky ndryshim statusi nuk lejohet.",
+  "supply_draft_only": "Vetëm porositë në draft mund të ndryshohen.",
+  "supply_attachment": "Zgjidhni një bashkëngjitje të këtij urdhri pune.",
+  "supply_concurrent": "Një përditësim tjetër është në vazhdim. Rifreskoni dhe provoni përsëri."
 }

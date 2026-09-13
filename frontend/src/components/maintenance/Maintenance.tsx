@@ -11,6 +11,12 @@ import { translateNotification, translateStatus, translateType } from "@/i18n/tr
 
 export const MAINTENANCE_LINKS: Array<{ href: string; labelKey: string; permission: string }> = [
   { href: "/maintenance", labelKey: "maintenanceDashboard", permission: "maintenance.view" },
+  { href: "/maintenance/parts", labelKey: "parts", permission: "parts.view" },
+  { href: "/maintenance/inventory", labelKey: "inventory", permission: "inventory.view" },
+  { href: "/maintenance/vendors", labelKey: "vendors", permission: "vendors.view" },
+  { href: "/maintenance/purchase-orders", labelKey: "purchaseOrders", permission: "purchase_orders.view" },
+  { href: "/maintenance/technicians", labelKey: "technicians", permission: "technicians.view" },
+  { href: "/maintenance/reports", labelKey: "supplyReports", permission: "reports.view" },
   { href: "/work-orders", labelKey: "workOrders", permission: "maintenance.view" },
   { href: "/services/overview", labelKey: "serviceHistory", permission: "maintenance.view" },
   { href: "/services/reminders", labelKey: "serviceReminders", permission: "maintenance.view" },

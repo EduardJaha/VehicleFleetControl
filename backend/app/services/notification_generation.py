@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.v1.endpoints.services import current_reminder_status
-from app.models import CompanySettings, Driver, Notification, VehicleAssignment, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
+from app.models import Part, PartInventory, CompanySettings, Driver, Notification, VehicleAssignment, VehiclePaper, VehicleReservation, VehicleService, WorkOrder
 from app.schemas import ReminderStatus
 from app.services.audit import record_audit
 from app.services.notifications import ACTIVE_STATUSES, notify_roles, resolve_by_prefix, transition
@@ -22,6 +22,12 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
 
     def enabled(name: str) -> bool:
         return rules.get(name, True) is not False
+
+    if enabled("low_stock"):
+        from app.services.maintenance_supply import refresh_low_stock
+        balances = db.query(PartInventory).options(joinedload(PartInventory.part), joinedload(PartInventory.location)).join(Part).filter(Part.archived.is_(False), Part.is_active.is_(True)).all()
+        for balance in balances:
+            refresh_low_stock(db, balance.part, balance)
 
     reminders = db.query(VehicleService).options(joinedload(VehicleService.vehicle)).filter(
         VehicleService.archived.is_(False),

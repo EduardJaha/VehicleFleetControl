@@ -28,8 +28,10 @@ from app.schemas import (
 from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.utils.files import store_upload
+from app.models import Vendor
 from app.services.audit import record_audit, snapshot
 from app.services.maintenance_metrics import current_reminder_status, reminder_status_expression
+from app.services.maintenance_supply import lock_row, require_no_active_clock
 
 router = APIRouter(dependencies=[Depends(require_permission("maintenance.view"))])
 
@@ -100,9 +102,9 @@ def service_query(db: Session):
 def service_overview_out(service: VehicleService) -> VehicleServiceOverviewOut:
     labor = decimal_from_text(service.labor_cost)
     parts = decimal_from_text(service.parts_cost)
-    actual = total_cost(labor, parts, decimal_from_text(service.cost))
+    actual = decimal_from_text(service.cost) if service.cost is not None else total_cost(labor, parts)
     return VehicleServiceOverviewOut(
-        id=service.id,
+        id=service.id, vendor_id=service.vendor_id, vendor_name=service.vendor.name if service.vendor else None,
         vehicle_id=service.vehicle_id,
         license_plate=service.vehicle.license_plate,
         vehicle_name=f"{service.vehicle.brand} {service.vehicle.model}",
@@ -161,9 +163,8 @@ def apply_service_payload(service: VehicleService, payload: AddService, db: Sess
         raise HTTPException(status_code=404, detail=f"No vehicle found with license plate '{payload.license_plate}'.")
     work_order = None
     if payload.work_order_id is not None:
-        work_order = db.get(WorkOrder, payload.work_order_id)
-        if not work_order:
-            raise HTTPException(status_code=404, detail="Work Order not found.")
+        work_order = lock_row(db, WorkOrder, payload.work_order_id)
+        require_no_active_clock(db, work_order.id)
         if work_order.vehicle_id != vehicle.id:
             raise HTTPException(status_code=400, detail="Work Order and Service must belong to the same vehicle.")
         duplicate = db.query(VehicleService).filter(
@@ -188,9 +189,20 @@ def apply_service_payload(service: VehicleService, payload: AddService, db: Sess
     service.description = payload.description
     service.service_date = service_date
     service.odometer_km = payload.odometer_km
+    if payload.work_order_id and (work_order.part_lines or work_order.labor_entries or work_order.vendor_charges or work_order.other_cost or work_order.tax_amount or work_order.discount_amount):
+        actual = work_order.total_cost
+        service.labor_cost = work_order.labor_cost
+        service.parts_cost = work_order.parts_cost
+        service.vendor_id = work_order.vendor_id
+    else:
+        service.labor_cost = payload.labor_cost
+        service.parts_cost = payload.parts_cost
+    if "vendor_id" in payload.model_fields_set:
+        if payload.vendor_id is not None:
+            vendor = db.query(Vendor).filter(Vendor.id == payload.vendor_id, Vendor.archived.is_(False), Vendor.is_active.is_(True)).first()
+            if not vendor: raise HTTPException(status_code=404, detail={"code": "supply_missing"})
+        service.vendor_id = payload.vendor_id
     service.cost = actual
-    service.labor_cost = payload.labor_cost
-    service.parts_cost = payload.parts_cost
     service.workshop = payload.workshop
     service.next_service_date = next_date
     service.next_service_km_interval = next_interval
@@ -231,6 +243,7 @@ async def register_with_bill(
     license_plate: str = Form(...), service_type: str = Form(...), description: str | None = Form(None),
     workshop: str | None = Form(None), odometer_km: int | None = Form(None), cost: Decimal | None = Form(None),
     labor_cost: Decimal | None = Form(None), parts_cost: Decimal | None = Form(None),
+    vendor_id: int | None = Form(None),
     service_date: str = Form(...), next_service_date: str | None = Form(None),
     next_service_km_interval: int | None = Form(None), work_order_id: int | None = Form(None),
     source: ServiceSource = Form(ServiceSource.manual), file: UploadFile = File(...),
@@ -238,7 +251,7 @@ async def register_with_bill(
 ):
     payload = AddService(
         license_plate=license_plate, service_type=service_type, description=description, workshop=workshop,
-        odometer_km=odometer_km, cost=cost, labor_cost=labor_cost, parts_cost=parts_cost,
+        odometer_km=odometer_km, cost=cost, labor_cost=labor_cost, parts_cost=parts_cost, vendor_id=vendor_id,
         service_date=service_date, next_service_date=next_service_date,
         next_service_km_interval=next_service_km_interval, work_order_id=work_order_id, source=source,
     )

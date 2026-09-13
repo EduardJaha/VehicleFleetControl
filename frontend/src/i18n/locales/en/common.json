@@ -144,7 +144,11 @@
     "Renewal In Progress": "Renewal In Progress",
     "Archived": "Archived",
     "None": "None",
-    "Submitted": "Submitted"
+    "Submitted": "Submitted",
+    "Draft": "Draft",
+    "Ordered": "Ordered",
+    "Partially Received": "Partially Received",
+    "Received": "Received"
   },
   "types": {
     "Petrol": "Petrol",

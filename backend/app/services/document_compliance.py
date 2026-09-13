@@ -141,7 +141,13 @@ def _rates(items: list[dict], key: str) -> list[dict]:
     return result
 
 
-def compliance_dashboard(db: Session, *, today: date | None = None) -> dict:
+def compliance_dashboard(
+    db: Session,
+    *,
+    today: date | None = None,
+    vehicle_ids: set[int] | None = None,
+    driver_ids: set[int] | None = None,
+) -> dict:
     today = today or datetime.utcnow().date()
     requirements = (
         db.query(DocumentRequirement)
@@ -149,23 +155,26 @@ def compliance_dashboard(db: Session, *, today: date | None = None) -> dict:
         .order_by(DocumentRequirement.document_type, DocumentRequirement.id)
         .all()
     )
-    vehicles = (
+    vehicle_query = (
         db.query(Vehicle)
         .options(joinedload(Vehicle.papers).joinedload(VehiclePaper.versions), joinedload(Vehicle.assigned_drivers))
         .filter(Vehicle.archived.is_(False))
-        .order_by(Vehicle.id)
-        .all()
     )
-    drivers = (
+    if vehicle_ids is not None:
+        vehicle_query = vehicle_query.filter(Vehicle.id.in_(vehicle_ids)) if vehicle_ids else vehicle_query.filter(False)
+    vehicles = vehicle_query.order_by(Vehicle.id).all()
+
+    driver_query = (
         db.query(Driver)
         .options(
             joinedload(Driver.documents).joinedload(VehiclePaper.versions),
             joinedload(Driver.assigned_vehicle),
         )
         .filter(Driver.archived.is_(False))
-        .order_by(Driver.id)
-        .all()
     )
+    if driver_ids is not None:
+        driver_query = driver_query.filter(Driver.id.in_(driver_ids)) if driver_ids else driver_query.filter(False)
+    drivers = driver_query.order_by(Driver.id).all()
 
     items: list[dict] = []
     for vehicle in vehicles:

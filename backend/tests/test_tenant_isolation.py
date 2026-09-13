@@ -109,7 +109,7 @@ def test_direct_ids_lists_filters_reports_and_exports_are_tenant_scoped(tenant_d
     assert db.get(Vehicle, ids["beta_vehicle"]) is None
     listed = list_vehicles(None, None, None, None, None, False, db, admin)
     assert [row.id for row in listed] == [ids["alpha_vehicle"]]
-    dashboard = filtered_dashboard(None, "Shared Depot", db)
+    dashboard = filtered_dashboard(None, "Shared Depot", db, admin)
     assert dashboard["total_vehicles"] == 1
     report = fleet_summary_report(db)
     assert [row["brand"] for row in report["rows"]] == ["Alpha"]

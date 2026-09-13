@@ -29,6 +29,7 @@ from app.utils.dates import format_date, parse_date
 from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.utils.files import store_upload
 from app.services.audit import record_audit, snapshot
+from app.services.maintenance_metrics import current_reminder_status, reminder_status_expression
 
 router = APIRouter(dependencies=[Depends(require_permission("maintenance.view"))])
 
@@ -308,48 +309,12 @@ async def upload_bill_later(
     }
 
 
-def reminder_status_expression(today: datetime):
-    due_soon = today + timedelta(days=30)
-    return case(
-        (VehicleService.reminder_status == ReminderStatus.resolved.value, ReminderStatus.resolved.value),
-        (VehicleService.reminder_status == ReminderStatus.dismissed.value, ReminderStatus.dismissed.value),
-        (or_(VehicleService.next_service_date < today, VehicleService.next_service_odometer_km < Vehicle.odometer_km), ReminderStatus.overdue.value),
-        (or_(func.date(VehicleService.next_service_date) == today.date(), VehicleService.next_service_odometer_km == Vehicle.odometer_km), ReminderStatus.due.value),
-        (or_(VehicleService.next_service_date <= due_soon, VehicleService.next_service_odometer_km - Vehicle.odometer_km <= 1000), ReminderStatus.due_soon.value),
-        else_=ReminderStatus.upcoming.value,
-    )
-
-
 def reminder_priority(status: ReminderStatus) -> WorkOrderPriority:
     return {
         ReminderStatus.overdue: WorkOrderPriority.critical,
         ReminderStatus.due: WorkOrderPriority.high,
         ReminderStatus.due_soon: WorkOrderPriority.medium,
     }.get(status, WorkOrderPriority.low)
-
-
-def current_reminder_status(service: VehicleService) -> ReminderStatus:
-    if service.reminder_status in {ReminderStatus.resolved.value, ReminderStatus.dismissed.value}:
-        return ReminderStatus(service.reminder_status)
-    today = datetime.today().date()
-    current_odometer = service.vehicle.odometer_km if service.vehicle else None
-    if service.next_service_date:
-        days_left = (service.next_service_date.date() - today).days
-        if days_left < 0:
-            return ReminderStatus.overdue
-        if days_left == 0:
-            return ReminderStatus.due
-        if days_left <= 30:
-            return ReminderStatus.due_soon
-    if service.next_service_odometer_km is not None and current_odometer is not None:
-        km_left = service.next_service_odometer_km - current_odometer
-        if km_left < 0:
-            return ReminderStatus.overdue
-        if km_left == 0:
-            return ReminderStatus.due
-        if km_left <= 1000:
-            return ReminderStatus.due_soon
-    return ReminderStatus.upcoming
 
 
 def reminder_out(service: VehicleService, status: ReminderStatus) -> ServiceReminderOut:

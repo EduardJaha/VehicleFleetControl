@@ -1817,3 +1817,183 @@ class DashboardSummaryOut(BaseModel):
     active_usage: list[DashboardActiveUsageItem] = []
     active_usage_count: int = 0
     overdue_return_count: int = 0
+
+
+class DashboardFilterSelection(BaseModel):
+    period: str
+    from_date: str
+    to_date: str
+    location_id: int | None = None
+    department_id: int | None = None
+    cost_center_id: int | None = None
+
+
+class DashboardFilterOption(BaseModel):
+    id: int
+    name: str
+
+
+class DashboardFilterOptions(BaseModel):
+    locations: list[DashboardFilterOption] = []
+    departments: list[DashboardFilterOption] = []
+    cost_centers: list[DashboardFilterOption] = []
+
+
+class DashboardFleetSummary(BaseModel):
+    total: int
+    operational: int
+    available: int
+    in_use: int
+    in_service: int
+    unavailable: int
+    availability_percentage: float
+
+
+class DashboardAttentionItem(BaseModel):
+    id: str
+    type: str
+    priority: str
+    title_key: str
+    message_key: str
+    params: dict[str, str | int | float | bool | None] = {}
+    entity_type: str
+    entity_id: int
+    url: str
+    occurred_at: str
+    due_at: str | None = None
+
+
+class DashboardMaintenanceSummary(BaseModel):
+    open_work_orders: int
+    critical_work_orders: int
+    overdue_work_orders: int
+    waiting_for_parts: int
+    vehicles_in_service: int
+    overdue_reminders: int
+    failed_inspections: int
+
+
+class DashboardComplianceSummary(BaseModel):
+    percentage: float
+    missing_required: int
+    expired: int
+    expiring_7_days: int
+    expiring_30_days: int
+    renewal_in_progress: int
+
+
+class DashboardUsageRecord(BaseModel):
+    assignment_id: int
+    vehicle_id: int
+    driver_id: int
+    license_plate: str
+    vehicle_name: str
+    driver_name: str
+    checkout_datetime: str
+    expected_return_datetime: str | None = None
+    destination: str | None = None
+    duration_minutes: int
+    overdue_minutes: int
+    overdue: bool
+
+
+class DashboardUsageSummary(BaseModel):
+    active_count: int
+    overdue_returns: int
+    records: list[DashboardUsageRecord] = []
+
+
+class DashboardReservationRecord(BaseModel):
+    id: int
+    vehicle_id: int
+    license_plate: str
+    reserved_by: str
+    start_date: str
+    end_date: str
+    status: int
+    status_name: str
+
+
+class DashboardReservationSummary(BaseModel):
+    pending: int
+    approved_today: int
+    starting_today: int
+    records: list[DashboardReservationRecord] = []
+
+
+class DashboardCostTrendItem(BaseModel):
+    period: str
+    fuel: float
+    charging: float
+    maintenance: float
+    accidents: float
+    other: float
+    total: float
+
+
+class DashboardCostSummary(BaseModel):
+    fuel: float
+    charging: float
+    maintenance: float
+    accidents: float
+    other: float
+    total: float
+    previous_period_total: float
+    change_percentage: float | None = None
+    trend: list[DashboardCostTrendItem] = []
+
+
+class DashboardSafetySummary(BaseModel):
+    accidents_period: int
+    open_accidents: int
+    open_claims: int
+    vehicles_unavailable: int
+    damage_cost: float | None = None
+    recovered_cost: float | None = None
+    unrecovered_cost: float | None = None
+
+
+class DashboardFleetHealthCandidate(BaseModel):
+    vehicle_id: int
+    license_plate: str
+    vehicle: str
+    status: str
+    cost_per_km: float | None = None
+    downtime_days: float
+
+
+class DashboardFleetHealthSummary(BaseModel):
+    replace: int
+    replace_soon: int
+    high_cost: int
+    anomalies: int
+    candidates: list[DashboardFleetHealthCandidate] = []
+
+
+class DashboardActivityItem(BaseModel):
+    id: int
+    action_key: str
+    params: dict[str, str | int | float | bool | None] = {}
+    description: str | None = None
+    entity_type: str
+    entity_id: int | None = None
+    url: str | None = None
+    occurred_at: str
+
+
+class DashboardOverviewOut(BaseModel):
+    generated_at: str
+    filters: DashboardFilterSelection
+    filter_options: DashboardFilterOptions
+    fleet: DashboardFleetSummary
+    attention: list[DashboardAttentionItem] = []
+    attention_total: int
+    maintenance: DashboardMaintenanceSummary | None = None
+    compliance: DashboardComplianceSummary | None = None
+    usage: DashboardUsageSummary | None = None
+    reservations: DashboardReservationSummary | None = None
+    costs: DashboardCostSummary | None = None
+    can_view_costs: bool = False
+    safety: DashboardSafetySummary | None = None
+    fleet_health: DashboardFleetHealthSummary | None = None
+    recent_activity: list[DashboardActivityItem] | None = None

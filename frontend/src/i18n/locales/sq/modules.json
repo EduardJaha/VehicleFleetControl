@@ -10,7 +10,9 @@
   "shell": {
     "recentNotifications": "Njoftimet e fundit",
     "noNotifications": "Nuk ka njoftime.",
-    "unreadNotifications": "{{count}} njoftime të palexuara"
+    "unreadNotifications": "{{count}} njoftime të palexuara",
+    "openNavigation": "Hap navigimin",
+    "closeNavigation": "Mbyll navigimin"
   },
   "reports": {
     "fleet-summary": "Përmbledhja e Flotës",
@@ -165,18 +167,41 @@
   },
   "dashboard": {
     "title": "Paneli",
-    "description": "Përmbledhja e flotës nga të dhënat aktuale operative.",
-    "totalVehicles": "Automjetet gjithsej",
-    "byStatus": "Sipas statusit",
-    "byLocation": "Sipas lokacionit",
-    "activeUsage": "Automjetet aktualisht në shfrytzim",
-    "activeUsageCount": "Të dorëzuara",
-    "overdueReturns": "Kthime me afat të kaluar",
-    "expectedReturn": "Kthimi i pritur",
-    "checkedOutAt": "Dorëzuar",
-    "noActiveUsage": "Asnjë Automjet nuk është aktualisht i dorëzuar.",
+    "workspace": "Qendra e kontrollit operativ",
+    "description": "Pasqyrë e drejtpërdrejtë e operacioneve të flotës sipas lejeve tuaja.",
+    "greeting": { "morning": "Mirëmëngjes, {{name}}", "afternoon": "Mirëdita, {{name}}", "evening": "Mirëmbrëma, {{name}}" },
+    "range": "Të dhënat operative nga {{from}} deri më {{to}}.",
+    "lastUpdated": "Përditësuar më {{date}}",
+    "refreshing": "Duke rifreskuar…",
+    "retry": "Provo përsëri",
+    "openDetails": "Hap detajet",
     "loadError": "Paneli nuk mund të ngarkohej.",
-    "loading": "Duke u ngarkuar paneli…"
+    "loading": "Duke u ngarkuar paneli…",
+    "filters": { "title": "Filtrat e panelit", "period": "Periudha", "costCenter": "Qendra e kostos" },
+    "periods": { "today": "Sot", "last_7_days": "7 ditët e fundit", "this_month": "Këtë muaj", "last_month": "Muajin e kaluar", "this_quarter": "Këtë tremujor", "this_year": "Këtë vit", "custom": "Periudhë e përcaktuar" },
+    "fleet": { "title": "Disponueshmëria e flotës", "description": "Gjendja operative e automjeteve me një shikim.", "availability": "të disponueshme", "total": "Automjete gjithsej", "available": "Të disponueshme", "inUse": "Në përdorim", "inService": "Në servis", "unavailable": "Të padisponueshme" },
+    "priorities": { "Low": "I ulët", "Medium": "Mesatar", "High": "I lartë", "Critical": "Kritik" },
+    "attention": {
+      "title": "Kërkon vëmendje", "description": "Përjashtimet operative të renditura sipas përparësisë.", "empty": "Nuk ka çështje urgjente në fushën aktuale.", "more": "Edhe {{count}} çështje gjenden te njoftimet.",
+      "workOrderOverdue": "Urdhri i punës ka kaluar afatin", "workOrderCritical": "Urdhër pune kritik", "workOrderDescription": "UP #{{work_order_id}} · {{license_plate}} · {{days_overdue}} ditë me vonesë",
+      "serviceOverdue": "Servisi ka kaluar afatin", "serviceOverdueDescription": "Servisi {{service_type}} për {{license_plate}} ka kaluar afatin.",
+      "inspectionFailed": "Inspektimi dështoi", "inspectionFailedDescription": "Inspektimi {{inspection_type}} dështoi për {{license_plate}}.",
+      "documentExpired": "Dokumenti ka skaduar", "documentMissing": "Mungon dokumenti i kërkuar", "documentDescription": "Dokumenti {{document_type}} për {{owner}} kërkon vëmendje.",
+      "returnOverdue": "Kthimi i automjetit është vonuar", "returnOverdueDescription": "{{license_plate}}, i caktuar për {{driver}}, është {{minutes_overdue}} minuta me vonesë.",
+      "driverLicenceExpired": "Leja e shoferit ka skaduar", "driverLicenceDescription": "Leja e drejtimit e {{driver}} ka skaduar.",
+      "vehicleReturnedDamaged": "Automjeti u kthye me dëmtime", "vehicleReturnedDamagedDescription": "U regjistruan dëmtime kur u kthye {{license_plate}}.",
+      "accidentCritical": "Aksident kritik i hapur", "accidentCriticalDescription": "Aksidenti {{severity}} me {{license_plate}} kërkon ndjekje."
+    },
+    "maintenance": { "title": "Mirëmbajtja", "openWorkOrders": "Urdhra pune të hapur", "critical": "Kritikë", "overdue": "Me afat të kaluar", "waitingParts": "Në pritje të pjesëve", "vehiclesInService": "Automjete në servis", "failedInspections": "Inspektime të dështuara" },
+    "compliance": { "title": "Pajtueshmëria", "compliant": "e flotës në pajtueshmëri", "missing": "Mungojnë", "expired": "Të skaduara", "expiring7": "Skadojnë brenda 7 ditësh", "renewing": "Në proces rinovimi" },
+    "reservations": { "title": "Rezervimet sot", "pending": "Në pritje të miratimit", "approvedToday": "Miratuar sot", "startingToday": "Fillojnë sot", "empty": "Asnjë rezervim nuk fillon sot." },
+    "safety": { "title": "Siguria dhe aksidentet", "periodAccidents": "Aksidente në periudhë", "openAccidents": "Aksidente të hapura", "openClaims": "Kërkesa të hapura", "unavailable": "Automjete të padisponueshme", "damage": "Dëmi", "recovered": "Rikuperuar", "unrecovered": "Pa rikuperuar" },
+    "usage": { "title": "Automjetet aktualisht në përdorim", "description": "Caktimet aktive, kthimet e pritshme dhe vonesat.", "active": "caktime aktive", "overdueCount": "{{count}} me vonesë", "checkedOut": "Marrë në përdorim", "expected": "Kthimi i pritur", "duration": "Kohëzgjatja", "onTime": "Në kohë", "overdueBy": "Vonesë {{duration}}", "empty": "Asnjë automjet nuk është aktualisht në përdorim." },
+    "costs": { "title": "Kostot e flotës", "description": "Kostot reale për periudhën, ku regjistrimet e lidhura të mirëmbajtjes numërohen vetëm një herë.", "total": "Gjithsej", "fuel": "Karburanti", "charging": "Karikimi", "maintenance": "Mirëmbajtja", "accidents": "Aksidentet", "other": "Të tjera", "vsPrevious": "krahasuar me periudhën e kaluar", "chartMetric": "Grafiku", "chartLabel": "Trendi gjashtëmujor i kostos për {{metric}}", "chartTable": "Vlerat e trendit të kostos së flotës" },
+    "health": { "title": "Gjendja e flotës dhe TCO", "description": "Sinjalet e zëvendësimit dhe anomalitë e kostos nga modeli TCO.", "replace": "Zëvendëso", "replaceSoon": "Zëvendëso së shpejti", "highCost": "Kosto e lartë/km", "anomalies": "Anomali", "empty": "Nuk ka kandidatë për zëvendësim në fushën aktuale.", "status": { "Replace": "Zëvendëso", "ReplaceSoon": "Zëvendëso së shpejti" } },
+    "activity": { "title": "Aktiviteti i fundit", "empty": "Nuk ka aktivitet të fundit.", "vehicleCreated": "U krijua automjeti #{{id}}", "vehicleReturned": "U kthye caktimi #{{id}}", "assignmentCreated": "U krijua caktimi #{{id}}", "reservationApproved": "U miratua rezervimi #{{id}}", "inspectionCreated": "U krijua inspektimi #{{id}}", "workOrderCreated": "U krijua urdhri i punës #{{id}}", "workOrderCompleted": "U përfundua urdhri i punës #{{id}}", "serviceCompleted": "U regjistrua servisi #{{id}}", "fuelAdded": "U shtua regjistrimi i karburantit #{{id}}", "accidentReported": "U raportua aksidenti #{{id}}", "documentRenewed": "U ngarkua dokumenti #{{id}}" },
+    "quickActions": { "title": "Veprime të shpejta", "vehicle": "Shto automjet", "checkout": "Jep automjet në përdorim", "fuel": "Regjistro karburant", "inspection": "Fillo inspektim", "workOrder": "Krijo urdhër pune", "reservation": "Rezervim i ri" },
+    "units": { "hour": "o", "minute": "m", "days": "ditë", "km": "km" }
   },
   "maintenance": {
     "title": "Paneli i Mirëmbajtjes",

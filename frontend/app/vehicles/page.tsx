@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { CreateEntityDialog } from "@/components/ui/CreateEntityDialog";
 import { EntityPageHeader } from "@/components/ui/EntityPageHeader";
@@ -16,6 +17,7 @@ import { useLanguage } from "@/components/i18n/LanguageProvider";
 
 export default function VehiclesPage() {
   const { t } = useTranslation(["common", "modules"]);
+  const searchParams = useSearchParams();
   const { formatNumber } = useLanguage();
   const { can, user } = useAuth();
   const canWrite = can("vehiclesWrite");
@@ -30,7 +32,7 @@ export default function VehiclesPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [countries, setCountries] = useState<RegistrationCountryOption[]>([]);
-  const [filters, setFilters] = useState({ search: "", registration_country: "" as RegistrationCountryCode | "", fuel: "", location: "", status: "", include_archived: false });
+  const [filters, setFilters] = useState({ search: "", registration_country: "" as RegistrationCountryCode | "", fuel: "", location: "", status: searchParams.get("status") ?? "", include_archived: false });
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState("archive");
   const [bulkValue, setBulkValue] = useState("");
@@ -60,7 +62,7 @@ export default function VehiclesPage() {
   }
 
   useEffect(() => {
-    void loadVehicles("");
+    void loadVehicles(searchParams.get("status") ?? "");
     void vehicleRegistrationApi.getCountries().then(setCountries).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

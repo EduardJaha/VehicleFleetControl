@@ -520,6 +520,145 @@ export type DashboardActiveUsage = {
   overdue: boolean;
 };
 
+export type DashboardFilterOption = { id: number; name: string };
+
+export type DashboardAttentionItem = {
+  id: string;
+  type: string;
+  priority: "Low" | "Medium" | "High" | "Critical";
+  title_key: string;
+  message_key: string;
+  params: Record<string, string | number | boolean | null>;
+  entity_type: string;
+  entity_id: number;
+  url: string;
+  occurred_at: string;
+  due_at?: string | null;
+};
+
+export type DashboardUsageRecord = DashboardActiveUsage & {
+  duration_minutes: number;
+  overdue_minutes: number;
+};
+
+export type DashboardOverview = {
+  generated_at: string;
+  filters: {
+    period: string;
+    from_date: string;
+    to_date: string;
+    location_id?: number | null;
+    department_id?: number | null;
+    cost_center_id?: number | null;
+  };
+  filter_options: {
+    locations: DashboardFilterOption[];
+    departments: DashboardFilterOption[];
+    cost_centers: DashboardFilterOption[];
+  };
+  fleet: {
+    total: number;
+    operational: number;
+    available: number;
+    in_use: number;
+    in_service: number;
+    unavailable: number;
+    availability_percentage: number;
+  };
+  attention: DashboardAttentionItem[];
+  attention_total: number;
+  maintenance?: {
+    open_work_orders: number;
+    critical_work_orders: number;
+    overdue_work_orders: number;
+    waiting_for_parts: number;
+    vehicles_in_service: number;
+    overdue_reminders: number;
+    failed_inspections: number;
+  } | null;
+  compliance?: {
+    percentage: number;
+    missing_required: number;
+    expired: number;
+    expiring_7_days: number;
+    expiring_30_days: number;
+    renewal_in_progress: number;
+  } | null;
+  usage?: {
+    active_count: number;
+    overdue_returns: number;
+    records: DashboardUsageRecord[];
+  } | null;
+  reservations?: {
+    pending: number;
+    approved_today: number;
+    starting_today: number;
+    records: Array<{
+      id: number;
+      vehicle_id: number;
+      license_plate: string;
+      reserved_by: string;
+      start_date: string;
+      end_date: string;
+      status: number;
+      status_name: string;
+    }>;
+  } | null;
+  costs?: {
+    fuel: number;
+    charging: number;
+    maintenance: number;
+    accidents: number;
+    other: number;
+    total: number;
+    previous_period_total: number;
+    change_percentage?: number | null;
+    trend: Array<{
+      period: string;
+      fuel: number;
+      charging: number;
+      maintenance: number;
+      accidents: number;
+      other: number;
+      total: number;
+    }>;
+  } | null;
+  can_view_costs: boolean;
+  safety?: {
+    accidents_period: number;
+    open_accidents: number;
+    open_claims: number;
+    vehicles_unavailable: number;
+    damage_cost?: number | null;
+    recovered_cost?: number | null;
+    unrecovered_cost?: number | null;
+  } | null;
+  fleet_health?: {
+    replace: number;
+    replace_soon: number;
+    high_cost: number;
+    anomalies: number;
+    candidates: Array<{
+      vehicle_id: number;
+      license_plate: string;
+      vehicle: string;
+      status: string;
+      cost_per_km?: number | null;
+      downtime_days: number;
+    }>;
+  } | null;
+  recent_activity?: Array<{
+    id: number;
+    action_key: string;
+    params: Record<string, string | number | boolean | null>;
+    description?: string | null;
+    entity_type: string;
+    entity_id?: number | null;
+    url?: string | null;
+    occurred_at: string;
+  }> | null;
+};
+
 export type ServiceReminder = {
   id: number;
   vehicle_id: number;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { AssignmentHistoryTable } from "@/components/assignments/AssignmentHistoryTable";
 import { Pagination } from "@/components/maintenance/Maintenance";
@@ -80,6 +81,7 @@ function assignmentPayload(form: AssignmentForm): VehicleAssignmentPayload {
 }
 
 export default function VehicleAssignmentsPage() {
+  const searchParams = useSearchParams();
   const { t } = useTranslation(["modules", "common"]);
   const { can, user } = useAuth();
   const canWrite = can("vehicleAssignmentsWrite");
@@ -92,10 +94,10 @@ export default function VehicleAssignmentsPage() {
     search: "",
     vehicle_id: "",
     driver_id: "",
-    status: "",
+    status: searchParams.get("status") ?? "",
     from_date: "",
     to_date: "",
-    active_only: false,
+    active_only: searchParams.get("active_only") === "true",
     include_archived: false
   });
   const [loading, setLoading] = useState(true);

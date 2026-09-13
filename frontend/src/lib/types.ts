@@ -426,6 +426,13 @@ export type LinkedServiceReminder = {
 };
 
 export type WorkOrder = {
+  vendor_id?: number | null;
+  external_vendor_cost?: number | string;
+  other_cost?: number | string;
+  tax_amount?: number | string;
+  discount_amount?: number | string;
+  costs_from_parts?: boolean;
+  costs_from_labor?: boolean;
   id: number;
   vehicle_id: number;
   license_plate: string;
@@ -679,6 +686,8 @@ export type ServiceReminder = {
 };
 
 export type VehicleServiceOverview = {
+  vendor_id?: number | null;
+  vendor_name?: string | null;
   id: number;
   vehicle_id: number;
   license_plate: string;

@@ -39,7 +39,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation(["common", "navigation", "modules"]);
   const { formatDateTime } = useLanguage();
   const isLoginPage = pathname === "/login";
-  const maintenanceActive = pathname === "/maintenance" || pathname.startsWith("/work-orders") || pathname.startsWith("/services") || pathname.startsWith("/inspections");
+  const maintenanceActive = pathname.startsWith("/maintenance") || pathname.startsWith("/work-orders") || pathname.startsWith("/services") || pathname.startsWith("/inspections");
   const administrationActive = pathname === "/audit-logs" || pathname.startsWith("/admin/users") || pathname.startsWith("/admin/roles");
   const administrationVisible = can("audit_logs.view") || can("users.manage") || can("roles.manage");
   const [unreadCount, setUnreadCount] = useState(0);
@@ -99,7 +99,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav id="primary-navigation">
           {navItems.slice(0, 3).filter((item) => can(item.permission)).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
-          {(can("maintenance.view") || can("inspections.view")) && <details className="navGroup" open={maintenanceActive}>
+          {MAINTENANCE_LINKS.some(item => can(item.permission)) && <details className="navGroup" open={maintenanceActive}>
             <summary className={maintenanceActive ? "navLink active" : "navLink"}>{t("navigation:maintenance")}</summary>
             <div className="navSubmenu">
               {MAINTENANCE_LINKS.filter((item) => can(item.permission)).map((item) => (

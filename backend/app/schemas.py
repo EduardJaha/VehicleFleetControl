@@ -753,6 +753,7 @@ class InspectionOut(BaseModel):
 
 
 class WorkOrderBase(BaseModel):
+    vendor_id: int | None = None
     vehicle_id: int | None = None
     license_plate: str | None = None
     driver_id: int | None = None
@@ -839,6 +840,12 @@ class WorkOrderCompletionOut(BaseModel):
 
 
 class WorkOrderOut(WorkOrderBase):
+    external_vendor_cost: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
+    other_cost: Decimal = Decimal("0")
+    costs_from_parts: bool = False
+    costs_from_labor: bool = False
     id: int
     vehicle_id: int
     license_plate: str
@@ -1031,6 +1038,7 @@ class UpdateLocation(BaseModel):
 
 
 class AddService(BaseModel):
+    vendor_id: int | None = None
     license_plate: str
     service_type: str
     description: str | None = None
@@ -1047,6 +1055,8 @@ class AddService(BaseModel):
 
 
 class VehicleServiceListOut(BaseModel):
+    vendor_id: int | None = None
+    vendor_name: str | None = None
     id: int
     license_plate: str
     vehicle_name: str
@@ -1073,6 +1083,8 @@ class VehicleServiceListOut(BaseModel):
 
 
 class VehicleServiceOverviewOut(BaseModel):
+    vendor_id: int | None = None
+    vendor_name: str | None = None
     id: int
     license_plate: str
     vehicle_name: str

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSupplyData, emptyOptions, type Options } from "@/components/supply/shared";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,20 +14,20 @@ import { MaintenanceEmptyState, MaintenancePageHeader, MaintenanceTable, Paginat
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { translateType } from "@/i18n/translate";
 
-type FormState = { license_plate: string; service_type: string; service_date: string; odometer_km: string; cost: string; labor_cost: string; parts_cost: string; workshop: string; description: string; next_service_date: string; next_service_km_interval: string; source: ServiceSource; work_order_id: string };
+type FormState = { vendor_id: string; license_plate: string; service_type: string; service_date: string; odometer_km: string; cost: string; labor_cost: string; parts_cost: string; workshop: string; description: string; next_service_date: string; next_service_km_interval: string; source: ServiceSource; work_order_id: string };
 type Filters = { search: string; license_plate: string; service_type: string; workshop: string; from_date: string; to_date: string; source: string; has_linked_work_order: string; minimum_cost: string; maximum_cost: string; include_archived: boolean };
 
 function newForm(params?: URLSearchParams): FormState {
   const workOrder = params?.get("work_order_id") ?? "";
-  return { license_plate: params?.get("license_plate") ?? "", service_type: "General Service", service_date: todayInputDate(), odometer_km: "", cost: "", labor_cost: "", parts_cost: "", workshop: "", description: "", next_service_date: "", next_service_km_interval: "10000", source: workOrder ? "Work Order" : "Manual", work_order_id: workOrder };
+  return { vendor_id: "", license_plate: params?.get("license_plate") ?? "", service_type: "General Service", service_date: todayInputDate(), odometer_km: "", cost: "", labor_cost: "", parts_cost: "", workshop: "", description: "", next_service_date: "", next_service_km_interval: "10000", source: workOrder ? "Work Order" : "Manual", work_order_id: workOrder };
 }
 
 function serviceForm(service: VehicleServiceOverview): FormState {
-  return { license_plate: service.license_plate, service_type: service.service_type, service_date: toInputDate(service.service_date), odometer_km: service.odometer_km ? String(service.odometer_km) : "", cost: service.cost ? String(service.cost) : "", labor_cost: service.labor_cost ? String(service.labor_cost) : "", parts_cost: service.parts_cost ? String(service.parts_cost) : "", workshop: service.workshop ?? "", description: service.description ?? "", next_service_date: toInputDate(service.next_service_date ?? ""), next_service_km_interval: service.next_service_km_interval ? String(service.next_service_km_interval) : "", source: service.source, work_order_id: service.linked_work_order ? String(service.linked_work_order.id) : "" };
+  return { vendor_id: String(service.vendor_id ?? ""), license_plate: service.license_plate, service_type: service.service_type, service_date: toInputDate(service.service_date), odometer_km: service.odometer_km ? String(service.odometer_km) : "", cost: service.cost ? String(service.cost) : "", labor_cost: service.labor_cost ? String(service.labor_cost) : "", parts_cost: service.parts_cost ? String(service.parts_cost) : "", workshop: service.workshop ?? "", description: service.description ?? "", next_service_date: toInputDate(service.next_service_date ?? ""), next_service_km_interval: service.next_service_km_interval ? String(service.next_service_km_interval) : "", source: service.source, work_order_id: service.linked_work_order ? String(service.linked_work_order.id) : "" };
 }
 
 function payload(form: FormState) {
-  return { license_plate: form.license_plate, service_type: form.service_type, service_date: toApiDate(form.service_date), odometer_km: form.odometer_km ? Number(form.odometer_km) : null, cost: form.cost ? Number(form.cost) : null, labor_cost: form.labor_cost ? Number(form.labor_cost) : null, parts_cost: form.parts_cost ? Number(form.parts_cost) : null, workshop: form.workshop || null, description: form.description || null, next_service_date: form.next_service_date ? toApiDate(form.next_service_date) : null, next_service_km_interval: form.next_service_km_interval ? Number(form.next_service_km_interval) : null, source: form.source, work_order_id: form.work_order_id ? Number(form.work_order_id) : null };
+  return { vendor_id: form.vendor_id ? Number(form.vendor_id) : null, license_plate: form.license_plate, service_type: form.service_type, service_date: toApiDate(form.service_date), odometer_km: form.odometer_km ? Number(form.odometer_km) : null, cost: form.cost ? Number(form.cost) : null, labor_cost: form.labor_cost ? Number(form.labor_cost) : null, parts_cost: form.parts_cost ? Number(form.parts_cost) : null, workshop: form.workshop || null, description: form.description || null, next_service_date: form.next_service_date ? toApiDate(form.next_service_date) : null, next_service_km_interval: form.next_service_km_interval ? Number(form.next_service_km_interval) : null, source: form.source, work_order_id: form.work_order_id ? Number(form.work_order_id) : null };
 }
 
 export default function ServiceHistoryPage() {
@@ -35,6 +36,7 @@ export default function ServiceHistoryPage() {
   const searchParams = useSearchParams();
   const { can, user } = useAuth();
   const canWrite = can("servicesWrite");
+  const vendorOptions = useSupplyData<Options>("/supply-options", emptyOptions, canWrite);
   const [result, setResult] = useState<PageResult<VehicleServiceOverview>>({ items: [], page: 1, page_size: 20, total: 0, pages: 0 });
   const [filters, setFilters] = useState<Filters>({ search: searchParams.get("search") ?? "", license_plate: searchParams.get("license_plate") ?? "", service_type: searchParams.get("service_type") ?? "", workshop: searchParams.get("workshop") ?? "", from_date: searchParams.get("from_date") ?? "", to_date: searchParams.get("to_date") ?? "", source: searchParams.get("source") ?? "", has_linked_work_order: searchParams.get("has_linked_work_order") ?? "", minimum_cost: searchParams.get("minimum_cost") ?? "", maximum_cost: searchParams.get("maximum_cost") ?? "", include_archived: searchParams.get("include_archived") === "true" });
   const [form, setForm] = useState<FormState>(() => newForm(searchParams));
@@ -79,6 +81,7 @@ export default function ServiceHistoryPage() {
         <div className="formRow"><label>{t("labels.odometer")}</label><input className="input" type="number" required={mileageReminder} value={form.odometer_km} onChange={(e) => setForm({ ...form, odometer_km: e.target.value })} /></div>
         <div className="formRow"><label>{t("labels.source")}</label><select className="select" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value as ServiceSource })}>{SERVICE_SOURCES.map((v) => <option key={v} value={v}>{translateType(v)}</option>)}</select></div>
         <div className="formRow"><label>{t("modules:services.workOrderId")}</label><input className="input" type="number" value={form.work_order_id} onChange={(e) => setForm({ ...form, work_order_id: e.target.value, source: e.target.value ? "Work Order" : form.source })} /></div>
+        <div className="formRow"><label>{t("modules:supply.vendor_id")}</label><select className="select" value={form.vendor_id} onChange={(e) => setForm({ ...form, vendor_id: e.target.value })}><option value="">{t("modules:supply.select")}</option>{vendorOptions.data.vendors.map(v => <option value={v.id} key={v.id}>{v.name}</option>)}</select></div>
         <div className="formRow"><label>{t("labels.workshop")}</label><input className="input" value={form.workshop} onChange={(e) => setForm({ ...form, workshop: e.target.value })} /></div>
         <div className="formRow"><label>{t("modules:services.legacyCost")}</label><input className="input" type="number" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></div>
         <div className="formRow"><label>{t("modules:services.laborCost")}</label><input className="input" type="number" step="0.01" value={form.labor_cost} onChange={(e) => setForm({ ...form, labor_cost: e.target.value })} /></div>

@@ -50,5 +50,24 @@
     "service_type": "Service type", "service_date": "Service date", "odometer_km": "Odometer",
     "quantity": "Quantity", "unit_cost": "Unit cost", "start_date": "Start date",
     "end_date": "End date", "expiry_date": "Expiry date"
-  }
+  },
+  "negative_stock": "Insufficient available stock at this location.",
+  "clock_overlap": "This technician has an overlapping clock session.",
+  "supply_locked": "This Work Order is closed, archived or linked; its costs are locked.",
+  "supply_inactive": "The selected record is archived or inactive.",
+  "supply_missing": "The selected record was not found in this company.",
+  "supply_conflict": "The record conflicts with existing data. Check its unique name or number.",
+  "supply_return_exceeded": "Return quantity exceeds the remaining issued quantity.",
+  "supply_receipt_exceeded": "The receipt exceeds the remaining ordered quantity.",
+  "supply_clock_active": "Clock out before closing this Work Order or deactivating the technician.",
+  "supply_clock_interval": "Enter a valid, non-overlapping labor interval ending in the past.",
+  "supply_clock_inactive": "This clock session is no longer active.",
+  "supply_discount": "The discount cannot exceed the cost total.",
+  "supply_stock_archive": "A part with stock on hand cannot be archived.",
+  "supply_reservation": "The reservation exceeds stock on hand.",
+  "supply_receipt_status": "Only approved, ordered or partially received purchases can receive inventory.",
+  "supply_status": "This status transition is not allowed.",
+  "supply_draft_only": "Only draft Purchase Orders can be edited.",
+  "supply_attachment": "Select an attachment belonging to this Work Order.",
+  "supply_concurrent": "Another update is in progress. Refresh and retry."
 }

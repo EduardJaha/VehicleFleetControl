@@ -43,3 +43,6 @@ test-results/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local safety backups
+backend/data/backups/

@@ -144,7 +144,11 @@
     "Renewal In Progress": "Rinovim në proces",
     "Archived": "I arkivuar",
     "None": "Asnjë",
-    "Submitted": "Dorëzuar"
+    "Submitted": "Dërguar për miratim",
+    "Draft": "Draft",
+    "Ordered": "Porositur",
+    "Partially Received": "Pranuar pjesërisht",
+    "Received": "Pranuar"
   },
   "types": {
     "Petrol": "Benzinë",

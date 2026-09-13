@@ -30,8 +30,22 @@ async function mockApi(page: Page) {
       return route.fulfill({ json: { access_token: "test-token", token_type: "bearer", user: admin } });
     }
     if (path === "/auth/me") return route.fulfill({ json: admin });
-    if (path === "/dashboard/summary") {
-      return route.fulfill({ json: { total_vehicles: 1, status_summary: [{ status: 0, count: 1 }], location_summary: [{ location: "Belgrade", count: 1 }], reservation_status_summary: [] } });
+    if (path === "/dashboard/overview") {
+      return route.fulfill({ json: {
+        generated_at: "2026-08-23T08:00:00Z",
+        filters: { period: url.searchParams.get("period") ?? "this_month", from_date: "2026-08-01", to_date: "2026-08-31", location_id: null, department_id: null, cost_center_id: null },
+        filter_options: { locations: [{ id: 1, name: "Belgrade" }], departments: [{ id: 2, name: "Operations" }], cost_centers: [] },
+        fleet: { total: 12, operational: 11, available: 7, in_use: 2, in_service: 2, unavailable: 1, availability_percentage: 58.3 },
+        attention: [{ id: "work-order:42", type: "work_order_overdue", priority: "Critical", title_key: "dashboard.attention.workOrderOverdue", message_key: "dashboard.attention.workOrderDescription", params: { work_order_id: 42, license_plate: "AA 123 AA", days_overdue: 3 }, entity_type: "work_order", entity_id: 42, url: "/work-orders/42", occurred_at: "2026-08-20T08:00:00", due_at: "2026-08-20T08:00:00" }],
+        attention_total: 1,
+        maintenance: { open_work_orders: 4, critical_work_orders: 1, overdue_work_orders: 1, waiting_for_parts: 1, vehicles_in_service: 2, overdue_reminders: 0, failed_inspections: 0 },
+        compliance: { percentage: 92, missing_required: 1, expired: 0, expiring_7_days: 2, expiring_30_days: 3, renewal_in_progress: 1 },
+        usage: { active_count: 0, overdue_returns: 0, records: [] },
+        reservations: { pending: 1, approved_today: 1, starting_today: 0, records: [] },
+        costs: null, can_view_costs: false,
+        safety: { accidents_period: 0, open_accidents: 0, open_claims: 0, vehicles_unavailable: 0, damage_cost: null, recovered_cost: null, unrecovered_cost: null },
+        fleet_health: null, recent_activity: []
+      } });
     }
     if (path === "/notifications/unread-count") return route.fulfill({ json: { unread_count: 1 } });
     if (path === "/notifications") {
@@ -148,7 +162,12 @@ test("Admin can log in and view the notification centre", async ({ page }) => {
   await page.getByLabel("Email").fill("admin@example.com");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Login" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard\?period=this_month$/);
+  await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening), Test/ })).toBeVisible();
+  await expect(page.getByText("Fleet availability")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Fleet costs" })).toHaveCount(0);
+  await page.getByLabel("Location").selectOption("1");
+  await expect(page).toHaveURL(/location_id=1/);
   await page.getByRole("link", { name: "Notifications" }).click();
   await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
   await expect(page.getByText("Work Order #42 is overdue").first()).toBeVisible();

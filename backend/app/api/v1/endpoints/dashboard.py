@@ -1,26 +1,64 @@
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 from app.core.authorization import require_permission
+from app.core.security import get_current_user
 from app.db.session import get_db
-from app.models import Vehicle, VehicleAssignment, VehicleReservation
+from app.models import User, Vehicle, VehicleAssignment, VehicleReservation
 from app.schemas import (
     DashboardActiveUsageItem,
     DashboardLocationItem,
     DashboardReservationStatusItem,
     DashboardStatusItem,
     DashboardSummaryOut,
+    DashboardOverviewOut,
 )
+from app.services.dashboard import build_dashboard_overview, scoped_dashboard_entities
 from app.utils.domain import reservation_status_name, parse_vehicle_status
 
 router = APIRouter(dependencies=[Depends(require_permission("dashboard.view"))])
 
 
+@router.get("/overview", response_model=DashboardOverviewOut)
+def overview(
+    period: str = "this_month",
+    from_date: date | None = None,
+    to_date: date | None = None,
+    location_id: int | None = None,
+    department_id: int | None = None,
+    cost_center_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return build_dashboard_overview(
+        db,
+        current_user,
+        period=period,
+        from_date=from_date,
+        to_date=to_date,
+        location_id=location_id,
+        department_id=department_id,
+        cost_center_id=cost_center_id,
+    )
+
+
 @router.get("/summary", response_model=DashboardSummaryOut)
-def summary(db: Session = Depends(get_db)):
-    vehicles = db.query(Vehicle).filter(Vehicle.archived.is_(False)).all()
-    reservations = db.query(VehicleReservation).filter(VehicleReservation.archived.is_(False)).all()
+def summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    vehicle_ids, driver_ids, _ = scoped_dashboard_entities(
+        db, current_user, location_id=None, department_id=None, cost_center_id=None
+    )
+    vehicles = db.query(Vehicle).filter(
+        Vehicle.id.in_(vehicle_ids) if vehicle_ids else False,
+        Vehicle.archived.is_(False),
+    ).all()
+    reservations = db.query(VehicleReservation).filter(
+        VehicleReservation.vehicle_id.in_(vehicle_ids) if vehicle_ids else False,
+        VehicleReservation.archived.is_(False),
+    ).all()
     status_counts = Counter(v.status for v in vehicles)
     location_counts = Counter(v.vehicle_location for v in vehicles)
     reservation_counts = Counter(r.status for r in reservations)
@@ -29,6 +67,8 @@ def summary(db: Session = Depends(get_db)):
         joinedload(VehicleAssignment.driver),
         joinedload(VehicleAssignment.reservation),
     ).filter(
+        VehicleAssignment.vehicle_id.in_(vehicle_ids) if vehicle_ids else False,
+        VehicleAssignment.driver_id.in_(driver_ids) if driver_ids else False,
         VehicleAssignment.archived.is_(False),
         VehicleAssignment.status.in_(["Active", "Overdue"]),
         VehicleAssignment.end_datetime.is_(None),
@@ -66,8 +106,19 @@ def summary(db: Session = Depends(get_db)):
 
 
 @router.get("/filtered")
-def filtered(status: str | None = None, location: str | None = None, db: Session = Depends(get_db)):
-    query = db.query(Vehicle).filter(Vehicle.archived.is_(False))
+def filtered(
+    status: str | None = None,
+    location: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    vehicle_ids, _, _ = scoped_dashboard_entities(
+        db, current_user, location_id=None, department_id=None, cost_center_id=None
+    )
+    query = db.query(Vehicle).filter(
+        Vehicle.id.in_(vehicle_ids) if vehicle_ids else False,
+        Vehicle.archived.is_(False),
+    )
     if status:
         query = query.filter(Vehicle.status == parse_vehicle_status(status))
     if location:

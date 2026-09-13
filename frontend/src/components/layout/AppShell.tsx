@@ -45,6 +45,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentNotifications, setRecentNotifications] = useState<Notification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const loadNotifications = useCallback(async () => {
     if (!user) return;
@@ -73,6 +74,8 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
     return () => window.clearInterval(timer);
   }, [loadNotifications, pathname, user]);
 
+  useEffect(() => setMobileNavOpen(false), [pathname]);
+
   if (isLoginPage) {
     return <>{children}</>;
   }
@@ -87,9 +90,14 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">{t("common:appName")}</div>
-        <nav>
+      <aside className={mobileNavOpen ? "sidebar mobileOpen" : "sidebar"}>
+        <div className="sidebarHeader">
+          <div className="brand">{t("common:appName")}</div>
+          <button className="mobileNavButton" type="button" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" aria-label={t(mobileNavOpen ? "modules:shell.closeNavigation" : "modules:shell.openNavigation")} onClick={() => setMobileNavOpen((value) => !value)}>
+            <span aria-hidden="true">{mobileNavOpen ? "×" : "☰"}</span>
+          </button>
+        </div>
+        <nav id="primary-navigation">
           {navItems.slice(0, 3).filter((item) => can(item.permission)).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
           {(can("maintenance.view") || can("inspections.view")) && <details className="navGroup" open={maintenanceActive}>
             <summary className={maintenanceActive ? "navLink active" : "navLink"}>{t("navigation:maintenance")}</summary>

@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import Numeric, case, cast, func, or_
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.authorization import require_permission
@@ -22,7 +22,12 @@ from app.schemas import (
     WorkOrderStatus,
 )
 from app.utils.dates import format_date
-from app.api.v1.endpoints.services import current_reminder_status, reminder_status_expression
+from app.services.maintenance_metrics import (
+    actual_maintenance_cost,
+    current_reminder_status,
+    latest_reminders_query,
+    reminder_status_expression,
+)
 
 router = APIRouter(dependencies=[Depends(require_permission("maintenance.view"))])
 
@@ -110,44 +115,6 @@ def reminder_summary(service: VehicleService) -> MaintenanceRecordSummary:
         due_date=format_date(service.next_service_date),
         href=f"/services/reminders?reminder_id={service.id}",
     )
-
-
-def latest_reminders_query(db: Session):
-    ranked = db.query(
-        VehicleService.id.label("service_id"),
-        func.row_number().over(
-            partition_by=(VehicleService.vehicle_id, VehicleService.service_type),
-            order_by=(VehicleService.service_date.desc(), VehicleService.id.desc()),
-        ).label("row_number"),
-    ).filter(
-        VehicleService.archived.is_(False),
-        or_(VehicleService.next_service_date.isnot(None), VehicleService.next_service_odometer_km.isnot(None)),
-    ).subquery()
-    return db.query(VehicleService).join(ranked, VehicleService.id == ranked.c.service_id).filter(ranked.c.row_number == 1).join(VehicleService.vehicle)
-
-
-def actual_maintenance_cost(db: Session, start: datetime | None = None, end: datetime | None = None, vehicle_id: int | None = None) -> Decimal:
-    """Actual cost = Services + completed Work Orders that have no linked Service.
-
-    A linked Work Order and Service describe the same maintenance activity, so the
-    Work Order estimate is deliberately excluded once an actual Service exists.
-    """
-    service_query = db.query(func.coalesce(func.sum(cast(VehicleService.cost, Numeric(14, 2))), 0)).filter(VehicleService.archived.is_(False))
-    order_query = db.query(func.coalesce(func.sum(cast(WorkOrder.total_cost, Numeric(14, 2))), 0)).filter(
-        WorkOrder.archived.is_(False),
-        WorkOrder.status == WorkOrderStatus.completed.value,
-        ~WorkOrder.linked_service.has(),
-    )
-    if start is not None:
-        service_query = service_query.filter(VehicleService.service_date >= start)
-        order_query = order_query.filter(WorkOrder.actual_completion_date >= start)
-    if end is not None:
-        service_query = service_query.filter(VehicleService.service_date < end)
-        order_query = order_query.filter(WorkOrder.actual_completion_date < end)
-    if vehicle_id is not None:
-        service_query = service_query.filter(VehicleService.vehicle_id == vehicle_id)
-        order_query = order_query.filter(WorkOrder.vehicle_id == vehicle_id)
-    return decimal_value(service_query.scalar()) + decimal_value(order_query.scalar())
 
 
 @router.get("/summary", response_model=MaintenanceSummaryOut)

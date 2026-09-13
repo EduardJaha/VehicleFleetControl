@@ -10,7 +10,9 @@
   "shell": {
     "recentNotifications": "Recent notifications",
     "noNotifications": "No notifications.",
-    "unreadNotifications": "{{count}} unread notifications"
+    "unreadNotifications": "{{count}} unread notifications",
+    "openNavigation": "Open navigation",
+    "closeNavigation": "Close navigation"
   },
   "reports": {
     "fleet-summary": "Fleet Summary",
@@ -165,18 +167,41 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "description": "Fleet overview from the current operational data.",
-    "totalVehicles": "Total vehicles",
-    "byStatus": "By status",
-    "byLocation": "By location",
-    "activeUsage": "Vehicles currently checked out",
-    "activeUsageCount": "Checked out",
-    "overdueReturns": "Overdue returns",
-    "expectedReturn": "Expected return",
-    "checkedOutAt": "Checked out",
-    "noActiveUsage": "No Vehicles are currently checked out.",
+    "workspace": "Operations control centre",
+    "description": "A live, permission-aware overview of fleet operations.",
+    "greeting": { "morning": "Good morning, {{name}}", "afternoon": "Good afternoon, {{name}}", "evening": "Good evening, {{name}}" },
+    "range": "Showing operational data from {{from}} to {{to}}.",
+    "lastUpdated": "Updated {{date}}",
+    "refreshing": "Refreshing…",
+    "retry": "Try again",
+    "openDetails": "Open details",
     "loadError": "Could not load dashboard.",
-    "loading": "Loading dashboard…"
+    "loading": "Loading dashboard…",
+    "filters": { "title": "Dashboard filters", "period": "Period", "costCenter": "Cost centre" },
+    "periods": { "today": "Today", "last_7_days": "Last 7 days", "this_month": "This month", "last_month": "Last month", "this_quarter": "This quarter", "this_year": "This year", "custom": "Custom range" },
+    "fleet": { "title": "Fleet availability", "description": "Operational vehicle status at a glance.", "availability": "available", "total": "Total vehicles", "available": "Available", "inUse": "In use", "inService": "In service", "unavailable": "Unavailable" },
+    "priorities": { "Low": "Low", "Medium": "Medium", "High": "High", "Critical": "Critical" },
+    "attention": {
+      "title": "Attention required", "description": "Prioritised operational exceptions that need action.", "empty": "No urgent exceptions in the current scope.", "more": "{{count}} more items are available in notifications.",
+      "workOrderOverdue": "Work order overdue", "workOrderCritical": "Critical work order", "workOrderDescription": "WO #{{work_order_id}} · {{license_plate}} · {{days_overdue}} days overdue",
+      "serviceOverdue": "Service overdue", "serviceOverdueDescription": "{{service_type}} for {{license_plate}} is overdue. Odometer variance: {{km_overdue}} km.",
+      "inspectionFailed": "Inspection failed", "inspectionFailedDescription": "{{inspection_type}} inspection failed for {{license_plate}}.",
+      "documentExpired": "Document expired", "documentMissing": "Required document missing", "documentDescription": "{{document_type}} for {{owner}} requires attention.",
+      "returnOverdue": "Vehicle return overdue", "returnOverdueDescription": "{{license_plate}} assigned to {{driver}} is {{minutes_overdue}} minutes overdue.",
+      "driverLicenceExpired": "Driver licence expired", "driverLicenceDescription": "{{driver}} has an expired driving licence.",
+      "vehicleReturnedDamaged": "Vehicle returned with damage", "vehicleReturnedDamagedDescription": "Damage was recorded when {{license_plate}} was returned.",
+      "accidentCritical": "Critical accident open", "accidentCriticalDescription": "{{severity}} accident involving {{license_plate}} needs follow-up."
+    },
+    "maintenance": { "title": "Maintenance", "openWorkOrders": "Open work orders", "critical": "Critical", "overdue": "Overdue", "waitingParts": "Waiting for parts", "vehiclesInService": "Vehicles in service", "failedInspections": "Failed inspections" },
+    "compliance": { "title": "Compliance", "compliant": "fleet compliant", "missing": "Missing", "expired": "Expired", "expiring7": "Expiring in 7 days", "renewing": "Renewal in progress" },
+    "reservations": { "title": "Reservations today", "pending": "Pending approval", "approvedToday": "Approved today", "startingToday": "Starting today", "empty": "No reservations start today." },
+    "safety": { "title": "Safety and accidents", "periodAccidents": "Accidents in period", "openAccidents": "Open accidents", "openClaims": "Open claims", "unavailable": "Vehicles unavailable", "damage": "Damage", "recovered": "Recovered", "unrecovered": "Unrecovered" },
+    "usage": { "title": "Vehicles currently in use", "description": "Live assignments, expected returns, and overdue hand-backs.", "active": "active assignments", "overdueCount": "{{count}} overdue", "checkedOut": "Checked out", "expected": "Expected return", "duration": "Duration", "onTime": "On time", "overdueBy": "Overdue {{duration}}", "empty": "No vehicles are currently checked out." },
+    "costs": { "title": "Fleet costs", "description": "Actual costs for the selected period, with linked maintenance records counted once.", "total": "Total", "fuel": "Fuel", "charging": "Charging", "maintenance": "Maintenance", "accidents": "Accidents", "other": "Other", "vsPrevious": "vs previous period", "chartMetric": "Chart", "chartLabel": "Six-month fleet cost trend for {{metric}}", "chartTable": "Fleet cost trend values" },
+    "health": { "title": "Fleet health and TCO", "description": "Replacement signals and cost anomalies from the TCO model.", "replace": "Replace", "replaceSoon": "Replace soon", "highCost": "High cost/km", "anomalies": "Anomalies", "empty": "No replacement candidates in the current scope.", "status": { "Replace": "Replace", "ReplaceSoon": "Replace soon" } },
+    "activity": { "title": "Recent activity", "empty": "No recent activity is available.", "vehicleCreated": "Vehicle #{{id}} was created", "vehicleReturned": "Vehicle assignment #{{id}} was returned", "assignmentCreated": "Vehicle assignment #{{id}} was created", "reservationApproved": "Reservation #{{id}} was approved", "inspectionCreated": "Inspection #{{id}} was created", "workOrderCreated": "Work order #{{id}} was created", "workOrderCompleted": "Work order #{{id}} was completed", "serviceCompleted": "Service #{{id}} was recorded", "fuelAdded": "Fuel record #{{id}} was added", "accidentReported": "Accident #{{id}} was reported", "documentRenewed": "Document #{{id}} was uploaded" },
+    "quickActions": { "title": "Quick actions", "vehicle": "Add vehicle", "checkout": "Check out vehicle", "fuel": "Record fuel", "inspection": "Start inspection", "workOrder": "Create work order", "reservation": "New reservation" },
+    "units": { "hour": "h", "minute": "m", "days": "days", "km": "km" }
   },
   "maintenance": {
     "title": "Maintenance Dashboard",

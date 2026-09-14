@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import datetime, timedelta
+from datetime import datetime
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -124,26 +124,52 @@ def apply_bulk_action(
     elif payload.action == "assign_service_program":
         if payload.entity_type != "Vehicles":
             raise HTTPException(status_code=422, detail="Service Programs can only be assigned to Vehicles.")
-        service_type = str(payload.options.get("service_type") or payload.value or "").strip()
-        try:
-            days = int(payload.options.get("interval_days") or 180)
-            km = int(payload.options.get("interval_km") or 10_000)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail="Service Program intervals must be whole numbers.") from exc
-        if not service_type or len(service_type) > 100 or not 1 <= days <= 3650 or not 1 <= km <= 500_000:
-            raise HTTPException(status_code=422, detail="Enter a valid Service Program name and interval.")
+        from app.api.v1.endpoints.service_programs import assign_rule, get_row
+        from app.models import ServiceProgram
+        from app.program_schemas import ProgramRuleIn
+        from app.services.service_programs import fail, synchronize_vehicle
+        from datetime import date
+        program_id = payload.options.get("program_id")
+        if program_id is None and str(payload.value or "").isdigit():
+            program_id = payload.value
+        if program_id is not None:
+            try:
+                program = get_row(db, ServiceProgram, int(program_id))
+            except (TypeError, ValueError):
+                fail("program_not_found", 404)
+        else:
+            # Compatibility: legacy names create/reuse a real one-task program.
+            # Day intervals must map exactly to legacy 30-day month units.
+            name = str(payload.options.get("service_type") or payload.value or "").strip()
+            if not name or len(name) > 100:
+                fail("program_legacy_interval")
+            try:
+                days = int(payload.options.get("interval_days", 180))
+                km = int(payload.options.get("interval_km", 10000))
+            except (TypeError, ValueError):
+                fail("program_legacy_interval")
+            if days <= 0 or days % 30 or days > 3600 or not 0 < km <= 500000:
+                fail("program_legacy_interval")
+            program = db.query(ServiceProgram).filter(ServiceProgram.name == name).first()
+            if program is None:
+                from app.api.v1.endpoints.service_programs import ensure_global_scope
+                from app.models import ServiceProgramTask
+                from app.services.service_programs import audit
+                ensure_global_scope(db, current_user)
+                program = ServiceProgram(name=name, description="Migrated legacy bulk assignment")
+                db.add(program)
+                db.flush()
+                audit(db, program, "created", current_user)
+                task = ServiceProgramTask(program_id=program.id, service_type=name, title=name,
+                    km_interval=km, month_interval=days // 30, warning_km=min(1000, km), warning_days=30)
+                db.add(task)
+                db.flush()
+                audit(db, task, "task_created", current_user)
         for vehicle in rows:
-            reminder = VehicleService(
-                vehicle_id=vehicle.id, service_type=service_type,
-                description=f"Service Program assigned in bulk by {current_user.full_name}.",
-                service_date=now, odometer_km=vehicle.odometer_km,
-                next_service_date=now + timedelta(days=days), next_service_km_interval=km,
-                next_service_odometer_km=(vehicle.odometer_km or 0) + km,
-                source="Manual", status="Reminder", reminder_status="Upcoming",
-            )
-            db.add(reminder)
-            db.flush()
-            created_ids.append(reminder.id)
+            assign_rule(db, ProgramRuleIn(program_id=program.id, target_type="Vehicle",
+                                         target_value=str(vehicle.id), effective_from=date.today()), current_user)
+            assignment = synchronize_vehicle(db, vehicle, current_user)
+            created_ids.append(assignment.id)
     record_audit(
         db, action=f"Bulk {payload.action.replace('_', ' ')}", entity_type=payload.entity_type,
         entity_id=None, user=current_user,

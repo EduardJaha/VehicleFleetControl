@@ -178,10 +178,15 @@ def apply_service_payload(service: VehicleService, payload: AddService, db: Sess
             raise HTTPException(status_code=409, detail=f"Work Order #{payload.work_order_id} is already linked to Service #{existing.id}.")
 
     service_date = parse_date(payload.service_date, "ServiceDate")
-    next_date, next_interval, next_odo = build_reminder_values(
-        payload.service_type, service_date, payload.next_service_date,
-        payload.odometer_km, payload.next_service_km_interval,
-    )
+    from app.services.service_programs import matching_task
+    task = matching_task(db, vehicle, payload.service_type)
+    if task and payload.next_service_date is None and payload.next_service_km_interval is None:
+        next_date, next_interval, next_odo = None, None, None
+    else:
+        next_date, next_interval, next_odo = build_reminder_values(
+            payload.service_type, service_date, payload.next_service_date,
+            payload.odometer_km, payload.next_service_km_interval,
+        )
     actual = total_cost(payload.labor_cost, payload.parts_cost, payload.cost)
     service.vehicle_id = vehicle.id
     service.work_order_id = payload.work_order_id

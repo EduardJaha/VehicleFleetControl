@@ -148,7 +148,10 @@
     "Draft": "Draft",
     "Ordered": "Ordered",
     "Partially Received": "Partially Received",
-    "Received": "Received"
+    "Received": "Received",
+    "Current": "Current",
+    "Needs Baseline": "Needs odometer",
+    "Superseded": "Superseded"
   },
   "types": {
     "Petrol": "Petrol",

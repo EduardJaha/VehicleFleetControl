@@ -31,5 +31,6 @@
   "inventory": "Stoku i pjesëve",
   "vendors": "Furnitorët",
   "technicians": "Teknikët",
-  "supplyReports": "Raportet e furnizimeve të mirëmbajtjes"
+  "supplyReports": "Raportet e furnizimeve të mirëmbajtjes",
+  "maintenancePrograms": "Programet e Mirëmbajtjes"
 }

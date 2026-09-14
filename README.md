@@ -115,6 +115,17 @@ VehicleFleetControl currently includes the following modules:
 * Track service workshops
 * Support kilometer-based and date-based service reminders
 
+### Preventive Maintenance Programs
+
+Reusable programs contain kilometer, calendar-month or combined tasks, warning
+thresholds and optional automatic Work Orders. Assign programs directly or through
+Brand/Model, Department, Location, Category and Fuel Type rules. Manage programs,
+tasks, assignments and compliance at `/maintenance/programs`; Vehicle Details
+shows the assigned program, next tasks and overdue tasks.
+
+Manual reminders are preserved. See [Maintenance Programs](docs/maintenance-programs.md)
+for precedence, scheduling, permissions, API routes and bulk compatibility.
+
 ### Fuel Management
 
 * Register fuel records

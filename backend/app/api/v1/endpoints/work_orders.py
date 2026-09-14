@@ -154,6 +154,8 @@ def work_order_out(work_order: WorkOrder) -> WorkOrderOut:
         driver_id=work_order.driver_id,
         driver_name=work_order.driver.full_name if work_order.driver else None,
         inspection_id=work_order.inspection_id,
+        program_service_type=work_order.program_reminder.task.service_type if work_order.program_reminder else None,
+        program_reminder_id=work_order.program_reminder.id if work_order.program_reminder else None,
         reminder_service_id=work_order.reminder_service_id,
         accident_id=work_order.accident_id,
         source=WorkOrderSource(work_order.source or WorkOrderSource.manual.value),
@@ -209,6 +211,9 @@ def apply_payload(work_order: WorkOrder, payload: WorkOrderCreate | WorkOrderUpd
         db, vehicle_id, payload.driver_id, payload.inspection_id,
         payload.reminder_service_id, payload.accident_id, work_order.id,
     )
+    if work_order.id and work_order.program_reminder and (vehicle_id != work_order.vehicle_id or payload.reminder_service_id):
+        from app.services.service_programs import fail
+        fail("program_order_vehicle", 409)
     if work_order.id:
         editable_order(db, work_order)
         if payload.archived or payload.status == WorkOrderStatus.cancelled:

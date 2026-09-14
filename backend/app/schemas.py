@@ -840,6 +840,8 @@ class WorkOrderCompletionOut(BaseModel):
 
 
 class WorkOrderOut(WorkOrderBase):
+    program_service_type: str | None = None
+    program_reminder_id: int | None = None
     external_vendor_cost: Decimal = Decimal("0")
     tax_amount: Decimal = Decimal("0")
     discount_amount: Decimal = Decimal("0")

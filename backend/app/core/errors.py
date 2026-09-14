@@ -80,6 +80,9 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
 
 def validation_code(error_type: str, message: str) -> str:
+    for code in ("program_interval_required", "program_warning_invalid", "program_target_invalid"):
+        if message == f"Value error, {code}":
+            return code
     normalized = error_type.lower()
     if "missing" in normalized:
         return "required"

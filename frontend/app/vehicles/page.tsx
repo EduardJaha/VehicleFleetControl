@@ -15,6 +15,8 @@ import { useTranslation } from "react-i18next";
 import { translateType } from "@/i18n/translate";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
+import { type Program, PROGRAM_API } from "@/components/maintenance/Programs";
+
 export default function VehiclesPage() {
   const { t } = useTranslation(["common", "modules"]);
   const searchParams = useSearchParams();
@@ -36,6 +38,10 @@ export default function VehiclesPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState("archive");
   const [bulkValue, setBulkValue] = useState("");
+  const [programs, setPrograms] = useState<Program[]>([]);
+  useEffect(() => {
+    if (bulkAction === "assign_service_program") apiGet<Program[]>(PROGRAM_API).then(p => setPrograms(p.filter(v => v.is_active))).catch(e => setError(e.message));
+  }, [bulkAction]);
   const [bulkBusy, setBulkBusy] = useState(false);
 
   async function loadVehicles(
@@ -172,7 +178,7 @@ export default function VehiclesPage() {
         entity_type: "Vehicles", action: bulkAction, ids,
         value: bulkValue || null,
         options: bulkAction === "create_work_orders" ? { title: bulkValue || t("modules:bulk.defaultWorkOrder") }
-          : bulkAction === "assign_service_program" ? { service_type: bulkValue } : {}
+          : bulkAction === "assign_service_program" ? { program_id: Number(bulkValue) } : {}
       });
       setMessage(t("modules:bulk.completed", { count: ids.length }));
       setSelected(new Set());
@@ -272,7 +278,8 @@ export default function VehiclesPage() {
           <option value="create_work_orders">{t("modules:bulk.createWorkOrders")}</option>
         </select>
         {bulkAction === "change_status" ? <select className="select" value={bulkValue} onChange={(event) => setBulkValue(event.target.value)}><option value="">{t("modules:bulk.chooseValue")}</option>{VEHICLE_STATUSES.map((status) => <option key={status.value} value={status.value}>{t(`common:${status.labelKey}`)}</option>)}</select>
-          : ["change_location", "assign_service_program", "create_work_orders"].includes(bulkAction) && <input className="input" value={bulkValue} onChange={(event) => setBulkValue(event.target.value)} placeholder={t(`modules:bulk.placeholders.${bulkAction}`)} />}
+          : bulkAction === "assign_service_program" ? <select className="select" aria-label={t("modules:programs.program")} value={bulkValue} onChange={e => setBulkValue(e.target.value)}><option value="">{t("modules:programs.selectProgram")}</option>{programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+          : ["change_location", "create_work_orders"].includes(bulkAction) && <input className="input" value={bulkValue} onChange={(event) => setBulkValue(event.target.value)} placeholder={t(`modules:bulk.placeholders.${bulkAction}`)} />}
         <button className="button" type="button" disabled={!selected.size || bulkBusy || (["change_status", "change_location", "assign_service_program"].includes(bulkAction) && !bulkValue)} onClick={() => void applyBulkAction()}>{t("modules:bulk.apply")}</button>
         <button className="secondaryButton" type="button" disabled={!selected.size} onClick={() => void apiDownload(`/bulk-actions/export?entity_type=Vehicles&ids=${Array.from(selected).join(",")}`, "selected-vehicles.csv")}>{t("modules:bulk.exportSelected")}</button>
       </div>}

@@ -610,6 +610,7 @@ class WorkOrder(TenantMixin, Base):
     technician_assignments = relationship("WorkOrderTechnician", back_populates="work_order")
     labor_entries = relationship("LaborEntry", back_populates="work_order")
     vendor_charges = relationship("WorkOrderVendorCharge", back_populates="work_order")
+    program_reminder = relationship("ServiceProgramReminder", back_populates="work_order", uselist=False)
 
 
 class Vendor(TenantMixin, Base):
@@ -1440,3 +1441,96 @@ class Attachment(TenantMixin, Base):
     archived_by = Column("ArchivedBy", Integer, ForeignKey("Users.Id", ondelete="SET NULL"), nullable=True)
 
     uploader = relationship("User", foreign_keys=[uploaded_by])
+
+
+class ServiceProgram(TenantMixin, Base):
+    __tablename__ = "ServicePrograms"
+    __table_args__ = (UniqueConstraint("CompanyId", "Name", name="uq_service_program_name"),)
+    id = Column("Id", Integer, primary_key=True)
+    name = Column("Name", String(150), nullable=False)
+    description = Column("Description", Text)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    tasks = relationship("ServiceProgramTask", back_populates="program", order_by="ServiceProgramTask.display_order")
+
+
+class ServiceProgramTask(TenantMixin, Base):
+    __tablename__ = "ServiceProgramTasks"
+    __table_args__ = (
+        UniqueConstraint("CompanyId", "ProgramId", "ServiceType", name="uq_program_task_type"),
+        CheckConstraint('"KmInterval" IS NOT NULL OR "MonthInterval" IS NOT NULL', name="ck_program_task_interval"),
+        CheckConstraint('"KmInterval" IS NULL OR "KmInterval" > 0', name="ck_program_task_km"),
+        CheckConstraint('"MonthInterval" IS NULL OR "MonthInterval" > 0', name="ck_program_task_month"),
+    )
+    id = Column("Id", Integer, primary_key=True)
+    program_id = Column("ProgramId", Integer, ForeignKey("ServicePrograms.Id"), nullable=False, index=True)
+    service_type = Column("ServiceType", String(100), nullable=False)
+    title = Column("Title", String(150), nullable=False)
+    description = Column("Description", Text)
+    km_interval = Column("KmInterval", Integer)
+    month_interval = Column("MonthInterval", Integer)
+    whichever_occurs_first = Column("WhicheverOccursFirst", Boolean, nullable=False, default=True)
+    warning_km = Column("WarningKm", Integer)
+    warning_days = Column("WarningDays", Integer)
+    priority = Column("Priority", String(50), nullable=False, default="Medium")
+    auto_create_work_order = Column("AutoCreateWorkOrder", Boolean, nullable=False, default=False)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    display_order = Column("DisplayOrder", Integer, nullable=False, default=0)
+    program = relationship("ServiceProgram", back_populates="tasks")
+
+
+class ServiceProgramRule(TenantMixin, Base):
+    __tablename__ = "ServiceProgramRules"
+    id = Column("Id", Integer, primary_key=True)
+    program_id = Column("ProgramId", Integer, ForeignKey("ServicePrograms.Id"), nullable=False, index=True)
+    target_type = Column("TargetType", String(30), nullable=False)
+    target_value = Column("TargetValue", String(255), nullable=False)
+    model = Column("Model", String(150))
+    effective_from = Column("EffectiveFrom", Date, nullable=False)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    assigned_by = Column("AssignedBy", Integer, ForeignKey("Users.Id"))
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    program = relationship("ServiceProgram")
+
+
+class VehicleServiceProgram(TenantMixin, Base):
+    __tablename__ = "VehicleServicePrograms"
+    __table_args__ = (Index("uq_vehicle_active_program", "CompanyId", "VehicleId", unique=True,
+                            sqlite_where=text('"IsActive" = 1'), postgresql_where=text('"IsActive" = true')),)
+    id = Column("Id", Integer, primary_key=True)
+    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id"), nullable=False, index=True)
+    program_id = Column("ProgramId", Integer, ForeignKey("ServicePrograms.Id"), nullable=False)
+    rule_id = Column("RuleId", Integer, ForeignKey("ServiceProgramRules.Id"), nullable=False)
+    assigned_at = Column("AssignedAt", DateTime, nullable=False, default=datetime.utcnow)
+    assigned_by = Column("AssignedBy", Integer, ForeignKey("Users.Id"))
+    effective_from = Column("EffectiveFrom", Date, nullable=False)
+    baseline_odometer_km = Column("BaselineOdometerKm", Integer)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    program = relationship("ServiceProgram")
+    vehicle = relationship("Vehicle")
+
+
+class ServiceProgramReminder(TenantMixin, Base):
+    __tablename__ = "ServiceProgramReminders"
+    __table_args__ = (
+        Index("uq_program_active_reminder", "CompanyId", "AssignmentId", "TaskId", unique=True,
+              sqlite_where=text('"IsActive" = 1'), postgresql_where=text('"IsActive" = true')),
+        UniqueConstraint("WorkOrderId", name="uq_program_reminder_work_order"),
+    )
+    id = Column("Id", Integer, primary_key=True)
+    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id"), nullable=False, index=True)
+    assignment_id = Column("AssignmentId", Integer, ForeignKey("VehicleServicePrograms.Id"), nullable=False)
+    task_id = Column("TaskId", Integer, ForeignKey("ServiceProgramTasks.Id"), nullable=False)
+    basis_service_id = Column("BasisServiceId", Integer, ForeignKey("VehicleServices.Id"))
+    due_date = Column("DueDate", Date)
+    due_odometer_km = Column("DueOdometerKm", Integer)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    resolution = Column("Resolution", String(30))
+    resolved_at = Column("ResolvedAt", DateTime)
+    work_order_id = Column("WorkOrderId", Integer, ForeignKey("WorkOrders.Id"))
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    task = relationship("ServiceProgramTask")
+    vehicle = relationship("Vehicle")
+    work_order = relationship("WorkOrder", back_populates="program_reminder")

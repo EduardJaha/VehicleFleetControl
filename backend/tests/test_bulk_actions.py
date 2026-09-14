@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints.bulk_actions import apply_bulk_action, export_selected
 from app.db.session import Base
-from app.models import AuditLog, Driver, User, Vehicle, VehicleAssignment, VehicleService, WorkOrder
+from app.models import AuditLog, Driver, User, Vehicle, VehicleAssignment, VehicleService, WorkOrder, ServiceProgram, VehicleServiceProgram, ServiceProgramReminder
 from app.schemas import BulkActionRequest
 
 
@@ -43,7 +43,10 @@ def test_bulk_vehicle_updates_programs_work_orders_and_export(context):
 
     programs = apply_bulk_action(BulkActionRequest(entity_type="Vehicles", action="assign_service_program", ids=ids, value="Six-month service"), db, admin)
     assert len(programs.created_ids) == 2
-    assert db.query(VehicleService).filter(VehicleService.status == "Reminder").count() == 2
+    assert db.query(VehicleService).count() == 0
+    assert db.query(ServiceProgram).count() == 1
+    assert db.query(VehicleServiceProgram).filter_by(is_active=True).count() == 2
+    assert db.query(ServiceProgramReminder).filter_by(is_active=True).count() == 2
 
     response = export_selected("Vehicles", ",".join(map(str, ids)), db, admin)
     assert b"Licence Plate" in response.body

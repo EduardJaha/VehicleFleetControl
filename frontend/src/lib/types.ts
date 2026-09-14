@@ -426,6 +426,8 @@ export type LinkedServiceReminder = {
 };
 
 export type WorkOrder = {
+  program_service_type?: string | null;
+  program_reminder_id?: number | null;
   vendor_id?: number | null;
   external_vendor_cost?: number | string;
   other_cost?: number | string;

@@ -13,6 +13,8 @@ function relatedHref(notification: Notification): string | null {
   const id = notification.entity_id;
   if (!id) return null;
   return {
+    ServiceProgramReminder: `/maintenance/programs`,
+    ServiceProgram: `/maintenance/programs`,
     WorkOrder: `/work-orders/${id}`,
     VehicleService: `/services/${id}`,
     Inspection: `/inspections/${id}`,

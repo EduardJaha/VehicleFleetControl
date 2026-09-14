@@ -31,5 +31,6 @@
   "inventory": "Parts Inventory",
   "vendors": "Vendors",
   "technicians": "Technicians",
-  "supplyReports": "Maintenance Supply Reports"
+  "supplyReports": "Maintenance Supply Reports",
+  "maintenancePrograms": "Maintenance Programs"
 }

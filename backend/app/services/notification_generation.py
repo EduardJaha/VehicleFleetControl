@@ -23,6 +23,9 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
     def enabled(name: str) -> bool:
         return rules.get(name, True) is not False
 
+    from app.services.service_programs import synchronize_all
+    synchronize_all(db, today=now.date())
+
     if enabled("low_stock"):
         from app.services.maintenance_supply import refresh_low_stock
         balances = db.query(PartInventory).options(joinedload(PartInventory.part), joinedload(PartInventory.location)).join(Part).filter(Part.archived.is_(False), Part.is_active.is_(True)).all()

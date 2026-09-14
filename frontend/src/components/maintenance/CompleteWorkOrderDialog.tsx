@@ -26,7 +26,7 @@ function initialState(order: WorkOrder | null) {
     parts_cost: order?.parts_cost ? String(order.parts_cost) : "0",
     completion_notes: order?.completion_notes ?? "",
     create_service_record: true,
-    service_type: "General Service",
+    service_type: order?.program_service_type || "General Service",
     service_description: order?.description ?? order?.reported_issue ?? "",
     next_service_km_interval: "10000",
     next_service_date: "",
@@ -59,8 +59,8 @@ export function CompleteWorkOrderDialog({ order, open, onClose, onCompleted }: P
     () => (Number(form.labor_cost || 0) + Number(form.parts_cost || 0) + Number(order?.external_vendor_cost ?? 0) + Number(order?.other_cost ?? 0) + Number(order?.tax_amount ?? 0) - Number(order?.discount_amount ?? 0)).toFixed(2),
     [form.labor_cost, form.parts_cost, order]
   );
-  const mileageReminder = ["General Service", "Oil Change"].includes(form.service_type);
-  const dateReminder = form.service_type === "Tire Change/Control";
+  const mileageReminder = !order?.program_reminder_id && ["General Service", "Oil Change"].includes(form.service_type);
+  const dateReminder = !order?.program_reminder_id && form.service_type === "Tire Change/Control";
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -121,11 +121,12 @@ export function CompleteWorkOrderDialog({ order, open, onClose, onCompleted }: P
         <div className="formRow"><label>{t("modules:workOrders.laborCost")}</label><input className="input" type="number" min="0" step="0.01" required readOnly={order?.costs_from_labor} value={form.labor_cost} onChange={(e) => setForm({ ...form, labor_cost: e.target.value })} /></div>
         <div className="formRow"><label>{t("modules:workOrders.partsCost")}</label><input className="input" type="number" min="0" step="0.01" required readOnly={order?.costs_from_parts} value={form.parts_cost} onChange={(e) => setForm({ ...form, parts_cost: e.target.value })} /></div>
         <div className="formRow span2"><label>{t("modules:workOrders.completionNotes")}</label><textarea className="input textarea" value={form.completion_notes} onChange={(e) => setForm({ ...form, completion_notes: e.target.value })} /></div>
-        <label className="actions span2"><input type="checkbox" checked={form.create_service_record} onChange={(e) => setForm({ ...form, create_service_record: e.target.checked })} /> {t("modules:workOrders.createService")}</label>
+        <label className="actions span2"><input type="checkbox" disabled={Boolean(order?.program_reminder_id)} checked={form.create_service_record} onChange={(e) => setForm({ ...form, create_service_record: e.target.checked })} /> {t("modules:workOrders.createService")}</label>
         {form.create_service_record && <>
-          <div className="formRow"><label>{t("modules:workOrders.serviceType")}</label><select className="select" value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })}>{SERVICE_TYPES.map((value) => <option key={value} value={value}>{translateType(value)}</option>)}</select></div>
+          <div className="formRow"><label>{t("modules:workOrders.serviceType")}</label><select className="select" disabled={Boolean(order?.program_reminder_id)} value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })}>{Array.from(new Set([...SERVICE_TYPES, ...(order?.program_service_type ? [order.program_service_type] : [])])).map((value) => <option key={value} value={value}>{translateType(value)}</option>)}</select></div>
           <div className="formRow"><label>{t("modules:workOrders.billInvoice")}</label><input className="input" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => setBill(e.target.files?.[0] ?? null)} /><span className="muted">{t("modules:workOrders.fileHelp")}</span></div>
           <div className="formRow span2"><label>{t("modules:workOrders.serviceDescription")}</label><textarea className="input textarea" value={form.service_description} onChange={(e) => setForm({ ...form, service_description: e.target.value })} /></div>
+          {order?.program_reminder_id && <p className="muted">{t("modules:programs.scheduleHelp")}</p>}
           {mileageReminder && <div className="formRow"><label>{t("modules:workOrders.nextServiceInterval")}</label><select className="select" value={form.next_service_km_interval} onChange={(e) => setForm({ ...form, next_service_km_interval: e.target.value })}>{SERVICE_KM_INTERVALS.map((value) => <option key={value} value={value}>{formatNumber(value)} km</option>)}</select></div>}
           {dateReminder && <div className="formRow"><label>{t("modules:workOrders.nextServiceDate")}</label><input className="input" type="date" min={form.actual_completion_date} required value={form.next_service_date} onChange={(e) => setForm({ ...form, next_service_date: e.target.value })} /></div>}
         </>}

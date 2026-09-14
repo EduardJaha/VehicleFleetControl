@@ -149,7 +149,7 @@ def test_migration_preserves_values_and_marks_electric_rows_for_review(
             assert audit["EntityId"] == 12
             assert connection.execute(sa.text(
                 'SELECT version_num FROM alembic_version'
-                    )).scalar_one() == "20260913_0017"
+                    )).scalar_one() == "20260914_0018"
 
         with pytest.raises(RuntimeError, match="Cannot downgrade.*KWH"):
             command.downgrade(config, "20260718_0004")
@@ -195,7 +195,7 @@ def test_registration_consolidation_relinks_documents_without_losing_versions(
             }
             assert connection.execute(sa.text(
                 'SELECT version_num FROM alembic_version'
-                    )).scalar_one() == "20260913_0017"
+                    )).scalar_one() == "20260914_0018"
     finally:
         engine.dispose()
         get_settings.cache_clear()
@@ -258,7 +258,7 @@ def test_accident_workflow_migration_preserves_legacy_accidents_and_files(tmp_pa
             assert file_row["FilePath"] == "uploads/accidents/legacy.jpg"
             assert connection.execute(sa.text(
                 'SELECT version_num FROM alembic_version'
-                )).scalar_one() == "20260913_0017"
+                )).scalar_one() == "20260914_0018"
     finally:
         engine.dispose()
         get_settings.cache_clear()
@@ -279,7 +279,7 @@ def test_legacy_expanded_maintenance_revision_bridges_to_tco_without_data_loss(t
     try:
         command.upgrade(alembic_config(database_url), "head")
         with engine.connect() as connection:
-            assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "20260913_0017"
+            assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "20260914_0018"
             assert connection.execute(sa.text('SELECT "Name" FROM "Parts" WHERE "Id" = 1')).scalar_one() == "Brake pad"
             vehicle_columns = {row[1] for row in connection.execute(sa.text('PRAGMA table_info("Vehicles")'))}
             assert {"AcquisitionDate", "PurchasePrice", "OwnershipType", "SaleDate"}.issubset(vehicle_columns)

@@ -69,5 +69,17 @@
   "supply_status": "This status transition is not allowed.",
   "supply_draft_only": "Only draft Purchase Orders can be edited.",
   "supply_attachment": "Select an attachment belonging to this Work Order.",
-  "supply_concurrent": "Another update is in progress. Refresh and retry."
+  "supply_concurrent": "Another update is in progress. Refresh and retry.",
+  "program_not_found": "The selected program record was not found in this company.",
+  "program_conflict": "A program with this name already exists, or another update is in progress. Refresh and retry.",
+  "program_task_conflict": "A task for this service type already exists in this program. Edit or reactivate that task.",
+  "program_inactive": "Restore and activate the selected record before assigning or editing it.",
+  "program_global_scope": "Managing shared programs and group rules requires an unrestricted maintenance role.",
+  "program_legacy_interval": "Select a Program ID. Legacy names accept positive day intervals divisible by 30 and kilometer intervals up to 500,000.",
+  "program_task_history": "Tasks with reminder history retain their service type. Deactivate this task and create another.",
+  "program_completion_service": "Complete this Program Work Order with a Service record matching its task type.",
+  "program_order_vehicle": "A Program Work Order must retain its original vehicle and program reminder.",
+  "program_interval_required": "Set a kilometer interval, a month interval, or both.",
+  "program_warning_invalid": "Warnings require their corresponding interval; kilometer warnings cannot exceed it.",
+  "program_target_invalid": "Choose a valid assignment target."
 }

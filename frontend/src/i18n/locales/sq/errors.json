@@ -69,5 +69,17 @@
   "supply_status": "Ky ndryshim statusi nuk lejohet.",
   "supply_draft_only": "Vetëm porositë në draft mund të ndryshohen.",
   "supply_attachment": "Zgjidhni një bashkëngjitje të këtij urdhri pune.",
-  "supply_concurrent": "Një përditësim tjetër është në vazhdim. Rifreskoni dhe provoni përsëri."
+  "supply_concurrent": "Një përditësim tjetër është në vazhdim. Rifreskoni dhe provoni përsëri.",
+  "program_not_found": "Regjistri i zgjedhur i programit nuk u gjet në këtë kompani.",
+  "program_conflict": "Një program me këtë emër ekziston ose një ndryshim tjetër është në proces. Rifreskoni dhe provoni përsëri.",
+  "program_task_conflict": "Një detyrë për këtë lloj servisi ekziston në këtë program. Ndryshoni ose riaktivizoni atë detyrë.",
+  "program_inactive": "Riktheni dhe aktivizoni regjistrin e zgjedhur para caktimit ose ndryshimit.",
+  "program_global_scope": "Menaxhimi i programeve të përbashkëta dhe rregullave të grupit kërkon rol mirëmbajtjeje pa kufizime.",
+  "program_legacy_interval": "Zgjidhni ID-në e Programit. Emrat e vjetër pranojnë intervale ditësh pozitive të pjesëtueshme me 30 dhe intervale kilometrash deri në 500.000.",
+  "program_task_history": "Detyrat me historik kujtesash ruajnë llojin e servisit. Çaktivizoni këtë detyrë dhe krijoni një tjetër.",
+  "program_completion_service": "Përfundoni këtë Urdhër Pune të Programit me një regjistër Servisi që përputhet me llojin e detyrës.",
+  "program_order_vehicle": "Urdhri i Punës i Programit duhet të ruajë automjetin dhe kujtesën origjinale.",
+  "program_interval_required": "Caktoni një interval kilometrash, muajsh ose të dyja.",
+  "program_warning_invalid": "Paralajmërimet kërkojnë intervalin përkatës; paralajmërimi në kilometra nuk mund ta tejkalojë atë.",
+  "program_target_invalid": "Zgjidhni një objektiv të vlefshëm caktimi."
 }

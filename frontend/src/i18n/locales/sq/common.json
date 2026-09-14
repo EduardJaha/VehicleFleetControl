@@ -148,7 +148,10 @@
     "Draft": "Draft",
     "Ordered": "Porositur",
     "Partially Received": "Pranuar pjesërisht",
-    "Received": "Pranuar"
+    "Received": "Pranuar",
+    "Current": "Në afat",
+    "Needs Baseline": "Kërkon kilometrazhin",
+    "Superseded": "Zëvendësuar"
   },
   "types": {
     "Petrol": "Benzinë",

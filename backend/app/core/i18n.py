@@ -9,6 +9,19 @@ DEFAULT_LANGUAGE = "en"
 
 MESSAGES: dict[str, dict[str, str]] = {
     "en": {
+        'program_not_found': 'The selected program record was not found in this company.',
+        'program_conflict': 'A program with this name already exists, or another update is in progress. Refresh and retry.',
+        'program_task_conflict': 'A task for this service type already exists in this program. Edit or reactivate that task.',
+        'program_inactive': 'Restore and activate the selected record before assigning or editing it.',
+        'program_global_scope': 'Managing shared programs and group rules requires an unrestricted maintenance role.',
+        'program_legacy_interval': 'Select a Program ID. Legacy names accept positive day intervals divisible by 30 and kilometer intervals up to 500,000.',
+        'program_task_history': 'Tasks with reminder history retain their service type. Deactivate this task and create another.',
+        'program_completion_service': 'Complete this Program Work Order with a Service record matching its task type.',
+        'program_order_vehicle': 'A Program Work Order must retain its original vehicle and program reminder.',
+        'program_interval_required': 'Set a kilometer interval, a month interval, or both.',
+        'program_warning_invalid': 'Warnings require their corresponding interval; kilometer warnings cannot exceed it.',
+        'program_target_invalid': 'Choose a valid assignment target.',
+
         "negative_stock": "Insufficient available stock at this location.",
         "clock_overlap": "This technician has an overlapping clock session.",
         "supply_locked": "This Work Order is closed, archived or linked; its costs are locked.",
@@ -67,6 +80,19 @@ MESSAGES: dict[str, dict[str, str]] = {
         "invalid_value": "Enter a valid value.",
     },
     "sq": {
+        'program_not_found': 'Regjistri i zgjedhur i programit nuk u gjet në këtë kompani.',
+        'program_conflict': 'Një program me këtë emër ekziston ose një ndryshim tjetër është në proces. Rifreskoni dhe provoni përsëri.',
+        'program_task_conflict': 'Një detyrë për këtë lloj servisi ekziston në këtë program. Ndryshoni ose riaktivizoni atë detyrë.',
+        'program_inactive': 'Riktheni dhe aktivizoni regjistrin e zgjedhur para caktimit ose ndryshimit.',
+        'program_global_scope': 'Menaxhimi i programeve të përbashkëta dhe rregullave të grupit kërkon rol mirëmbajtjeje pa kufizime.',
+        'program_legacy_interval': 'Zgjidhni ID-në e Programit. Emrat e vjetër pranojnë intervale ditësh pozitive të pjesëtueshme me 30 dhe intervale kilometrash deri në 500.000.',
+        'program_task_history': 'Detyrat me historik kujtesash ruajnë llojin e servisit. Çaktivizoni këtë detyrë dhe krijoni një tjetër.',
+        'program_completion_service': 'Përfundoni këtë Urdhër Pune të Programit me një regjistër Servisi që përputhet me llojin e detyrës.',
+        'program_order_vehicle': 'Urdhri i Punës i Programit duhet të ruajë automjetin dhe kujtesën origjinale.',
+        'program_interval_required': 'Caktoni një interval kilometrash, muajsh ose të dyja.',
+        'program_warning_invalid': 'Paralajmërimet kërkojnë intervalin përkatës; paralajmërimi në kilometra nuk mund ta tejkalojë atë.',
+        'program_target_invalid': 'Zgjidhni një objektiv të vlefshëm caktimi.',
+
         "negative_stock": "Stoku i disponueshëm në këtë vendndodhje është i pamjaftueshëm.",
         "clock_overlap": "Ky teknik ka një seancë pune që mbivendoset.",
         "supply_locked": "Ky urdhër pune është i mbyllur, i arkivuar ose i lidhur; kostot e tij janë të bllokuara.",

@@ -5,6 +5,7 @@ from sqlalchemy import inspect, text
 from app.db.session import SessionLocal
 
 TENANT_TABLES = (
+    "ServicePrograms", "ServiceProgramTasks", "ServiceProgramRules", "VehicleServicePrograms", "ServiceProgramReminders",
     "CompanySettings", "CompanyUsers", "Users", "Locations", "Departments", "CostCenters", "UserRoles", "Suppliers",
     "Vehicles", "Drivers", "VehicleAssignments", "VehicleConditionRecords", "Inspections",
     "InspectionItems", "WorkOrders", "DocumentRequirements", "VehiclePapers",

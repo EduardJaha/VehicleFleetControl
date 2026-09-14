@@ -57,6 +57,13 @@ def complete_work_order_transaction(
     if payload.create_service_record and not payload.service_type:
         raise HTTPException(status_code=422, detail="service_type is required when create_service_record is true.")
 
+    from app.models import ServiceProgramReminder
+    from app.services.service_programs import fail
+    program_reminder = db.query(ServiceProgramReminder).filter(ServiceProgramReminder.work_order_id == work_order.id).first()
+    if program_reminder and (not payload.create_service_record or
+            (payload.service_type or "").strip().casefold() != program_reminder.task.service_type.casefold()):
+        fail("program_completion_service")
+
     completed_at = parse_date(payload.actual_completion_date, "ActualCompletionDate")
     now = datetime.utcnow()
     if completed_at > now:
@@ -105,13 +112,15 @@ def complete_work_order_transaction(
         # service creation behavior identical.
         from app.api.v1.endpoints.services import build_reminder_values
 
-        next_date, next_interval, next_odometer = build_reminder_values(
-            payload.service_type or "",
-            completed_at,
-            payload.next_service_date,
-            payload.completed_odometer_km,
-            payload.next_service_km_interval,
-        )
+        from app.services.service_programs import matching_task
+        task = matching_task(db, work_order.vehicle, payload.service_type or "")
+        if (task or program_reminder) and payload.next_service_date is None and payload.next_service_km_interval is None:
+            next_date, next_interval, next_odometer = None, None, None
+        else:
+            next_date, next_interval, next_odometer = build_reminder_values(
+                payload.service_type or "", completed_at, payload.next_service_date,
+                payload.completed_odometer_km, payload.next_service_km_interval,
+            )
         service = VehicleService(
             vehicle_id=work_order.vehicle_id,
             work_order_id=work_order.id,
@@ -225,5 +234,15 @@ def complete_work_order_transaction(
         deduplication_key=f"work-order:{work_order.id}:completed",
         message_params={"id": work_order.id, "title": work_order.title, "plate": work_order.vehicle.license_plate},
     )
+    if service:
+        from app.services.service_programs import synchronize_vehicle
+        synchronize_vehicle(db, work_order.vehicle, current_user)
+        if program_reminder:
+            reminder_resolved = not program_reminder.is_active
+            next_reminder_created = db.query(ServiceProgramReminder).filter(
+                ServiceProgramReminder.vehicle_id == work_order.vehicle_id,
+                ServiceProgramReminder.task_id == program_reminder.task_id,
+                ServiceProgramReminder.is_active.is_(True),
+            ).first() is not None
     db.flush()
     return work_order, service, reminder_resolved, next_reminder_created

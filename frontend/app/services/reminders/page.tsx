@@ -13,6 +13,8 @@ import { REMINDER_STATUSES, SERVICE_TYPES, WORK_ORDER_PRIORITIES } from "@/lib/c
 import { toApiDate } from "@/lib/format";
 import type { PageResult, ServiceReminder } from "@/lib/types";
 
+import { VehicleProgramPanel } from "@/components/maintenance/Programs";
+
 type Filters = { search: string; license_plate: string; reminder_type: string; status: string; priority: string; from_date: string; to_date: string; overdue_only: boolean; has_linked_work_order: string };
 
 export default function ServiceRemindersPage() {
@@ -59,6 +61,7 @@ export default function ServiceRemindersPage() {
   }
 
   return <section>
+    <VehicleProgramPanel />
     <MaintenancePageHeader title={t("modules:reminders.title")} description={t("modules:reminders.description")} actions={<button className="secondaryButton" onClick={() => void load(result.page)}>{t("actions.refresh")}</button>} />
     {error && <div className="error spaced">{error}</div>}{message && <div className="success spaced">{message}</div>}
     <div className="card filtersGrid spaced">

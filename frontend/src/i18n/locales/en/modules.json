@@ -281,6 +281,14 @@
     "updateError": "Could not update notification."
   },
   "notificationContent": {
+    "inspection_required": {
+      "title": "Inspection #{{id}} required",
+      "message": "{{template}} · Vehicle #{{vehicle_id}}"
+    },
+    "inspection_item_failed": {
+      "title": "Inspection #{{id}}: item failed",
+      "message": "{{item}}"
+    },
     "service_reminder": {
       "title": "{{service_type}} {{status}}",
       "message": "{{plate}} requires {{service_type}}."
@@ -1703,6 +1711,117 @@
     "notification": {
       "title": "Maintenance task requires attention",
       "message": "{{plate}}: {{title}} — {{status}}."
+    }
+  },
+  "inspectionTemplates": {
+    "title": "Inspection Templates",
+    "description": "Configure checklists, failure actions, assignments and inspection schedules.",
+    "create": "Create template",
+    "templates": "Templates",
+    "edit": "Edit",
+    "duplicate": "Duplicate",
+    "copy": "Copy",
+    "includeArchived": "Include archived",
+    "generate": "Generate due inspections",
+    "empty": "No templates yet. Create a template to get started.",
+    "code": "Code",
+    "name": "Name",
+    "details": "Description",
+    "type": "Inspection type",
+    "examples": "Start with a template name",
+    "choose": "Select…",
+    "save": "Save",
+    "saved": "Saved.",
+    "preview": "Preview",
+    "archive": "Archive",
+    "archived": "Archived",
+    "restore": "Restore",
+    "items": "Checklist items",
+    "snapshotHelp": "Each inspection keeps the checklist and rules it began with. Template changes apply to future inspections.",
+    "category": "Category",
+    "rules": "Rules",
+    "actions": "Actions",
+    "moveUp": "Move item up",
+    "moveDown": "Move item down",
+    "delete": "Delete",
+    "addItem": "Add item",
+    "editItem": "Edit item",
+    "cancel": "Cancel",
+    "assignments": "Assignments",
+    "precedence": "Selection per inspection type: vehicle → brand/model → category → fuel type → location → department. An exact model wins over a brand. Then higher priority wins; ties use the oldest assignment ID. Department uses the handover driver or current assigned driver.",
+    "target": "Applies to",
+    "value": "Selection",
+    "model": "Model",
+    "allModels": "All models",
+    "priority": "Priority",
+    "active": "Active",
+    "inactive": "Inactive",
+    "disable": "Disable",
+    "schedules": "Schedules",
+    "scheduleHelp": "Schedules apply where this template wins selection. Calendar periods start on the chosen date (UTC). Mileage needs a known odometer and a shared baseline. Before check-out requires a passed inspection for that handover day; after return creates a required inspection.",
+    "frequency": "Frequency",
+    "startDate": "Start date",
+    "intervalDays": "Interval in days",
+    "intervalKm": "Interval in km",
+    "baselineKm": "Baseline odometer (km)",
+    "begin": "Begin inspection",
+    "beginHelp": "Begin to save this checklist, then record results and attach photos.",
+    "completedLocked": "Completed. Results and checklist are locked.",
+    "photo": "Photo",
+    "saveResults": "Save results",
+    "complete": "Complete inspection",
+    "error": "Unable to save. Please try again.",
+    "denied": "You do not have permission to configure inspection templates.",
+    "audit": "Inspection configuration or automation updated record #{{id}}.",
+    "flags": {
+      "required": "Required",
+      "critical": "Critical failure",
+      "photo_required_on_failure": "Photo required on failure",
+      "comment_required_on_failure": "Comment required on failure",
+      "create_work_order_on_failure": "Create work order on failure",
+      "mark_vehicle_unavailable_on_failure": "Mark vehicle unavailable on failure",
+      "generate_notification_on_failure": "Notify on failure",
+      "is_active": "Active"
+    },
+    "categories": {
+      "Tires": "Tires",
+      "Brakes": "Brakes",
+      "Lights": "Lights",
+      "Fluids": "Fluids",
+      "Safety": "Safety",
+      "Body": "Body",
+      "Interior": "Interior",
+      "Documents": "Documents",
+      "Electrical": "Electrical",
+      "EV System": "EV System",
+      "Other": "Other"
+    },
+    "frequencies": {
+      "Daily": "Daily",
+      "Weekly": "Weekly",
+      "Monthly": "Monthly",
+      "Every X days": "Every X days",
+      "Before check-out": "Before check-out",
+      "After return": "After return",
+      "Mileage": "Mileage"
+    },
+    "targets": {
+      "Vehicle": "Specific vehicle",
+      "BrandModel": "Brand/model",
+      "Category": "Vehicle category",
+      "FuelType": "Fuel type",
+      "Location": "Location",
+      "Department": "Department"
+    },
+    "examplesList": {
+      "daily": "Daily Inspection",
+      "pre_trip": "Pre-Trip Inspection",
+      "post_trip": "Post-Trip Inspection",
+      "return": "Vehicle Return Inspection",
+      "weekly": "Weekly Safety Inspection",
+      "monthly": "Monthly Inspection",
+      "winter": "Winter Inspection",
+      "electric": "Electric Vehicle Inspection"
     }
   }
 }

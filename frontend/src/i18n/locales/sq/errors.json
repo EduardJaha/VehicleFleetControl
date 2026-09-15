@@ -81,5 +81,19 @@
   "program_order_vehicle": "Urdhri i Punës i Programit duhet të ruajë automjetin dhe kujtesën origjinale.",
   "program_interval_required": "Caktoni një interval kilometrash, muajsh ose të dyja.",
   "program_warning_invalid": "Paralajmërimet kërkojnë intervalin përkatës; paralajmërimi në kilometra nuk mund ta tejkalojë atë.",
-  "program_target_invalid": "Zgjidhni një objektiv të vlefshëm caktimi."
+  "program_target_invalid": "Zgjidhni një objektiv të vlefshëm caktimi.",
+  "inspection_template_missing": "Regjistrimi i zgjedhur i inspektimit nuk u gjet në këtë kompani.",
+  "inspection_template_conflict": "Ky kod është në përdorim. Zgjidhni një kod unik.",
+  "inspection_snapshot_locked": "Lista e ruajtur nuk mund të ndryshohet. Dërgoni të gjitha ID-të dhe emrat origjinalë.",
+  "inspection_completed_locked": "Rezultatet e inspektimit të përfunduar nuk mund të ndryshohen.",
+  "inspection_template_empty": "Shtoni të paktën një pikë aktive para fillimit të inspektimit.",
+  "inspection_required_item": "Kontrolloni pikën e detyrueshme: {{item}}.",
+  "inspection_photo_required": "Bashkëngjitni fotografi nga ky inspektim për pikën: {{item}}.",
+  "inspection_comment_required": "Shkruani koment për dështimin e pikës: {{item}}.",
+  "inspection_template_changed": "Përzgjedhja e modelit ndryshoi. Ringarkoni listën para fillimit.",
+  "inspection_begin_first": "Filloni inspektimin me listë bosh rezultatesh, pastaj regjistroni rezultatet e pikave të ruajtura.",
+  "inspection_checkout_required": "Përfundoni dhe kaloni inspektimet e kërkuara para marrjes: {{ids}}.",
+  "inspection_reorder_invalid": "Përfshini çdo ID të pikës saktësisht një herë gjatë rirenditjes.",
+  "inspection_schedule_interval": "Jepni intervalin e kërkuar për këtë shpeshtësi. Kilometrazhi kërkon edhe bazën.",
+  "inspection_evidence_locked": "Kjo fotografi përdoret nga një rezultat inspektimi dhe nuk mund të hiqet."
 }

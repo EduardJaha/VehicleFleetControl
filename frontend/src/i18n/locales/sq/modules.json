@@ -281,6 +281,14 @@
     "updateError": "Njoftimi nuk mund të përditësohej."
   },
   "notificationContent": {
+    "inspection_required": {
+      "title": "Kërkohet inspektimi #{{id}}",
+      "message": "{{template}} · Automjeti #{{vehicle_id}}"
+    },
+    "inspection_item_failed": {
+      "title": "Inspektimi #{{id}}: pikë e dështuar",
+      "message": "{{item}}"
+    },
     "service_reminder": {
       "title": "{{service_type}}: {{status}}",
       "message": "{{plate}} kërkon {{service_type}}."
@@ -1703,6 +1711,117 @@
     "notification": {
       "title": "Detyra e mirëmbajtjes kërkon vëmendje",
       "message": "{{plate}}: {{title}} — {{status}}."
+    }
+  },
+  "inspectionTemplates": {
+    "title": "Modelet e inspektimit",
+    "description": "Konfiguroni listat e kontrollit, veprimet në dështim, caktimet dhe oraret e inspektimit.",
+    "create": "Krijo model",
+    "templates": "Modelet",
+    "edit": "Ndrysho",
+    "duplicate": "Dyfisho",
+    "copy": "Kopje",
+    "includeArchived": "Përfshi të arkivuarat",
+    "generate": "Gjenero inspektimet e kërkuara",
+    "empty": "Ende nuk ka modele. Krijoni një model për të filluar.",
+    "code": "Kodi",
+    "name": "Emri",
+    "details": "Përshkrimi",
+    "type": "Lloji i inspektimit",
+    "examples": "Filloni me një emër modeli",
+    "choose": "Zgjidhni…",
+    "save": "Ruaj",
+    "saved": "U ruajt.",
+    "preview": "Shiko paraprakisht",
+    "archive": "Arkivo",
+    "archived": "Arkivuar",
+    "restore": "Rikthe",
+    "items": "Pikat e kontrollit",
+    "snapshotHelp": "Çdo inspektim ruan listën dhe rregullat me të cilat filloi. Ndryshimet e modelit vlejnë për inspektimet e ardhshme.",
+    "category": "Kategoria",
+    "rules": "Rregullat",
+    "actions": "Veprimet",
+    "moveUp": "Zhvendos pikën lart",
+    "moveDown": "Zhvendos pikën poshtë",
+    "delete": "Fshi",
+    "addItem": "Shto pikë",
+    "editItem": "Ndrysho pikën",
+    "cancel": "Anulo",
+    "assignments": "Caktimet",
+    "precedence": "Përzgjedhja sipas llojit: automjeti → marka/modeli → kategoria → karburanti → lokacioni → departamenti. Modeli i saktë ka përparësi ndaj markës. Pastaj fiton prioriteti më i lartë; barazimet përdorin ID-në më të vjetër. Departamenti merret nga shoferi i dorëzimit ose shoferi i caktuar.",
+    "target": "Vlen për",
+    "value": "Përzgjedhja",
+    "model": "Modeli",
+    "allModels": "Të gjitha modelet",
+    "priority": "Prioriteti",
+    "active": "Aktiv",
+    "inactive": "Joaktiv",
+    "disable": "Çaktivizo",
+    "schedules": "Oraret",
+    "scheduleHelp": "Oraret vlejnë kur ky model zgjidhet. Periudhat kalendarike fillojnë në datën e zgjedhur (UTC). Kilometrazhi kërkon vlerë të njohur dhe bazë të përbashkët. Para marrjes kërkohet inspektim i kaluar atë ditë; pas kthimit krijohet inspektim i detyrueshëm.",
+    "frequency": "Shpeshtësia",
+    "startDate": "Data e fillimit",
+    "intervalDays": "Intervali në ditë",
+    "intervalKm": "Intervali në km",
+    "baselineKm": "Kilometrazhi bazë (km)",
+    "begin": "Fillo inspektimin",
+    "beginHelp": "Filloni për ta ruajtur këtë listë, pastaj regjistroni rezultatet dhe bashkëngjitni fotografi.",
+    "completedLocked": "Përfunduar. Rezultatet dhe lista janë të kyçura.",
+    "photo": "Fotografia",
+    "saveResults": "Ruaj rezultatet",
+    "complete": "Përfundo inspektimin",
+    "error": "Ruajtja dështoi. Provoni përsëri.",
+    "denied": "Nuk keni leje për të konfiguruar modelet e inspektimit.",
+    "audit": "Konfigurimi ose automatizimi i inspektimit përditësoi regjistrimin #{{id}}.",
+    "flags": {
+      "required": "E detyrueshme",
+      "critical": "Dështim kritik",
+      "photo_required_on_failure": "Fotografi e detyrueshme në dështim",
+      "comment_required_on_failure": "Koment i detyrueshëm në dështim",
+      "create_work_order_on_failure": "Krijo urdhër pune në dështim",
+      "mark_vehicle_unavailable_on_failure": "Shëno automjetin të padisponueshëm në dështim",
+      "generate_notification_on_failure": "Njofto për dështim",
+      "is_active": "Aktiv"
+    },
+    "categories": {
+      "Tires": "Gomat",
+      "Brakes": "Frenat",
+      "Lights": "Dritat",
+      "Fluids": "Lëngjet",
+      "Safety": "Siguria",
+      "Body": "Karroceria",
+      "Interior": "Brendësia",
+      "Documents": "Dokumentet",
+      "Electrical": "Sistemi elektrik",
+      "EV System": "Sistemi EV",
+      "Other": "Tjetër"
+    },
+    "frequencies": {
+      "Daily": "Çdo ditë",
+      "Weekly": "Çdo javë",
+      "Monthly": "Çdo muaj",
+      "Every X days": "Çdo X ditë",
+      "Before check-out": "Para marrjes",
+      "After return": "Pas kthimit",
+      "Mileage": "Sipas kilometrazhit"
+    },
+    "targets": {
+      "Vehicle": "Automjet i caktuar",
+      "BrandModel": "Marka/modeli",
+      "Category": "Kategoria e automjetit",
+      "FuelType": "Lloji i karburantit",
+      "Location": "Lokacioni",
+      "Department": "Departamenti"
+    },
+    "examplesList": {
+      "daily": "Inspektimi ditor",
+      "pre_trip": "Inspektimi para udhëtimit",
+      "post_trip": "Inspektimi pas udhëtimit",
+      "return": "Inspektimi i kthimit të automjetit",
+      "weekly": "Inspektimi javor i sigurisë",
+      "monthly": "Inspektimi mujor",
+      "winter": "Inspektimi dimëror",
+      "electric": "Inspektimi i automjetit elektrik"
     }
   }
 }

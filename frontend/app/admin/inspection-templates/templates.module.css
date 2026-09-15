@@ -1,0 +1,16 @@
+.page > :global(.detailCard) {
+  margin-bottom: 18px;
+}
+
+.page :global(.tableScroll .table) {
+  min-width: 640px;
+  table-layout: fixed;
+}
+
+.page :global(.table td) {
+  overflow-wrap: anywhere;
+}
+
+.page :global(.detailGrid) > form :global(.formRow) {
+  margin-bottom: 12px;
+}

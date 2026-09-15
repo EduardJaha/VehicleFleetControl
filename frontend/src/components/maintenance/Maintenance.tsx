@@ -21,7 +21,8 @@ export const MAINTENANCE_LINKS: Array<{ href: string; labelKey: string; permissi
   { href: "/work-orders", labelKey: "workOrders", permission: "maintenance.view" },
   { href: "/services/overview", labelKey: "serviceHistory", permission: "maintenance.view" },
   { href: "/services/reminders", labelKey: "serviceReminders", permission: "maintenance.view" },
-  { href: "/inspections", labelKey: "inspections", permission: "inspections.view" }
+  { href: "/inspections", labelKey: "inspections", permission: "inspections.view" },
+  { href: "/admin/inspection-templates", labelKey: "inspectionTemplates", permission: "inspection_templates.manage" }
 ];
 
 export function MaintenanceNavigation() {

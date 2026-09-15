@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
@@ -20,6 +20,8 @@ import {
   MaintenanceTable, Pagination
 } from "@/components/maintenance/Maintenance";
 import { translateChecklistItem, translateStatus, translateType } from "@/i18n/translate";
+
+import type { Template } from "@/lib/inspection-templates";
 
 type FormState = {
   vehicle_id: string;
@@ -85,6 +87,10 @@ function payload(form: FormState): InspectionPayload {
 export default function InspectionsPage() {
   const { formatDate } = useLanguage();
   const params = useSearchParams();
+  const router = useRouter();
+  const [resolvedTemplate, setResolvedTemplate] = useState<Template | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState(false);
   const { can } = useAuth();
   const { t } = useTranslation(["modules", "common"]);
   const canCreate = can("inspectionsCreate");
@@ -149,6 +155,17 @@ export default function InspectionsPage() {
     void loadVehicles();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    let alive = true;
+    if (editingId || !form.vehicle_id) { setResolvedTemplate(null); setResolving(false); return; }
+    setResolving(true); setResolveError(false);
+    apiGet<Template | null>(`/inspection-templates/resolve?vehicle_id=${form.vehicle_id}&inspection_type=${encodeURIComponent(form.inspection_type)}${form.driver_id ? `&driver_id=${form.driver_id}` : ""}`)
+      .then(value => { if (alive) setResolvedTemplate(value); })
+      .catch(e => { if (alive) { setError(e.message); setResolveError(true); } })
+      .finally(() => { if (alive) setResolving(false); });
+    return () => { alive = false; };
+  }, [form.vehicle_id, form.inspection_type, form.driver_id, editingId]);
+
   function updateItem(index: number, patch: Partial<InspectionItem>) {
     setForm((current) => ({
       ...current,
@@ -162,7 +179,8 @@ export default function InspectionsPage() {
     try {
       const saved = editingId
         ? await apiPut<Inspection>(`/inspections/${editingId}`, payload(form))
-        : await apiPost<Inspection>("/inspections", payload(form));
+        : await apiPost<Inspection>("/inspections", resolvedTemplate ? {...payload(form), items: [], template_id: resolvedTemplate.id} : payload(form));
+      if (saved.template_id) { router.push(`/inspections/${saved.id}`); return; }
       setMessage(t("modules:inspections.saved", {
         id: saved.id,
         action: t(`modules:inspections.${editingId ? "updated" : "created"}`)
@@ -239,7 +257,8 @@ export default function InspectionsPage() {
             <div className="formRow"><label>{t("modules:inspections.inspector")}</label><input className="input" value={form.inspector} onChange={(e) => setForm({ ...form, inspector: e.target.value })} placeholder={t("modules:inspections.defaultsCurrentUser")} /></div>
             <div className="formRow span2"><label>{t("common:labels.notes")}</label><textarea className="input textarea" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
           </div>
-          <div className="header">
+          {resolvedTemplate && <div className="card"><h2>{resolvedTemplate.name}</h2><p>{t("modules:inspectionTemplates.beginHelp")}</p><ol>{resolvedTemplate.items.map(item => <li key={item.id}>{item.name}</li>)}</ol></div>}
+          {!resolvedTemplate && <><div className="header">
             <h2>{t("modules:inspections.checklist")}</h2>
             <button className="secondaryButton smallButton" type="button" onClick={() => setForm({ ...form, items: [...form.items, { item_name: "", status: "Not Checked", comment: "" }] })}>{t("modules:inspections.addItem")}</button>
           </div>
@@ -253,13 +272,13 @@ export default function InspectionsPage() {
                 <td><button className="dangerButton smallButton" type="button" disabled={form.items.length === 1} onClick={() => setForm({ ...form, items: form.items.filter((_, itemIndex) => itemIndex !== index) })}>{t("modules:inspections.remove")}</button></td>
               </tr>
             ))}</tbody>
-          </MaintenanceTable>
+          </MaintenanceTable></>}
           <div className="actions">
             <button
               className="button"
-              disabled={!form.vehicle_id || vehiclesLoading || Boolean(vehiclesError)}
+              disabled={!form.vehicle_id || vehiclesLoading || Boolean(vehiclesError) || resolving || resolveError}
             >
-              {editingId ? t("modules:inspections.update") : t("modules:inspections.create")}
+              {editingId ? t("modules:inspections.update") : resolvedTemplate ? t("modules:inspectionTemplates.begin") : t("modules:inspections.create")}
             </button>
             {editingId && <button className="secondaryButton" type="button" onClick={() => { setEditingId(null); setForm(newForm()); }}>{t("common:actions.cancel")}</button>}
           </div>
@@ -313,7 +332,7 @@ export default function InspectionsPage() {
                   <td><div className="actions">
                     <Link className="secondaryButton smallButton" href={`/inspections/${inspection.id}`}>{t("common:actions.view")}</Link>
                     {canManage && <>
-                      <button className="secondaryButton smallButton" onClick={() => { setEditingId(inspection.id); setForm(toForm(inspection)); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{t("common:actions.edit")}</button>
+                      <button className="secondaryButton smallButton" onClick={() => { if (inspection.template_id) { router.push(`/inspections/${inspection.id}`); return; } setEditingId(inspection.id); setForm(toForm(inspection)); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{t("common:actions.edit")}</button>
                       {failedItems.length > 0 && !inspection.linked_work_order && <Link className="button smallButton" href={`/work-orders?inspection_id=${inspection.id}&license_plate=${encodeURIComponent(inspection.license_plate)}`}>{t("modules:workOrders.create")}</Link>}
                       {inspection.linked_work_order && <Link className="secondaryButton smallButton" href={`/work-orders/${inspection.linked_work_order.id}`}>{t("modules:inspections.viewExisting")}</Link>}
                       <button className="secondaryButton smallButton" onClick={() => void archive(inspection)}>{t("common:actions.archive")}</button>

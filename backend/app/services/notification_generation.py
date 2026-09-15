@@ -23,6 +23,9 @@ def generate_time_based_notifications(db: Session, now: datetime | None = None) 
     def enabled(name: str) -> bool:
         return rules.get(name, True) is not False
 
+    from app.services.inspection_templates import generate_scheduled
+    generate_scheduled(db, now)
+
     from app.services.service_programs import synchronize_all
     synchronize_all(db, today=now.date())
 

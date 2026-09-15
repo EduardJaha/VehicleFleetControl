@@ -34,7 +34,7 @@ def test_program_migration_preserves_manual_history_and_round_trips(tmp_path, mo
         command.upgrade(config, "head")
         with sqlite3.connect(path) as db:
             assert db.execute('SELECT * FROM VehicleServices').fetchall() == original
-            assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == "20260914_0018"
+            assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == "20260914_0019"
     finally:
         get_settings.cache_clear(); engine.dispose()
 

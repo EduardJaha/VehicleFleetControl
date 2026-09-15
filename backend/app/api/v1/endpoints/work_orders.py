@@ -79,7 +79,9 @@ def validate_optional_links(
         )
         if current_work_order_id is not None:
             duplicate = duplicate.filter(WorkOrder.id != current_work_order_id)
-        if duplicate.first():
+        current = db.query(WorkOrder).filter(WorkOrder.id == current_work_order_id).first() if current_work_order_id else None
+        item_order = current is not None and current.inspection_item_id is not None and current.inspection_id == inspection_id
+        if not item_order and duplicate.first():
             raise HTTPException(status_code=409, detail="An open Work Order already exists for this Inspection.")
     if reminder_service_id is not None:
         reminder = db.get(VehicleService, reminder_service_id)
@@ -207,6 +209,9 @@ def work_order_out(work_order: WorkOrder) -> WorkOrderOut:
 def apply_payload(work_order: WorkOrder, payload: WorkOrderCreate | WorkOrderUpdate, db: Session) -> None:
     prevent_generic_completion(payload.status)
     vehicle_id = resolve_vehicle_id(db, payload.vehicle_id, payload.license_plate)
+    if work_order.inspection_item_id and (vehicle_id != work_order.vehicle_id or payload.inspection_id != work_order.inspection_id or payload.source.value != "Inspection"):
+        from app.services.inspection_templates import fail
+        fail("inspection_snapshot_locked", 409)
     validate_optional_links(
         db, vehicle_id, payload.driver_id, payload.inspection_id,
         payload.reminder_service_id, payload.accident_id, work_order.id,

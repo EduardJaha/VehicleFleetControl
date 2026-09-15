@@ -30,3 +30,6 @@ api_router.include_router(maintenance_supply.router, tags=["maintenance supply"]
 
 from app.api.v1.endpoints import service_programs
 api_router.include_router(service_programs.router, prefix="/maintenance/programs", tags=["maintenance programs"])
+
+from app.api.v1.endpoints import inspection_templates
+api_router.include_router(inspection_templates.router, prefix="/inspection-templates", tags=["inspection templates"])

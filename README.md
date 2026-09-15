@@ -774,3 +774,7 @@ Apply the bilingual schema migration before running the updated application:
 cd backend
 alembic upgrade head
 ```
+
+### Configurable inspection templates
+
+Inspection templates, per-item failure rules and schedules are managed at `/admin/inspection-templates`. Apply `alembic upgrade head` and continue running the existing notification-generation job. Historical results are preserved as described in the [inspection template guide](docs/inspection-templates.md).

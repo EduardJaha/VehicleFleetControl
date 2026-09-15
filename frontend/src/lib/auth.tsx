@@ -37,7 +37,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "drivers.view", "drivers.manage", "assignments.view", "assignments.manage",
     "fuel.view", "fuel.create", "fuel.edit", "fuel.view_cost",
     "maintenance.view", "maintenance.create_work_order", "maintenance.assign_work_order", "maintenance.complete_work_order",
-    "inspections.view", "inspections.create", "inspections.manage",
+    "inspections.view", "inspections.create", "inspections.manage", "inspection_templates.manage",
     "documents.view", "documents.upload", "documents.verify",
     "reservations.view", "reservations.create", "reservations.approve",
     "reports.view", "reports.export", "accidents.view", "accidents.manage", "claims.manage",
@@ -48,7 +48,7 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "drivers.view", "drivers.manage", "assignments.view", "assignments.manage",
     "fuel.view", "fuel.create", "fuel.edit", "fuel.view_cost",
     "maintenance.view", "maintenance.create_work_order", "maintenance.assign_work_order", "maintenance.complete_work_order",
-    "inspections.view", "inspections.create", "inspections.manage",
+    "inspections.view", "inspections.create", "inspections.manage", "inspection_templates.manage",
     "documents.view", "documents.upload", "documents.verify",
     "reservations.view", "reservations.create", "reservations.approve", "reports.view", "reports.export",
     "accidents.view", "accidents.manage", "claims.manage", "imports.manage", "audit_logs.view"

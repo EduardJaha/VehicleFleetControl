@@ -1,0 +1,10 @@
+import type { InspectionType } from "./types";
+export const ITEM_FLAGS = ["required", "critical", "photo_required_on_failure", "comment_required_on_failure", "create_work_order_on_failure", "mark_vehicle_unavailable_on_failure", "generate_notification_on_failure", "is_active"] as const;
+export type TemplateItem = { id?: number; code: string; name: string; description: string | null; category: string; display_order: number } & Record<typeof ITEM_FLAGS[number], boolean>;
+export type Template = { id: number; code: string; name: string; description: string | null; inspection_type: InspectionType; is_active: boolean; archived: boolean; items: TemplateItem[] };
+export type Assignment = { id?: number; target_type: string; target_value: string; model: string | null; priority: number; is_active: boolean };
+export type Schedule = { id?: number; frequency: string; start_date: string; interval_days: number | null; interval_km: number | null; baseline_odometer_km: number | null; is_active: boolean };
+export const FREQUENCIES = ["Daily", "Weekly", "Monthly", "Every X days", "Before check-out", "After return", "Mileage"];
+export const TARGETS = ["Vehicle", "BrandModel", "Category", "FuelType", "Location", "Department"];
+export const CATEGORIES = ["Tires", "Brakes", "Lights", "Fluids", "Safety", "Body", "Interior", "Documents", "Electrical", "EV System", "Other"];
+export const emptyItem = (): TemplateItem => ({code: "", name: "", description: "", category: "Other", display_order: 0, required: true, critical: false, photo_required_on_failure: false, comment_required_on_failure: false, create_work_order_on_failure: false, mark_vehicle_unavailable_on_failure: false, generate_notification_on_failure: true, is_active: true});

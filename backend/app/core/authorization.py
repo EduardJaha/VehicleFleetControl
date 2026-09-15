@@ -40,6 +40,7 @@ PERMISSION_CATALOG: dict[str, tuple[str, str]] = {
     "maintenance.create_work_order": ("Maintenance", "Create work orders"),
     "maintenance.assign_work_order": ("Maintenance", "Assign and edit work orders"),
     "maintenance.complete_work_order": ("Maintenance", "Complete work orders"),
+    "inspection_templates.manage": ("Inspections", "Configure inspection templates, rules, and schedules"),
     "inspections.view": ("Inspections", "View inspections"),
     "inspections.create": ("Inspections", "Create inspections"),
     "inspections.manage": ("Inspections", "Edit and archive inspections"),

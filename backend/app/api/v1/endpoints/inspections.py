@@ -27,6 +27,7 @@ from app.utils.domain import find_vehicle_by_plate, normalize_plate
 from app.services.audit import record_audit, snapshot
 from app.services.notifications import notify_roles
 from app.services.vehicle_assignments import active_assignment_at
+from app.services.inspection_templates import copy_template, resolve_template, validate_results, fail, can_record_results
 
 router = APIRouter(dependencies=[Depends(require_permission("inspections.view"))])
 
@@ -53,6 +54,10 @@ def inspection_out(inspection: Inspection) -> InspectionOut:
     failed_count = sum(1 for item in inspection.items if item.status == InspectionItemStatus.fail.value)
     return InspectionOut(
         id=inspection.id,
+        created_by_user_id=inspection.created_by_user_id,
+        template_id=inspection.template_id, template_snapshot=inspection.template_snapshot,
+        schedule_id=inspection.schedule_id, odometer_km=inspection.odometer_km,
+        completed_at=inspection.completed_at.isoformat() if inspection.completed_at else None,
         vehicle_id=inspection.vehicle_id,
         license_plate=inspection.vehicle.license_plate,
         vehicle_name=f"{inspection.vehicle.brand} {inspection.vehicle.model}",
@@ -78,8 +83,11 @@ def inspection_out(inspection: Inspection) -> InspectionOut:
                 "item_name": item.item_name,
                 "status": InspectionItemStatus(item.status),
                 "comment": item.comment,
+                "template_item_id": item.template_item_id, "item_snapshot": item.item_snapshot,
+                "work_order_id": next((o.id for o in linked_orders if o.inspection_item_id == item.id), None),
+                "photo_attachment_ids": item.photo_attachment_ids or [],
             }
-            for item in inspection.items
+            for item in sorted(inspection.items, key=lambda i: ((i.item_snapshot or {}).get("display_order", 0), i.id))
         ],
         created_at=inspection.created_at.isoformat(),
         updated_at=inspection.updated_at.isoformat(),
@@ -88,7 +96,7 @@ def inspection_out(inspection: Inspection) -> InspectionOut:
 
 def resolve_vehicle_id(db: Session, vehicle_id: int | None, license_plate: str | None) -> int:
     if vehicle_id is not None:
-        vehicle = db.get(Vehicle, vehicle_id)
+        vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
         if not vehicle:
             raise HTTPException(status_code=404, detail="Vehicle not found.")
         return vehicle.id
@@ -103,7 +111,7 @@ def resolve_vehicle_id(db: Session, vehicle_id: int | None, license_plate: str |
 def validate_driver(db: Session, driver_id: int | None) -> int | None:
     if driver_id is None:
         return None
-    if not db.get(Driver, driver_id):
+    if not db.query(Driver).filter(Driver.id == driver_id).first():
         raise HTTPException(status_code=404, detail="Driver not found.")
     return driver_id
 
@@ -137,6 +145,34 @@ def replace_items(inspection: Inspection, items: list[InspectionItemCreate]) -> 
 
 
 def apply_payload(inspection: Inspection, payload: InspectionCreate | InspectionUpdate, db: Session) -> None:
+    vehicle_id = resolve_vehicle_id(db, payload.vehicle_id, payload.license_plate)
+    driver_id = validate_driver(db, payload.driver_id)
+    if inspection.template_snapshot is not None:
+        if vehicle_id != inspection.vehicle_id or payload.inspection_type.value != inspection.inspection_type or (payload.template_id and payload.template_id != inspection.template_id):
+            fail("inspection_snapshot_locked", 409)
+        validate_results(db, inspection, payload.items, completing=payload.complete)
+        inspection.notes = payload.notes
+        return
+    if inspection.id is None:
+        vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).one()
+        template = resolve_template(db, vehicle, payload.inspection_type.value, driver_id)
+        if payload.template_id and (template is None or template.id != payload.template_id):
+            fail("inspection_template_changed", 409)
+        if template:
+            if payload.items or payload.complete:
+                fail("inspection_begin_first", 409)
+            inspection.vehicle_id = vehicle_id
+            inspection.driver_id = driver_id
+            inspection.inspection_type = payload.inspection_type.value
+            inspection.inspection_date = parse_date(payload.inspection_date, "InspectionDate")
+            inspection.overall_status = "Needs Review"
+            inspection.notes = payload.notes
+            inspection.inspector = payload.inspector
+            inspection.odometer_km = vehicle.odometer_km
+            assignment = active_assignment_at(db, vehicle_id=vehicle_id, driver_id=driver_id, occurred_at=inspection.inspection_date)
+            inspection.vehicle_assignment_id = assignment.id if assignment else None
+            copy_template(inspection, template)
+            return
     items = checklist_items(payload.items)
     inspection.vehicle_id = resolve_vehicle_id(db, payload.vehicle_id, payload.license_plate)
     inspection.driver_id = validate_driver(db, payload.driver_id)
@@ -224,7 +260,7 @@ def list_inspections(
 
 @router.post("", response_model=InspectionOut, status_code=201)
 def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("inspections.create"))):
-    inspection = Inspection()
+    inspection = Inspection(created_by_user_id=current_user.id)
     apply_payload(inspection, payload, db)
     inspection.inspector = inspection.inspector or current_user.full_name
     db.add(inspection)
@@ -270,10 +306,15 @@ def get_inspection(inspection_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{inspection_id}", response_model=InspectionOut)
-def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("inspections.manage"))):
-    inspection = inspection_query(db).filter(Inspection.id == inspection_id).first()
+def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    inspection = db.query(Inspection).filter(Inspection.id == inspection_id).with_for_update().populate_existing().first()
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found.")
+    if not can_record_results(db, current_user, inspection):
+        fail("insufficient_permissions", 403)
+    if inspection.template_snapshot and inspection.archived:
+        fail("record_archived", 409)
+    db.expire(inspection, ["items"])
     old_values = snapshot(inspection)
     apply_payload(inspection, payload, db)
     record_audit(

@@ -350,6 +350,10 @@ export type InspectionItemStatus = "Pass" | "Fail" | "Not Checked";
 export type InspectionOverallStatus = "Passed" | "Failed" | "Needs Review";
 
 export type InspectionItem = {
+  work_order_id?: number | null;
+  template_item_id?: number | null;
+  item_snapshot?: import("./inspection-templates").TemplateItem | null;
+  photo_attachment_ids?: number[];
   id?: number;
   item_name: string;
   status: InspectionItemStatus;
@@ -357,6 +361,11 @@ export type InspectionItem = {
 };
 
 export type Inspection = {
+  created_by_user_id?: number | null;
+  template_id?: number | null;
+  template_snapshot?: {code: string; name: string; description: string | null} | null;
+  schedule_id?: number | null;
+  completed_at?: string | null;
   id: number;
   vehicle_id: number;
   vehicle_assignment_id?: number | null;
@@ -378,6 +387,8 @@ export type Inspection = {
 };
 
 export type InspectionPayload = {
+  template_id?: number | null;
+  complete?: boolean;
   vehicle_id?: number | null;
   license_plate?: string | null;
   driver_id?: number | null;

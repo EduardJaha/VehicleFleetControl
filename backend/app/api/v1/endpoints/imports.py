@@ -2,7 +2,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.authorization import has_permission, require_permission
@@ -24,8 +24,9 @@ from app.schemas import (
 )
 from app.services.audit import record_audit
 from app.services.imports import (
+    authorize_import,
     confirm_job,
-    error_report,
+    iter_error_report,
     fields_for,
     store_import,
     suggested_mapping,
@@ -33,15 +34,19 @@ from app.services.imports import (
     validate_job,
 )
 
+from app.services.import_progress import read_progress
+
 router = APIRouter(dependencies=[Depends(require_permission("imports.manage"))])
 IMPORT_ROLES = (UserRole.admin, UserRole.fleet_manager)
 
 
 def authorize_job(job: ImportJob | None, current_user: User, db: Session | None = None) -> ImportJob:
-    if not job:
+    if not job or (db is not None and db.info.get("company_id") is not None and job.company_id != db.info["company_id"]):
         raise HTTPException(status_code=404, detail="Import job not found.")
     if not has_permission(db, current_user, "users.manage") and job.uploaded_by != current_user.id:
         raise HTTPException(status_code=403, detail="You can only access your own import jobs.")
+    if db is not None:
+        authorize_import(db, current_user, job.entity_type, ImportUpdateMode(job.update_mode or "create_only"))
     return job
 
 
@@ -52,8 +57,9 @@ def row_out(row: ImportRowResult) -> ImportRowResultOut:
         status=row.status,
         action=row.action,
         raw_data=row.raw_data or {},
-        mapped_data=row.mapped_data,
+        mapped_data={key: value for key, value in (row.mapped_data or {}).items() if not key.startswith("_")},
         errors=row.errors or [],
+        warnings=(row.mapped_data or {}).get("_warnings", []),
         duplicate_fields=row.duplicate_fields or [],
         target_id=row.target_id,
     )
@@ -62,6 +68,8 @@ def row_out(row: ImportRowResult) -> ImportRowResultOut:
 def job_out(job: ImportJob, rows: list[ImportRowResult] | None = None) -> ImportJobOut:
     return ImportJobOut(
         id=job.id,
+        fields=[ImportFieldDefinition(**field) for field in fields_for(job.entity_type)],
+        **read_progress(job),
         entity_type=job.entity_type,
         filename=job.filename,
         uploaded_by=job.uploaded_by,
@@ -110,6 +118,7 @@ async def upload_import(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("imports.manage")),
 ):
+    authorize_import(db, current_user, entity_type.value)
     job = await store_import(file, entity_type.value, current_user, db)
     mapping = suggested_mapping(job.entity_type, job.source_headers or [])
     return ImportUploadOut(
@@ -155,7 +164,7 @@ def get_import(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("imports.manage")),
 ):
-    job = authorize_job(db.get(ImportJob, job_id), current_user)
+    job = authorize_job(db.get(ImportJob, job_id), current_user, db)
     query = db.query(ImportRowResult).filter(ImportRowResult.import_job_id == job.id)
     if row_status:
         query = query.filter(ImportRowResult.status == row_status)
@@ -170,8 +179,8 @@ def dry_run_import(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("imports.manage")),
 ):
-    job = authorize_job(db.get(ImportJob, job_id), current_user)
-    validated = validate_job(db, job, payload.column_mapping, payload.update_mode)
+    job = authorize_job(db.get(ImportJob, job_id), current_user, db)
+    validated = validate_job(db, job, payload.column_mapping, payload.update_mode, current_user)
     rows = db.query(ImportRowResult).filter(ImportRowResult.import_job_id == job.id).order_by(ImportRowResult.row_number).limit(200).all()
     return job_out(validated, rows)
 
@@ -183,7 +192,7 @@ def confirm_import(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("imports.manage")),
 ):
-    job = authorize_job(db.get(ImportJob, job_id), current_user)
+    job = authorize_job(db.get(ImportJob, job_id), current_user, db)
     result = confirm_job(db, job, current_user, payload.update_mode, payload.transaction_mode)
     rows = db.query(ImportRowResult).filter(ImportRowResult.import_job_id == job_id).order_by(ImportRowResult.row_number).limit(200).all()
     return job_out(result, rows)
@@ -195,7 +204,7 @@ def cancel_import(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("imports.manage")),
 ):
-    job = authorize_job(db.get(ImportJob, job_id), current_user)
+    job = authorize_job(db.get(ImportJob, job_id), current_user, db)
     if job.status not in {"Uploaded", "Ready"}:
         raise HTTPException(status_code=409, detail="Only Uploaded or Ready imports can be cancelled.")
     job.status = "Cancelled"
@@ -216,11 +225,11 @@ def download_errors(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("imports.manage")),
 ):
-    job = authorize_job(db.get(ImportJob, job_id), current_user)
-    rows = db.query(ImportRowResult).filter(ImportRowResult.import_job_id == job.id).order_by(ImportRowResult.row_number).all()
-    content = error_report(job, rows, language.value)
+    job = authorize_job(db.get(ImportJob, job_id), current_user, db)
+    rows = db.query(ImportRowResult).filter(ImportRowResult.import_job_id == job.id).order_by(ImportRowResult.row_number).yield_per(250)
+    content = iter_error_report(job, rows, language.value)
     filename = f"import-{job.id}-errors.csv"
-    return Response(
+    return StreamingResponse(
         content=content,
         media_type="text/csv; charset=utf-8",
         headers={

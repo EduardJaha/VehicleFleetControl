@@ -64,6 +64,7 @@ class ImportJobStatus(str, Enum):
 
 class ImportUpdateMode(str, Enum):
     create_only = "create_only"
+    create_or_skip = "create_or_skip"
     update_existing = "update_existing"
 
 
@@ -1689,6 +1690,7 @@ class ImportConfirmRequest(BaseModel):
 
 
 class ImportRowResultOut(BaseModel):
+    warnings: list[dict[str, str]] = []
     id: int
     row_number: int
     status: str
@@ -1701,6 +1703,10 @@ class ImportRowResultOut(BaseModel):
 
 
 class ImportJobOut(BaseModel):
+    fields: list[ImportFieldDefinition] = []
+    phase: str | None = None
+    processed_rows: int = 0
+    progress_percent: int = 0
     id: int
     entity_type: ImportEntityType
     filename: str

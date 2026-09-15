@@ -95,5 +95,18 @@
   "inspection_checkout_required": "Complete and pass required inspections before check-out: {{ids}}.",
   "inspection_reorder_invalid": "Include every template item ID exactly once when reordering.",
   "inspection_schedule_interval": "Provide the interval required for this frequency. Mileage also needs a baseline.",
-  "inspection_evidence_locked": "This photo is used by an inspection result and cannot be removed."
+  "inspection_evidence_locked": "This photo is used by an inspection result and cannot be removed.",
+  "import_unknown_reference": "Referenced record was not found or is unavailable in this company.",
+  "import_energy_unit": "Use L or KWH matching the historical fuel type and a positive quantity.",
+  "import_cost_mismatch": "Total cost must equal quantity multiplied by unit cost, rounded to two decimals.",
+  "import_assignment_status": "Import Completed, Cancelled or Scheduled assignments. Use handover to start live assignments.",
+  "import_assignment_overlap": "This assignment overlaps another vehicle or driver assignment. Historical dates are preserved.",
+  "import_mileage_conflict": "Mileage conflicts with another reading. Review the source; current vehicle mileage is preserved.",
+  "import_document_owner": "Provide exactly one vehicle plate/country or driver employee number.",
+  "import_document_status": "Status must agree with expiry, or be Renewal In Progress or Rejected.",
+  "import_unsafe_attachment": "Use an existing secure PDF attachment for the same owner and company.",
+  "import_archived": "Archived records cannot be updated by import.",
+  "import_linked_record": "Live or linked records must be edited through their normal workflow.",
+  "import_rolled_back": "No rows were saved because the file transaction failed.",
+  "import_permission_required": "Bulk imports require unrestricted company permission for this entity."
 }

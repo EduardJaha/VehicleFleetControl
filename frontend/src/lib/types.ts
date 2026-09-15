@@ -161,7 +161,7 @@ export type DriverPayload = Omit<Driver, "id" | "assigned_vehicle_id" | "created
 export type ImportEntityType =
   | "Vehicles" | "Drivers" | "Historical Services" | "Fuel and Charging Records"
   | "Documents Metadata" | "Vehicle Assignments" | "Vendors" | "Parts";
-export type ImportUpdateMode = "create_only" | "update_existing";
+export type ImportUpdateMode = "create_only" | "create_or_skip" | "update_existing";
 export type ImportTransactionMode = "row" | "file";
 export type ImportJobStatus = "Uploaded" | "Validating" | "Ready" | "Importing" | "Completed" | "Completed With Errors" | "Failed" | "Cancelled";
 
@@ -173,6 +173,7 @@ export type ImportFieldDefinition = {
 };
 
 export type ImportRowResult = {
+  warnings?: Array<{ field?: string; code?: string; message?: string }>;
   id: number;
   row_number: number;
   status: string;
@@ -185,6 +186,10 @@ export type ImportRowResult = {
 };
 
 export type ImportJob = {
+  fields?: ImportFieldDefinition[];
+  phase?: string;
+  progress_percent?: number;
+  processed_rows?: number;
   id: number;
   entity_type: ImportEntityType;
   filename: string;

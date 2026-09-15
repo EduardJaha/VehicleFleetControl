@@ -398,13 +398,18 @@ Uploads are not mounted as public static files. New files use UUID storage
 names, streamed size/type/content validation, metadata records, and
 authenticated download endpoints.
 
-Generate deduplicated time-based in-app notifications from `backend`:
+Time-based notifications and retryable email delivery run automatically in a
+dedicated scheduler process. Compose starts exactly one scheduler service; API
+workers do not start their own schedulers. Configuration and production
+architecture are documented in `docs/scheduled-notifications.md`.
+
+The one-shot maintenance command is still available from `backend`:
 
 ```bash
 python -m app.scripts.generate_notifications
 ```
 
-Run it periodically with cron, Task Scheduler, or the production scheduler.
+Do not schedule that command when the dedicated scheduler process is running.
 
 ### Verification
 

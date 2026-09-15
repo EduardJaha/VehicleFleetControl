@@ -1804,6 +1804,20 @@ class NotificationUnreadCount(BaseModel):
     unread_count: int
 
 
+class NotificationPreferenceItem(BaseModel):
+    notification_type: str
+    in_app_enabled: bool = True
+    email_enabled: bool = False
+
+
+class NotificationPreferencesOut(BaseModel):
+    items: list[NotificationPreferenceItem]
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    items: list[NotificationPreferenceItem]
+
+
 class AttachmentOut(BaseModel):
     id: int
     original_filename: str

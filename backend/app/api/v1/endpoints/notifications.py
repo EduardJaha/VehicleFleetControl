@@ -1,22 +1,37 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
 from app.db.session import get_db
-from app.models import Notification, User
+from app.models import Notification, NotificationPreference, User
 from app.schemas import (
     NotificationOut,
     NotificationPage,
     NotificationPriority,
     NotificationStatus,
     NotificationUnreadCount,
+    NotificationPreferenceItem,
+    NotificationPreferencesOut,
+    NotificationPreferencesUpdate,
 )
-from app.services.notifications import transition
+from app.services.audit import record_audit
+from app.services.notifications import SUPPORTED_NOTIFICATION_TYPES, transition
 from app.utils.dates import parse_date
 
 router = APIRouter()
+
+
+def visible_notifications(db: Session, user: User):
+    disabled = exists().where(
+        NotificationPreference.company_id == Notification.company_id,
+        NotificationPreference.user_id == user.id,
+        NotificationPreference.notification_type == Notification.notification_type,
+        NotificationPreference.in_app_enabled.is_(False),
+    )
+    return db.query(Notification).filter(Notification.user_id == user.id, ~disabled)
 
 
 def notification_out(row: Notification) -> NotificationOut:
@@ -40,9 +55,8 @@ def notification_out(row: Notification) -> NotificationOut:
 
 
 def owned_notification(db: Session, notification_id: int, user: User) -> Notification:
-    row = db.query(Notification).filter(
+    row = visible_notifications(db, user).filter(
         Notification.id == notification_id,
-        Notification.user_id == user.id,
     ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Notification not found.")
@@ -63,7 +77,7 @@ def list_notifications(
 ):
     if page < 1 or page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="page must be at least 1 and page_size must be between 1 and 100.")
-    query = db.query(Notification).filter(Notification.user_id == current_user.id)
+    query = visible_notifications(db, current_user)
     if status:
         query = query.filter(Notification.status == status.value)
     if priority:
@@ -90,11 +104,70 @@ def unread_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    count = db.query(Notification).filter(
-        Notification.user_id == current_user.id,
+    count = visible_notifications(db, current_user).filter(
         Notification.status == NotificationStatus.unread.value,
     ).count()
     return NotificationUnreadCount(unread_count=count)
+
+
+@router.get("/preferences", response_model=NotificationPreferencesOut)
+def get_preferences(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    configured = {
+        row.notification_type: row
+        for row in db.query(NotificationPreference).filter(NotificationPreference.user_id == current_user.id).all()
+    }
+    types = list(SUPPORTED_NOTIFICATION_TYPES)
+    for notification_type in configured:
+        if notification_type not in types:
+            types.append(notification_type)
+    return NotificationPreferencesOut(items=[
+        NotificationPreferenceItem(
+            notification_type=notification_type,
+            in_app_enabled=configured[notification_type].in_app_enabled if notification_type in configured else True,
+            email_enabled=configured[notification_type].email_enabled if notification_type in configured else False,
+        )
+        for notification_type in types
+    ])
+
+
+@router.put("/preferences", response_model=NotificationPreferencesOut)
+def update_preferences(
+    payload: NotificationPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if len(payload.items) != len({item.notification_type for item in payload.items}):
+        raise HTTPException(status_code=422, detail="Notification types must be unique.")
+    existing = {
+        row.notification_type: row
+        for row in db.query(NotificationPreference).filter(NotificationPreference.user_id == current_user.id).all()
+    }
+    changed = []
+    for item in payload.items:
+        notification_type = item.notification_type.strip()
+        if not notification_type or len(notification_type) > 100:
+            raise HTTPException(status_code=422, detail="Notification type is invalid.")
+        row = existing.get(notification_type)
+        if row is None:
+            row = NotificationPreference(user_id=current_user.id, notification_type=notification_type)
+            db.add(row)
+        row.in_app_enabled = item.in_app_enabled
+        row.email_enabled = item.email_enabled
+        changed.append(notification_type)
+    record_audit(
+        db,
+        action="Notification preferences changed",
+        entity_type="User",
+        entity_id=current_user.id,
+        user=current_user,
+        new_values={"notification_types": changed},
+        description="Notification channel preferences changed.",
+    )
+    db.commit()
+    return get_preferences(db, current_user)
 
 
 @router.put("/read-all")
@@ -102,8 +175,7 @@ def read_all(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = db.query(Notification).filter(
-        Notification.user_id == current_user.id,
+    rows = visible_notifications(db, current_user).filter(
         Notification.status == NotificationStatus.unread.value,
     ).all()
     now = datetime.utcnow()

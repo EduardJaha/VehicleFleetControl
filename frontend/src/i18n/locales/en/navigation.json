@@ -33,5 +33,6 @@
   "technicians": "Technicians",
   "supplyReports": "Maintenance Supply Reports",
   "maintenancePrograms": "Maintenance Programs",
-  "inspectionTemplates": "Inspection Templates"
+  "inspectionTemplates": "Inspection Templates",
+  "notificationPreferences": "Notification Preferences"
 }

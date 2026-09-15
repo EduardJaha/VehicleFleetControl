@@ -133,6 +133,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
           </label>}
           <div className="userName">{user.full_name}</div>
           <div className="userRole">{t(`common:roles.${user.role}`, { defaultValue: user.role.replaceAll("_", " ") })}</div>
+          <Link href="/account/notifications" className={pathname === "/account/notifications" ? "navLink active" : "navLink"}>{t("navigation:notificationPreferences")}</Link>
           <button className="logoutButton" type="button" onClick={logout}>{t("common:actions.logout")}</button>
         </div>
       </aside>

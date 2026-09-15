@@ -13,6 +13,45 @@ services:
     ports:
       - "8000:8000"
     command: sh -c "pip install -r requirements.txt && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  scheduler:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: sqlite:///./data/vehiclemanagement.db
+      ENVIRONMENT: development
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-local-development-secret}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-console}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-notifications@vehiclefleetcontrol.local}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-VehicleFleetControl}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      EMAIL_MAX_ATTEMPTS: ${EMAIL_MAX_ATTEMPTS:-4}
+      EMAIL_RETRY_BASE_MINUTES: ${EMAIL_RETRY_BASE_MINUTES:-5}
+      EMAIL_DELIVERY_INTERVAL_MINUTES: ${EMAIL_DELIVERY_INTERVAL_MINUTES:-1}
+      NOTIFICATION_SCAN_INTERVAL_MINUTES: ${NOTIFICATION_SCAN_INTERVAL_MINUTES:-15}
+      DOCUMENT_SCAN_INTERVAL_HOURS: ${DOCUMENT_SCAN_INTERVAL_HOURS:-24}
+      MAINTENANCE_SCAN_INTERVAL_MINUTES: ${MAINTENANCE_SCAN_INTERVAL_MINUTES:-60}
+      OVERDUE_RETURN_SCAN_INTERVAL_MINUTES: ${OVERDUE_RETURN_SCAN_INTERVAL_MINUTES:-15}
+      LOW_STOCK_SCAN_INTERVAL_MINUTES: ${LOW_STOCK_SCAN_INTERVAL_MINUTES:-60}
+      CLAIM_SCAN_INTERVAL_MINUTES: ${CLAIM_SCAN_INTERVAL_MINUTES:-1440}
+      CLAIM_REMINDER_AFTER_DAYS: ${CLAIM_REMINDER_AFTER_DAYS:-7}
+    command: sh -c "pip install -r requirements.txt && python -m app.scripts.scheduler"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
 
   frontend:
     image: node:20-alpine

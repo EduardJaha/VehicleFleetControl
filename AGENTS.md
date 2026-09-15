@@ -242,7 +242,7 @@ Frontend uses `apiPostForm` with browser-generated multipart boundaries and auth
 
 `DATABASE_URL` configures SQLAlchemy; the default resolves from backend working directory to `backend/data/vehiclemanagement.db`. Request mutations explicitly commit/rollback. Tenant isolation is application-level.
 
-Alembic uses `Base.metadata`, `compare_type=True`, SQLite batch operations, and settings-based URL in `backend/alembic/env.py`. Current source head: **`20260914_0019`**. Migration history includes the intentional no-op `20260810_0015` legacy bridge before lifecycle revision `20260812_0015`; do not delete/reorder it. Early migrations bootstrap empty DBs from current metadata, while later migrations freeze definitions/check existing schemas. Test both fresh and populated upgrade paths.
+Alembic uses `Base.metadata`, `compare_type=True`, SQLite batch operations, and settings-based URL in `backend/alembic/env.py`. Current source head: **`20260915_0020`**. Migration history includes the intentional no-op `20260810_0015` legacy bridge before lifecycle revision `20260812_0015`; do not delete/reorder it. Early migrations bootstrap empty DBs from current metadata, while later migrations freeze definitions/check existing schemas. Test both fresh and populated upgrade paths.
 
 From `backend/`, with dependencies/environment ready:
 

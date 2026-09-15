@@ -280,6 +280,39 @@
     "loadError": "Njoftimet nuk mund të ngarkoheshin.",
     "updateError": "Njoftimi nuk mund të përditësohej."
   },
+  "notificationPreferences": {
+    "title": "Preferencat e njoftimeve",
+    "description": "Zgjidhni si të merrni secilin lloj alarmi të flotës. Email-i aktivizohet me zgjedhje.",
+    "type": "Lloji i njoftimit",
+    "inApp": "Në aplikacion",
+    "email": "Email",
+    "saved": "Preferencat e njoftimeve u ruajtën.",
+    "loadError": "Preferencat e njoftimeve nuk mund të ngarkoheshin.",
+    "saveError": "Preferencat e njoftimeve nuk mund të ruheshin.",
+    "types": {
+      "Service due soon": "Servisi po afron",
+      "Service overdue": "Servisit i ka kaluar afati",
+      "Document compliance missing": "Dokumenti mungon",
+      "Document compliance expired": "Dokumenti ka skaduar",
+      "Document compliance expiring soon": "Dokumenti po skadon",
+      "Document compliance renewal in progress": "Rinovimi i dokumentit është në proces",
+      "Document compliance rejected": "Dokumenti u refuzua",
+      "Driver licence expiring": "Patenta po skadon",
+      "Driver licence expired": "Patenta ka skaduar",
+      "Inspection failed": "Inspektim i dështuar",
+      "Inspection item failed": "Pikë inspektimi e dështuar",
+      "Inspection required": "Kërkohet inspektim",
+      "Critical Work Order created": "Urdhër Pune kritik",
+      "Work Order overdue": "Urdhër Pune me afat të kaluar",
+      "Reservation pending approval": "Rezervimi pret miratim",
+      "Reservation starting soon": "Rezervimi fillon së shpejti",
+      "Reservation overdue for return": "Kthimit të rezervimit i ka kaluar afati",
+      "Vehicle return overdue": "Kthimit të automjetit i ka kaluar afati",
+      "Program task due": "Përkujtues i programit të mirëmbajtjes",
+      "Part low stock": "Inventar i ulët",
+      "Insurance claim reminder": "Përkujtues sigurimi / kërkese"
+    }
+  },
   "notificationContent": {
     "inspection_required": {
       "title": "Kërkohet inspektimi #{{id}}",

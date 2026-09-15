@@ -280,6 +280,39 @@
     "loadError": "Could not load notifications.",
     "updateError": "Could not update notification."
   },
+  "notificationPreferences": {
+    "title": "Notification Preferences",
+    "description": "Choose how you receive each kind of fleet alert. Email is opt-in.",
+    "type": "Notification type",
+    "inApp": "In-App",
+    "email": "Email",
+    "saved": "Notification preferences saved.",
+    "loadError": "Could not load notification preferences.",
+    "saveError": "Could not save notification preferences.",
+    "types": {
+      "Service due soon": "Service due soon",
+      "Service overdue": "Service overdue",
+      "Document compliance missing": "Document missing",
+      "Document compliance expired": "Document expired",
+      "Document compliance expiring soon": "Document expiring soon",
+      "Document compliance renewal in progress": "Document renewal in progress",
+      "Document compliance rejected": "Document rejected",
+      "Driver licence expiring": "Driver licence expiring",
+      "Driver licence expired": "Driver licence expired",
+      "Inspection failed": "Failed inspection",
+      "Inspection item failed": "Failed inspection item",
+      "Inspection required": "Inspection required",
+      "Critical Work Order created": "Critical work order",
+      "Work Order overdue": "Overdue work order",
+      "Reservation pending approval": "Reservation pending approval",
+      "Reservation starting soon": "Reservation starting soon",
+      "Reservation overdue for return": "Reservation overdue for return",
+      "Vehicle return overdue": "Vehicle return overdue",
+      "Program task due": "Maintenance program reminder",
+      "Part low stock": "Low inventory",
+      "Insurance claim reminder": "Insurance / claim reminder"
+    }
+  },
   "notificationContent": {
     "inspection_required": {
       "title": "Inspection #{{id}} required",

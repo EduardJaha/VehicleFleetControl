@@ -26,6 +26,25 @@ class Settings(BaseSettings):
     allowed_document_types: str = "application/pdf"
     allowed_image_types: str = "image/jpeg,image/png,image/webp"
     antivirus_provider: str = "none"
+    email_backend: str = "console"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str = "notifications@vehiclefleetcontrol.local"
+    smtp_from_name: str = "VehicleFleetControl"
+    smtp_use_tls: bool = True
+    frontend_url: str = "http://localhost:3000"
+    email_max_attempts: int = 4
+    email_retry_base_minutes: int = 5
+    email_delivery_interval_minutes: int = 1
+    notification_scan_interval_minutes: int = 15
+    document_scan_interval_hours: int = 24
+    maintenance_scan_interval_minutes: int = 60
+    overdue_return_scan_interval_minutes: int = 15
+    low_stock_scan_interval_minutes: int = 60
+    claim_scan_interval_minutes: int = 1440
+    claim_reminder_after_days: int = 7
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -38,6 +57,23 @@ class Settings(BaseSettings):
                 raise ValueError("DEBUG must be false in production.")
             if "*" in self.cors_origins:
                 raise ValueError("CORS_ORIGINS cannot contain '*' in production.")
+        if self.email_backend not in {"console", "smtp", "mock"}:
+            raise ValueError("EMAIL_BACKEND must be console, mock, or smtp.")
+        if self.email_backend == "smtp" and (not self.smtp_host or not self.smtp_from_email):
+            raise ValueError("SMTP_HOST and SMTP_FROM_EMAIL are required for the SMTP email backend.")
+        intervals = (
+            self.email_delivery_interval_minutes,
+            self.notification_scan_interval_minutes,
+            self.document_scan_interval_hours,
+            self.maintenance_scan_interval_minutes,
+            self.overdue_return_scan_interval_minutes,
+            self.low_stock_scan_interval_minutes,
+            self.claim_scan_interval_minutes,
+            self.email_max_attempts,
+            self.email_retry_base_minutes,
+        )
+        if any(value <= 0 for value in intervals):
+            raise ValueError("Scheduler intervals and email retry settings must be positive.")
         return self
 
     @property

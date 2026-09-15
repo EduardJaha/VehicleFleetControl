@@ -1499,6 +1499,48 @@ class Notification(TenantMixin, Base):
     dismissed_at = Column("DismissedAt", DateTime, nullable=True)
 
     user = relationship("User")
+    deliveries = relationship("NotificationDelivery", back_populates="notification", cascade="all, delete-orphan")
+
+
+class NotificationPreference(TenantMixin, Base):
+    __tablename__ = "NotificationPreferences"
+    __table_args__ = (
+        UniqueConstraint("CompanyId", "UserId", "NotificationType", name="uq_notification_preferences_user_type"),
+        Index("ix_notification_preferences_user", "UserId"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    user_id = Column("UserId", Integer, ForeignKey("Users.Id", ondelete="CASCADE"), nullable=False)
+    notification_type = Column("NotificationType", String(100), nullable=False)
+    in_app_enabled = Column("InAppEnabled", Boolean, nullable=False, default=True)
+    email_enabled = Column("EmailEnabled", Boolean, nullable=False, default=False)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
+
+
+class NotificationDelivery(TenantMixin, Base):
+    __tablename__ = "NotificationDeliveries"
+    __table_args__ = (
+        UniqueConstraint("CompanyId", "NotificationId", "Channel", name="uq_notification_deliveries_notification_channel"),
+        Index("ix_notification_deliveries_status_attempt", "Status", "NextAttemptAt"),
+    )
+
+    id = Column("Id", Integer, primary_key=True)
+    notification_id = Column("NotificationId", Integer, ForeignKey("Notifications.Id", ondelete="CASCADE"), nullable=False)
+    channel = Column("Channel", String(20), nullable=False)
+    recipient = Column("Recipient", String(255), nullable=False)
+    status = Column("Status", String(20), nullable=False, default="Pending")
+    attempt_count = Column("AttemptCount", Integer, nullable=False, default=0)
+    last_attempt = Column("LastAttempt", DateTime, nullable=True)
+    next_attempt_at = Column("NextAttemptAt", DateTime, nullable=True)
+    sent_at = Column("SentAt", DateTime, nullable=True)
+    failure_reason = Column("FailureReason", Text, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    notification = relationship("Notification", back_populates="deliveries")
 
 
 class Attachment(TenantMixin, Base):

@@ -1,12 +1,65 @@
 from datetime import datetime
 import re
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import CompanyUser, Notification, User
+from app.models import CompanyUser, Notification, NotificationDelivery, NotificationPreference, User
 
 ACTIVE_STATUSES = {"Unread", "Read"}
+SUPPORTED_CHANNELS = ("In-App", "Email")
+FUTURE_CHANNELS = ("Push", "SMS")
+
+SUPPORTED_NOTIFICATION_TYPES = (
+    "Service due soon",
+    "Service overdue",
+    "Document compliance missing",
+    "Document compliance expired",
+    "Document compliance expiring soon",
+    "Document compliance renewal in progress",
+    "Document compliance rejected",
+    "Driver licence expiring",
+    "Driver licence expired",
+    "Inspection failed",
+    "Inspection item failed",
+    "Inspection required",
+    "Critical Work Order created",
+    "Work Order overdue",
+    "Reservation pending approval",
+    "Reservation starting soon",
+    "Reservation overdue for return",
+    "Vehicle return overdue",
+    "Program task due",
+    "Part low stock",
+    "Insurance claim reminder",
+)
+
+
+def preference_for(db: Session, user_id: int, notification_type: str) -> NotificationPreference | None:
+    return db.query(NotificationPreference).filter(
+        NotificationPreference.user_id == user_id,
+        NotificationPreference.notification_type == notification_type,
+    ).first()
+
+
+def _create_deliveries(db: Session, notification: Notification, user: User) -> None:
+    preference = preference_for(db, user.id, notification.notification_type)
+    in_app_enabled = preference.in_app_enabled if preference else True
+    email_enabled = preference.email_enabled if preference else False
+    if in_app_enabled:
+        db.add(NotificationDelivery(
+            notification=notification,
+            channel="In-App",
+            recipient=str(user.id),
+            status="Sent",
+            sent_at=datetime.utcnow(),
+        ))
+    if email_enabled:
+        db.add(NotificationDelivery(
+            notification=notification,
+            channel="Email",
+            recipient=user.email,
+            status="Pending",
+        ))
 
 
 def notification_key(notification_type: str, part: str) -> str:
@@ -29,6 +82,15 @@ def notify_user(
     message_key: str | None = None,
     message_params: dict | None = None,
 ) -> Notification:
+    company_id = db.info.get("company_id")
+    if company_id is not None:
+        membership = db.query(CompanyUser).filter(
+            CompanyUser.company_id == company_id,
+            CompanyUser.user_id == user_id,
+            CompanyUser.is_active.is_(True),
+        ).first()
+        if membership is None:
+            raise ValueError("Notification recipient is not an active member of this company.")
     existing = db.query(Notification).filter(
         Notification.deduplication_key == deduplication_key,
     ).first()
@@ -49,6 +111,12 @@ def notify_user(
             existing.dismissed_at = None
         return existing
 
+    user = db.query(User).execution_options(skip_tenant_scope=True).filter(
+        User.id == user_id,
+        User.is_active.is_(True),
+    ).first()
+    if user is None:
+        raise ValueError("Notification recipient is not an active user.")
     notification = Notification(
         user_id=user_id,
         notification_type=notification_type,
@@ -63,6 +131,8 @@ def notify_user(
         deduplication_key=deduplication_key,
     )
     db.add(notification)
+    db.flush()
+    _create_deliveries(db, notification, user)
     return notification
 
 

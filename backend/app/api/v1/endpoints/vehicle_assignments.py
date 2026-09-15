@@ -38,6 +38,7 @@ from app.schemas import (
     VehicleReturnResult,
 )
 from app.services.audit import record_audit, snapshot
+from app.services.inspection_templates import copy_template, resolve_template, generate_scheduled, require_checkout_inspections, required_notification
 from app.services.notifications import notify_roles, resolve_by_prefix
 from app.services.vehicle_assignments import (
     ACTIVE_ASSIGNMENT_STATUSES,
@@ -190,16 +191,23 @@ def create_return_inspection(
         notes=payload.new_damage or payload.driver_comments,
         inspector=current_user.full_name,
     )
-    inspection.items = [
-        InspectionItem(
-            item_name=name,
-            status="Fail" if name == "Body damage" and payload.new_damage else "Not Checked",
-            comment=payload.new_damage if name == "Body damage" and payload.new_damage else None,
-        )
-        for name in RETURN_INSPECTION_ITEMS
-    ]
+    template = resolve_template(db, assignment.vehicle, "Return Inspection", assignment.driver_id)
+    if template:
+        copy_template(inspection, template)
+        inspection.odometer_km = assignment.vehicle.odometer_km
+    else:
+        inspection.items = [
+            InspectionItem(
+                item_name=name,
+                status="Fail" if name == "Body damage" and payload.new_damage else "Not Checked",
+                comment=payload.new_damage if name == "Body damage" and payload.new_damage else None,
+            )
+            for name in RETURN_INSPECTION_ITEMS
+        ]
     db.add(inspection)
     db.flush()
+    if template:
+        required_notification(db, inspection)
     record_audit(
         db,
         action="Return Inspection created",
@@ -341,6 +349,8 @@ def checkout_vehicle(
                 status_code=400,
                 detail=f"Start odometer cannot be lower than the Vehicle odometer of {vehicle.odometer_km:,} km.",
             )
+
+        require_checkout_inspections(db, vehicle, driver.id, checkout_at)
 
         assignment = selected_assignment or reservation_assignment or VehicleAssignment(
             vehicle_id=vehicle.id,
@@ -554,6 +564,7 @@ def start_vehicle_assignment(
             status_code=400,
             detail=f"Start odometer cannot be lower than the Vehicle odometer of {vehicle.odometer_km:,} km.",
         )
+    require_checkout_inspections(db, vehicle, driver.id, started_at)
     old_values = snapshot(assignment)
     assignment.start_datetime = started_at
     assignment.start_odometer_km = odometer
@@ -615,7 +626,7 @@ def complete_vehicle_assignment(
     assignment.status = VehicleAssignmentStatus.completed.value
     assignment.updated_at = datetime.utcnow()
     vehicle.odometer_km = payload.end_odometer_km
-    vehicle.status = (
+    vehicle.status = vehicle.status if vehicle.status == 3 else (
         assignment.vehicle_status_before_checkout
         if assignment.vehicle_status_before_checkout is not None
         else AVAILABLE_VEHICLE_STATUS
@@ -634,6 +645,7 @@ def complete_vehicle_assignment(
         new_values=snapshot(assignment),
         description=f"Assignment #{assignment.id} completed.",
     )
+    generate_scheduled(db, ended_at, vehicle=vehicle, event="After return", assignment=assignment)
     notify_assignment(db, assignment, "completed")
     resolve_by_prefix(db, f"vehicle-assignment:{assignment.id}:started")
     commit_or_conflict(db)
@@ -682,7 +694,7 @@ def return_vehicle(
         assignment.status = VehicleAssignmentStatus.completed.value
         assignment.updated_at = datetime.utcnow()
         vehicle.odometer_km = payload.ending_odometer_km
-        vehicle.status = (
+        vehicle.status = vehicle.status if vehicle.status == 3 else (
             assignment.vehicle_status_before_checkout
             if assignment.vehicle_status_before_checkout is not None
             else AVAILABLE_VEHICLE_STATUS
@@ -709,7 +721,9 @@ def return_vehicle(
         db.add(condition)
         db.flush()
 
-        inspection = (
+        scheduled_inspections = generate_scheduled(db, ended_at, vehicle=vehicle, event="After return", assignment=assignment)
+        condition.return_inspection_required = bool(scheduled_inspections) or payload.return_inspection_required
+        inspection = scheduled_inspections[0] if scheduled_inspections else (
             create_return_inspection(db, assignment, payload, current_user, ended_at)
             if payload.return_inspection_required
             else None

@@ -693,15 +693,22 @@ class InspectionItemBase(BaseModel):
 
 
 class InspectionItemCreate(InspectionItemBase):
-    pass
+    id: int | None = None
+    photo_attachment_ids: list[int] = Field(default_factory=list)
 
 
 class InspectionItemOut(InspectionItemBase):
     id: int
+    work_order_id: int | None = None
+    template_item_id: int | None = None
+    item_snapshot: dict | None = None
+    photo_attachment_ids: list[int] = Field(default_factory=list)
     model_config = ConfigDict(from_attributes=True)
 
 
 class InspectionBase(BaseModel):
+    template_id: int | None = None
+    complete: bool = False
     vehicle_id: int | None = None
     license_plate: str | None = None
     driver_id: int | None = None
@@ -731,6 +738,12 @@ class InspectionUpdate(InspectionBase):
 
 
 class InspectionOut(BaseModel):
+    created_by_user_id: int | None = None
+    template_id: int | None = None
+    template_snapshot: dict | None = None
+    schedule_id: int | None = None
+    completed_at: str | None = None
+    odometer_km: int | None = None
     id: int
     vehicle_id: int
     license_plate: str

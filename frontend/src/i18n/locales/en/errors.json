@@ -81,5 +81,19 @@
   "program_order_vehicle": "A Program Work Order must retain its original vehicle and program reminder.",
   "program_interval_required": "Set a kilometer interval, a month interval, or both.",
   "program_warning_invalid": "Warnings require their corresponding interval; kilometer warnings cannot exceed it.",
-  "program_target_invalid": "Choose a valid assignment target."
+  "program_target_invalid": "Choose a valid assignment target.",
+  "inspection_template_missing": "The selected inspection record was not found in this company.",
+  "inspection_template_conflict": "This code is already in use. Choose a unique code.",
+  "inspection_snapshot_locked": "The saved inspection checklist cannot be changed. Submit all original item IDs and names.",
+  "inspection_completed_locked": "Completed inspection results cannot be edited.",
+  "inspection_template_empty": "Add at least one active item before starting an inspection.",
+  "inspection_required_item": "Check required item: {{item}}.",
+  "inspection_photo_required": "Attach a photo from this inspection for item: {{item}}.",
+  "inspection_comment_required": "Enter a failure comment for item: {{item}}.",
+  "inspection_template_changed": "Template selection changed. Reload the checklist before beginning.",
+  "inspection_begin_first": "Begin the inspection with an empty results list, then record the saved item results.",
+  "inspection_checkout_required": "Complete and pass required inspections before check-out: {{ids}}.",
+  "inspection_reorder_invalid": "Include every template item ID exactly once when reordering.",
+  "inspection_schedule_interval": "Provide the interval required for this frequency. Mileage also needs a baseline.",
+  "inspection_evidence_locked": "This photo is used by an inspection result and cannot be removed."
 }

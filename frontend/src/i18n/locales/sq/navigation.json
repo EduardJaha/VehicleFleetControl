@@ -32,5 +32,6 @@
   "vendors": "Furnitorët",
   "technicians": "Teknikët",
   "supplyReports": "Raportet e furnizimeve të mirëmbajtjes",
-  "maintenancePrograms": "Programet e Mirëmbajtjes"
+  "maintenancePrograms": "Programet e Mirëmbajtjes",
+  "inspectionTemplates": "Modelet e inspektimit"
 }

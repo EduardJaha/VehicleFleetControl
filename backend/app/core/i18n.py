@@ -9,6 +9,21 @@ DEFAULT_LANGUAGE = "en"
 
 MESSAGES: dict[str, dict[str, str]] = {
     "en": {
+        'inspection_template_missing': 'The selected inspection record was not found in this company.',
+        'inspection_template_conflict': 'This code is already in use. Choose a unique code.',
+        'inspection_snapshot_locked': 'The saved inspection checklist cannot be changed. Submit all original item IDs and names.',
+        'inspection_completed_locked': 'Completed inspection results cannot be edited.',
+        'inspection_template_empty': 'Add at least one active item before starting an inspection.',
+        'inspection_required_item': 'Check required item: {item}.',
+        'inspection_photo_required': 'Attach a photo from this inspection for item: {item}.',
+        'inspection_comment_required': 'Enter a failure comment for item: {item}.',
+        'inspection_template_changed': 'Template selection changed. Reload the checklist before beginning.',
+        'inspection_begin_first': 'Begin the inspection with an empty results list, then record the saved item results.',
+        'inspection_checkout_required': 'Complete and pass required inspections before check-out: {ids}.',
+        'inspection_reorder_invalid': 'Include every template item ID exactly once when reordering.',
+        'inspection_schedule_interval': 'Provide the interval required for this frequency. Mileage also needs a baseline.',
+        'inspection_evidence_locked': 'This photo is used by an inspection result and cannot be removed.',
+
         'program_not_found': 'The selected program record was not found in this company.',
         'program_conflict': 'A program with this name already exists, or another update is in progress. Refresh and retry.',
         'program_task_conflict': 'A task for this service type already exists in this program. Edit or reactivate that task.',
@@ -80,6 +95,21 @@ MESSAGES: dict[str, dict[str, str]] = {
         "invalid_value": "Enter a valid value.",
     },
     "sq": {
+        'inspection_template_missing': 'Regjistrimi i zgjedhur i inspektimit nuk u gjet në këtë kompani.',
+        'inspection_template_conflict': 'Ky kod është në përdorim. Zgjidhni një kod unik.',
+        'inspection_snapshot_locked': 'Lista e ruajtur nuk mund të ndryshohet. Dërgoni të gjitha ID-të dhe emrat origjinalë.',
+        'inspection_completed_locked': 'Rezultatet e inspektimit të përfunduar nuk mund të ndryshohen.',
+        'inspection_template_empty': 'Shtoni të paktën një pikë aktive para fillimit të inspektimit.',
+        'inspection_required_item': 'Kontrolloni pikën e detyrueshme: {item}.',
+        'inspection_photo_required': 'Bashkëngjitni fotografi nga ky inspektim për pikën: {item}.',
+        'inspection_comment_required': 'Shkruani koment për dështimin e pikës: {item}.',
+        'inspection_template_changed': 'Përzgjedhja e modelit ndryshoi. Ringarkoni listën para fillimit.',
+        'inspection_begin_first': 'Filloni inspektimin me listë bosh rezultatesh, pastaj regjistroni rezultatet e pikave të ruajtura.',
+        'inspection_checkout_required': 'Përfundoni dhe kaloni inspektimet e kërkuara para marrjes: {ids}.',
+        'inspection_reorder_invalid': 'Përfshini çdo ID të pikës saktësisht një herë gjatë rirenditjes.',
+        'inspection_schedule_interval': 'Jepni intervalin e kërkuar për këtë shpeshtësi. Kilometrazhi kërkon edhe bazën.',
+        'inspection_evidence_locked': 'Kjo fotografi përdoret nga një rezultat inspektimi dhe nuk mund të hiqet.',
+
         'program_not_found': 'Regjistri i zgjedhur i programit nuk u gjet në këtë kompani.',
         'program_conflict': 'Një program me këtë emër ekziston ose një ndryshim tjetër është në proces. Rifreskoni dhe provoni përsëri.',
         'program_task_conflict': 'Një detyrë për këtë lloj servisi ekziston në këtë program. Ndryshoni ose riaktivizoni atë detyrë.',

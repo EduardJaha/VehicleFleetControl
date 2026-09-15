@@ -32,5 +32,6 @@
   "vendors": "Vendors",
   "technicians": "Technicians",
   "supplyReports": "Maintenance Supply Reports",
-  "maintenancePrograms": "Maintenance Programs"
+  "maintenancePrograms": "Maintenance Programs",
+  "inspectionTemplates": "Inspection Templates"
 }

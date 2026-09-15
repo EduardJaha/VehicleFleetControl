@@ -13,6 +13,7 @@ from app.models import (
     AccidentFile,
     DocumentVersion,
     Inspection,
+    InspectionItem,
     ServiceBill,
     User,
     VehicleAccident,
@@ -136,6 +137,12 @@ async def upload_file(
         raise HTTPException(status_code=404, detail="Related record not found.")
     authorize_entity_permission(db, current_user, normalized_entity, write=True)
     authorize_entity_access(db, current_user, normalized_entity, entity)
+    if normalized_entity == "Inspection" and entity.template_snapshot:
+        from app.services.inspection_templates import can_record_results, fail
+        if not can_record_results(db, current_user, entity):
+            fail("insufficient_permissions", 403)
+        if entity.completed_at:
+            fail("inspection_completed_locked", 409)
     stored = await store_upload(file, normalized_entity.lower(), category)
     attachment = Attachment(
         original_filename=stored.original_filename,
@@ -248,6 +255,11 @@ def archive_file(
     if not attachment:
         raise HTTPException(status_code=404, detail="File not found.")
     authorize_entity_permission(db, current_user, attachment.entity_type, write=True)
+    if attachment.entity_type == "Inspection":
+        used = db.query(InspectionItem).filter(InspectionItem.inspection_id == attachment.entity_id).all()
+        if any(attachment.id in (item.photo_attachment_ids or []) for item in used):
+            from app.services.inspection_templates import fail
+            fail("inspection_evidence_locked", 409)
     attachment.archived = True
     attachment.archived_at = datetime.utcnow()
     attachment.archived_by = current_user.id

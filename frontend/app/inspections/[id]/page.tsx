@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import InspectionResults from "@/components/maintenance/InspectionResults";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
@@ -65,7 +66,7 @@ export default function InspectionDetailsPage({ params }: { params: { id: string
           )}
         </section>
       </div>
-      <section className="card detailCard">
+      {inspection.template_id ? <InspectionResults inspection={inspection} onSave={setInspection} /> : <section className="card detailCard">
         <h2>{t("modules:inspections.checklist")}</h2>
         <MaintenanceTable>
           <thead><tr><th>{t("modules:inspections.item")}</th><th>{t("common:labels.status")}</th><th>{t("common:labels.comment")}</th></tr></thead>
@@ -77,7 +78,7 @@ export default function InspectionDetailsPage({ params }: { params: { id: string
             </tr>
           ))}</tbody>
         </MaintenanceTable>
-      </section>
+      </section>}
     </section>
   );
 }

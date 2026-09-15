@@ -511,10 +511,79 @@ class VehicleConditionRecord(TenantMixin, Base):
     recorded_by_user = relationship("User", foreign_keys=[recorded_by_user_id])
 
 
+class InspectionTemplate(TenantMixin, Base):
+    __tablename__ = "InspectionTemplates"
+    __table_args__ = (UniqueConstraint("CompanyId", "Code", name="uq_inspection_template_code"),)
+    id = Column("Id", Integer, primary_key=True)
+    code = Column("Code", String(80), nullable=False)
+    name = Column("Name", String(150), nullable=False)
+    description = Column("Description", Text)
+    inspection_type = Column("InspectionType", String(50), nullable=False)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    archived = Column("Archived", Boolean, nullable=False, default=False)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    items = relationship("InspectionTemplateItem", order_by="(InspectionTemplateItem.display_order, InspectionTemplateItem.id)", back_populates="template", cascade="all, delete-orphan")
+
+
+class InspectionTemplateItem(TenantMixin, Base):
+    __tablename__ = "InspectionTemplateItems"
+    __table_args__ = (UniqueConstraint("CompanyId", "TemplateId", "Code", name="uq_inspection_template_item_code"),)
+    id = Column("Id", Integer, primary_key=True)
+    template_id = Column("TemplateId", Integer, ForeignKey("InspectionTemplates.Id"), nullable=False, index=True)
+    code = Column("Code", String(80), nullable=False)
+    name = Column("Name", String(150), nullable=False)
+    description = Column("Description", Text)
+    category = Column("Category", String(50), nullable=False, default="Other")
+    display_order = Column("DisplayOrder", Integer, nullable=False, default=0)
+    required = Column("Required", Boolean, nullable=False, default=True)
+    critical = Column("Critical", Boolean, nullable=False, default=False)
+    photo_required_on_failure = Column("PhotoRequiredOnFailure", Boolean, nullable=False, default=False)
+    comment_required_on_failure = Column("CommentRequiredOnFailure", Boolean, nullable=False, default=False)
+    create_work_order_on_failure = Column("CreateWorkOrderOnFailure", Boolean, nullable=False, default=False)
+    mark_vehicle_unavailable_on_failure = Column("MarkVehicleUnavailableOnFailure", Boolean, nullable=False, default=False)
+    generate_notification_on_failure = Column("GenerateNotificationOnFailure", Boolean, nullable=False, default=True)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    template = relationship("InspectionTemplate", back_populates="items")
+
+
+class InspectionTemplateAssignment(TenantMixin, Base):
+    __tablename__ = "InspectionTemplateAssignments"
+    id = Column("Id", Integer, primary_key=True)
+    template_id = Column("TemplateId", Integer, ForeignKey("InspectionTemplates.Id"), nullable=False, index=True)
+    target_type = Column("TargetType", String(30), nullable=False)
+    target_value = Column("TargetValue", String(255), nullable=False)
+    model = Column("Model", String(150))
+    priority = Column("Priority", Integer, nullable=False, default=0)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    template = relationship("InspectionTemplate")
+
+
+class InspectionSchedule(TenantMixin, Base):
+    __tablename__ = "InspectionSchedules"
+    id = Column("Id", Integer, primary_key=True)
+    template_id = Column("TemplateId", Integer, ForeignKey("InspectionTemplates.Id"), nullable=False, index=True)
+    frequency = Column("Frequency", String(30), nullable=False)
+    start_date = Column("StartDate", Date, nullable=False)
+    interval_days = Column("IntervalDays", Integer)
+    interval_km = Column("IntervalKm", Integer)
+    baseline_odometer_km = Column("BaselineOdometerKm", Integer)
+    is_active = Column("IsActive", Boolean, nullable=False, default=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    template = relationship("InspectionTemplate")
+    __table_args__ = (
+        CheckConstraint('"IntervalDays" IS NULL OR "IntervalDays" > 0', name="ck_inspection_schedule_days"),
+        CheckConstraint('"IntervalKm" IS NULL OR "IntervalKm" > 0', name="ck_inspection_schedule_km"),
+    )
+
+
 class Inspection(TenantMixin, Base):
     __tablename__ = "Inspections"
     __table_args__ = (
         Index("ix_inspections_vehicle_assignment_id", "VehicleAssignmentId"),
+        UniqueConstraint("CompanyId", "OccurrenceKey", name="uq_inspection_occurrence"),
     )
 
     id = Column("Id", Integer, primary_key=True, index=True)
@@ -526,6 +595,13 @@ class Inspection(TenantMixin, Base):
         ForeignKey("VehicleAssignments.Id", ondelete="SET NULL"),
         nullable=True,
     )
+    template_id = Column("TemplateId", Integer, ForeignKey("InspectionTemplates.Id", name="fk_inspections_templateid"), nullable=True)
+    template_snapshot = Column("TemplateSnapshot", JSON, nullable=True)
+    created_by_user_id = Column("CreatedByUserId", Integer, ForeignKey("Users.Id", ondelete="SET NULL", name="fk_inspections_createdbyuserid"), nullable=True)
+    schedule_id = Column("ScheduleId", Integer, ForeignKey("InspectionSchedules.Id", name="fk_inspections_scheduleid"), nullable=True)
+    occurrence_key = Column("OccurrenceKey", String(200), nullable=True)
+    completed_at = Column("CompletedAt", DateTime, nullable=True)
+    odometer_km = Column("OdometerKm", Integer, nullable=True)
     inspection_type = Column("InspectionType", String(50), nullable=False)
     inspection_date = Column("InspectionDate", DateTime, nullable=False)
     overall_status = Column("OverallStatus", String(50), nullable=False, default="Needs Review")
@@ -553,6 +629,10 @@ class InspectionItem(TenantMixin, Base):
     status = Column("Status", String(50), nullable=False, default="Not Checked")
     comment = Column("Comment", Text, nullable=True)
 
+    template_item_id = Column("TemplateItemId", Integer, nullable=True)
+    item_snapshot = Column("ItemSnapshot", JSON, nullable=True)
+    photo_attachment_ids = Column("PhotoAttachmentIds", JSON, nullable=True)
+
     inspection = relationship("Inspection", back_populates="items")
 
 
@@ -561,12 +641,14 @@ class WorkOrder(TenantMixin, Base):
     __table_args__ = (
         Index("ix_work_orders_reminder_service", "ReminderServiceId"),
         Index("ix_work_orders_accident_id", "AccidentId"),
+        UniqueConstraint("InspectionItemId", name="uq_work_order_inspection_item"),
     )
 
     id = Column("Id", Integer, primary_key=True, index=True)
     vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id", ondelete="CASCADE"), nullable=False)
     driver_id = Column("DriverId", Integer, ForeignKey("Drivers.Id", ondelete="SET NULL"), nullable=True)
     inspection_id = Column("InspectionId", Integer, ForeignKey("Inspections.Id", ondelete="SET NULL"), nullable=True)
+    inspection_item_id = Column("InspectionItemId", Integer, ForeignKey("InspectionItems.Id", ondelete="RESTRICT", name="fk_workorders_inspectionitemid"), nullable=True)
     reminder_service_id = Column("ReminderServiceId", Integer, ForeignKey("VehicleServices.Id"), nullable=True)
     accident_id = Column("AccidentId", Integer, ForeignKey("VehicleAccidents.Id", ondelete="SET NULL"), nullable=True)
     source = Column("Source", String(50), nullable=False, default="Manual")

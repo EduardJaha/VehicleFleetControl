@@ -39,7 +39,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation(["common", "navigation", "modules"]);
   const { formatDateTime } = useLanguage();
   const isLoginPage = pathname === "/login";
-  const maintenanceActive = pathname.startsWith("/maintenance") || pathname.startsWith("/work-orders") || pathname.startsWith("/services") || pathname.startsWith("/inspections");
+  const maintenanceActive = pathname.startsWith("/maintenance") || pathname.startsWith("/work-orders") || pathname.startsWith("/services") || pathname.startsWith("/inspections") || pathname.startsWith("/admin/inspection-templates");
   const administrationActive = pathname === "/audit-logs" || pathname.startsWith("/admin/users") || pathname.startsWith("/admin/roles");
   const administrationVisible = can("audit_logs.view") || can("users.manage") || can("roles.manage");
   const [unreadCount, setUnreadCount] = useState(0);

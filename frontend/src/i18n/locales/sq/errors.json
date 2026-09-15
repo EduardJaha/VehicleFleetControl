@@ -95,5 +95,18 @@
   "inspection_checkout_required": "Përfundoni dhe kaloni inspektimet e kërkuara para marrjes: {{ids}}.",
   "inspection_reorder_invalid": "Përfshini çdo ID të pikës saktësisht një herë gjatë rirenditjes.",
   "inspection_schedule_interval": "Jepni intervalin e kërkuar për këtë shpeshtësi. Kilometrazhi kërkon edhe bazën.",
-  "inspection_evidence_locked": "Kjo fotografi përdoret nga një rezultat inspektimi dhe nuk mund të hiqet."
+  "inspection_evidence_locked": "Kjo fotografi përdoret nga një rezultat inspektimi dhe nuk mund të hiqet.",
+  "import_unknown_reference": "Rekordi i referuar nuk u gjet ose nuk është i disponueshëm në këtë kompani.",
+  "import_energy_unit": "Përdorni L ose KWH sipas llojit historik të karburantit dhe një sasi pozitive.",
+  "import_cost_mismatch": "Kostoja totale duhet të jetë sasia shumëzuar me koston për njësi, e rrumbullakosur në dy shifra dhjetore.",
+  "import_assignment_status": "Importoni caktime Completed, Cancelled ose Scheduled. Përdorni dorëzimin për të nisur caktimet aktive.",
+  "import_assignment_overlap": "Ky caktim mbivendoset me një caktim tjetër të automjetit ose shoferit. Datat historike ruhen.",
+  "import_mileage_conflict": "Kilometrazhi bie ndesh me një lexim tjetër. Kontrolloni burimin; kilometrazhi aktual i automjetit ruhet.",
+  "import_document_owner": "Jepni vetëm një targë/shtet automjeti ose numër punonjësi shofer.",
+  "import_document_status": "Statusi duhet të përputhet me skadimin, ose të jetë Renewal In Progress ose Rejected.",
+  "import_unsafe_attachment": "Përdorni një bashkëngjitje PDF të sigurt ekzistuese për të njëjtin pronar dhe kompani.",
+  "import_archived": "Rekordet e arkivuara nuk mund të përditësohen me import.",
+  "import_linked_record": "Rekordet aktive ose të lidhura duhet të ndryshohen përmes rrjedhës së tyre normale.",
+  "import_rolled_back": "Asnjë rresht nuk u ruajt sepse transaksioni i skedarit dështoi.",
+  "import_permission_required": "Importet masive kërkojnë leje të pakufizuara të kompanisë për këtë lloj rekordi."
 }

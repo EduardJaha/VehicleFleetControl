@@ -8,7 +8,7 @@ A fleet operations application for administrators, fleet managers, mechanics, dr
 
 **Implemented:** company registration/switching, tenant isolation, permission administration, lifecycle/TCO reports, vehicle/driver imports, in-app notifications, service programs, and inspection templates/schedules.
 
-**Partial/stubbed:** imports beyond Vehicles/Drivers are unsupported; antivirus is a no-op. Company isolation is a SaaS foundation; billing/subscriptions, email/SMS delivery, and an installed periodic scheduler are absent.
+**Partial/stubbed:** antivirus is a no-op. Imports cover Vehicles, Drivers, historical Services, Fuel/Charging, Assignments, Documents Metadata, Vendors, and Parts; live assignment activation remains in the handover workflow. Company isolation is a SaaS foundation; billing/subscriptions, email/SMS delivery, and an installed periodic scheduler are absent.
 
 **Actual database:** SQLite is configured in examples, Compose, and tests. SQL Server is intended in the brief but has no configured driver, container, or verified migration workflow.
 
@@ -230,7 +230,7 @@ F/C paths use the opening prefixes. Calls use `frontend/src/lib/api.ts`; there i
 | Company logo | Images, company-specific logo subfolder |
 | `/imports/upload` | Separate `S/imports.py` pipeline; `imports` subfolder |
 
-Imports support **10 MiB / 20,000 rows / 100 columns**, mapping validation, create/update modes, and row/file transaction modes. Confirm revalidates before execution.
+Imports support **10 MiB / 20,000 rows / 100 columns**, CSV/XLSX streaming, mapping validation, create-only/create-or-skip/explicit-update modes, and row/file transaction modes. Validation and execution stage/process 250-row chunks through existing ImportJob/ImportRowResult records. Confirm revalidates records and checks matched-record fingerprints. File mode requires all rows valid and rolls back all writes on failure; row mode uses savepoints. Private atomic progress sidecars support polling during SQLite write transactions. See `docs/imports.md` for identities, historical rules, permissions, and attachment association.
 
 Default document limit **10 MiB**, image limit **8 MiB**; PDF/JPEG/PNG/WebP only. **Auto uses the larger 10 MiB limit for either category.** Extension and MIME are individually allowlisted; content signature follows MIME, so this is not full file-format validation. `ANTIVIRUS_PROVIDER` does not select a real scanner.
 
@@ -409,7 +409,7 @@ Contract → model/migration → transactional API/permissions → client/form/d
 - Files: antivirus stub, permissive auto-size policy, transaction orphans. Legacy accident downloads omit the generic ownership check; attachment archive omits the upload/download entity-access helper.
 - Tokens live in localStorage; no refresh/cookie flow or rate limiter appears. Required password-change redirection is not a universal API restriction.
 - Company notification rules gate selected generation categories, not every event. Stored timezone/currency do not imply universal timezone conversion or currency conversion.
-- Import enums exceed implemented domains. XLSX parsing materializes rows before enforcing row limits; compressed file size does not bound decompressed memory use.
+- Imports reject formulas and bound expanded XLSX content to 100 MiB. Bulk import requires unrestricted domain grants; scoped bulk imports and live Active/Overdue assignment imports are not supported. Jobs run synchronously without distributed workers; a process crash during a claimed job requires operator recovery after verifying the process stopped.
 - Preserve legacy columns, metadata-coupled bootstrap migrations, and migration bridge compatibility (§11).
 - README's first-admin narrative and historical notes lag onboarding/features. No production Docker build, CI, installed scheduler, or comprehensive live integration suite exists.
 
@@ -449,6 +449,6 @@ Prefixes are defined above; shared model/DTO/client files are in §§4–6.
 | Dashboard/reports/TCO | `E/dashboard.py`, `S/dashboard.py`, `E/reports.py`, `S/tco.py` | `F/dashboard/page.tsx`, `C/dashboard/`, `F/reports/` |
 | Uploads/storage | `E/files.py`, `backend/app/utils/files.py` | `frontend/src/lib/api.ts`, affected form |
 | Auth/company/permissions | `backend/app/core/security.py`, `backend/app/core/authorization.py`, `E/auth.py`, `E/admin.py` | `frontend/src/lib/auth.tsx`, `C/layout/AppShell.tsx`, `F/admin/` |
-| Notifications/imports | `S/notification_generation.py`, `S/imports.py`, matching E routers | `F/notifications/page.tsx`, `F/imports/page.tsx` |
+| Notifications/imports | `S/notification_generation.py`, `S/imports.py`, `S/import_entities.py`, `S/import_source.py`, matching E routers | `F/notifications/page.tsx`, `F/imports/page.tsx` |
 | Database/config/new endpoint | `backend/app/db/session.py`, `backend/app/core/config.py`, `backend/alembic/versions/`, `backend/app/api/v1/router.py` | `frontend/src/lib/api.ts` |
 | New page/shared UI | Match the domain endpoint/DTO | `frontend/app/`, `frontend/src/components/ui/`, shell navigation |

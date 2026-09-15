@@ -15,20 +15,10 @@ const ENTITIES: ImportEntityType[] = [
   "Vehicles", "Drivers", "Historical Services", "Fuel and Charging Records",
   "Documents Metadata", "Vehicle Assignments", "Vendors", "Parts"
 ];
-const ENABLED = new Set<ImportEntityType>(["Vehicles", "Drivers"]);
-const FIELD_KEYS: Record<"Vehicles" | "Drivers", string[]> = {
-  Vehicles: ["registration_country", "license_plate", "brand", "model", "fuel_type", "vehicle_location", "vehicle_category", "year", "vin_number", "engine_cc", "odometer_km", "status"],
-  Drivers: ["full_name", "employee_number", "email", "phone_number", "department", "license_number", "license_category", "license_expiry_date", "status", "notes"]
-};
-const REQUIRED: Record<"Vehicles" | "Drivers", Set<string>> = {
-  Vehicles: new Set(["registration_country", "license_plate", "brand", "model", "fuel_type", "vehicle_location"]),
-  Drivers: new Set(["full_name", "employee_number", "license_number", "license_category", "license_expiry_date"])
-};
+const ENABLED = new Set<ImportEntityType>(ENTITIES);
 
-function entityFields(entity: ImportEntityType, t: (key: string) => string): ImportFieldDefinition[] {
-  if (!ENABLED.has(entity)) return [];
-  const supported = entity as "Vehicles" | "Drivers";
-  return FIELD_KEYS[supported].map((key) => ({ key, label: t(`modules:imports.fields.${key}`), required: REQUIRED[supported].has(key) }));
+function entityFields(definitions: ImportFieldDefinition[], t: (key: string, options: { defaultValue: string }) => string) {
+  return definitions.map((field) => ({ ...field, label: t(`modules:imports.fields.${field.key}`, { defaultValue: field.label }) }));
 }
 
 export default function ImportsPage() {
@@ -41,7 +31,7 @@ export default function ImportsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [current, setCurrent] = useState<ImportJob | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
-  const [fields, setFields] = useState<ImportFieldDefinition[]>(entityFields("Vehicles", t));
+  const [fields, setFields] = useState<ImportFieldDefinition[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [updateMode, setUpdateMode] = useState<ImportUpdateMode>("create_only");
   const [transactionMode, setTransactionMode] = useState<ImportTransactionMode>("row");
@@ -68,18 +58,42 @@ export default function ImportsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowed]);
 
+  const currentId = current?.id;
+  const currentStatus = current?.status;
+  useEffect(() => {
+    if (!currentId || !(busy === "validate" || busy === "confirm" || currentStatus === "Validating" || currentStatus === "Importing")) return;
+    let cancelled = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const progress = await apiGet<ImportJob>(`/imports/${currentId}?row_limit=0`);
+        if (!busy && progress.status !== "Validating" && progress.status !== "Importing") {
+          const detail = await apiGet<ImportJob>(`/imports/${currentId}`);
+          if (!cancelled) setCurrent((previous) => previous?.id === detail.id ? detail : previous);
+          return;
+        }
+        if (!cancelled) setCurrent((previous) => previous?.id === progress.id ? { ...previous, phase: progress.phase, progress_percent: progress.progress_percent } : previous);
+      } catch { /* The mutation request reports failures. */ }
+    }, 750);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [currentId, currentStatus, busy]);
+
+  const validationChanged = !!current && (updateMode !== current.update_mode ||
+    JSON.stringify(Object.entries(mapping).filter(([, value]) => value).sort()) !==
+    JSON.stringify(Object.entries(current.column_mapping ?? {}).filter(([, value]) => value).sort()));
+
   function chooseEntity(next: ImportEntityType) {
     setEntity(next);
     setFile(null);
     setCurrent(null);
     setHeaders([]);
-    setFields(entityFields(next, t));
+    setFields([]);
+    setUpdateMode("create_only");
     setMapping({});
     setError(null);
   }
 
   async function downloadTemplate(format: "csv" | "xlsx") {
-    const stem = entity === "Vehicles" ? "vehicles" : "drivers";
+    const stem = entity.toLowerCase().replaceAll(" ", "-");
     await apiDownload(`/imports/templates/${encodeURIComponent(entity)}?format=${format}&language=${language}`, `${stem}-import-template-${language}.${format}`);
   }
 
@@ -94,7 +108,8 @@ export default function ImportsPage() {
       form.set("file", file);
       const result = await apiPostForm<ImportUpload>("/imports/upload", form);
       setHeaders(result.headers);
-      setFields(entityFields(entity, t));
+      setFields(entityFields(result.fields, t));
+      setUpdateMode("create_only");
       setMapping(result.suggested_mapping);
       setCurrent(await apiGet<ImportJob>(`/imports/${result.id}`));
       await loadJobs();
@@ -108,6 +123,7 @@ export default function ImportsPage() {
   async function validate() {
     if (!current) return;
     setBusy("validate");
+    setCurrent({ ...current, phase: "Validating", progress_percent: 0 });
     setError(null);
     try {
       const result = await apiPost<ImportJob>(`/imports/${current.id}/validate`, { column_mapping: mapping, update_mode: updateMode });
@@ -123,6 +139,7 @@ export default function ImportsPage() {
   async function confirmImport() {
     if (!current || !window.confirm(t("modules:imports.confirmPrompt"))) return;
     setBusy("confirm");
+    setCurrent({ ...current, phase: "Importing", progress_percent: 0 });
     setError(null);
     try {
       const result = await apiPost<ImportJob>(`/imports/${current.id}/confirm`, { update_mode: updateMode, transaction_mode: transactionMode });
@@ -142,7 +159,7 @@ export default function ImportsPage() {
       setEntity(detail.entity_type);
       setCurrent(detail);
       setHeaders(detail.source_headers);
-      setFields(entityFields(detail.entity_type, t));
+      setFields(entityFields(detail.fields ?? [], t));
       setMapping(detail.column_mapping ?? {});
       setUpdateMode(detail.update_mode ?? "create_only");
       setTransactionMode(detail.transaction_mode ?? "row");
@@ -173,7 +190,7 @@ export default function ImportsPage() {
           <h2>{t("modules:imports.newImport")}</h2>
           <div className="formRow">
             <label htmlFor="import-entity">{t("modules:imports.entityType")}</label>
-            <select id="import-entity" className="select" value={entity} onChange={(event) => chooseEntity(event.target.value as ImportEntityType)}>
+            <select id="import-entity" className="select" value={entity} disabled={busy !== null} onChange={(event) => chooseEntity(event.target.value as ImportEntityType)}>
               {ENTITIES.map((item) => <option key={item} value={item}>{t(`modules:imports.entities.${item}`)}{!ENABLED.has(item) ? ` — ${t("modules:imports.planned")}` : ""}</option>)}
             </select>
           </div>
@@ -193,7 +210,7 @@ export default function ImportsPage() {
         <div className="card">
           <h2>{t("modules:imports.history")}</h2>
           {jobs.length === 0 ? <p className="muted">{t("modules:imports.noJobs")}</p> : <div className="recordList">
-            {jobs.map((job) => <button className="importHistoryRow" type="button" key={job.id} onClick={() => void openJob(job)}>
+            {jobs.map((job) => <button className="importHistoryRow" type="button" disabled={busy !== null} key={job.id} onClick={() => void openJob(job)}>
               <span><strong>#{job.id} · {job.filename}</strong><small>{t(`modules:imports.entities.${job.entity_type}`)} · {formatDateTime(job.created_at)}</small></span>
               <span className="badge">{t(`modules:imports.statuses.${job.status}`)}</span>
             </button>)}
@@ -201,13 +218,19 @@ export default function ImportsPage() {
         </div>
       </div>
 
+      {current && (busy === "validate" || busy === "confirm" || current.status === "Validating" || current.status === "Importing") && <div className="card spaced" role="status">
+        <label htmlFor="import-progress">{t(`modules:imports.statuses.${current.phase === "Importing" || busy === "confirm" ? "Importing" : "Validating"}`)} · {current.progress_percent ?? 0}%</label>
+        <progress id="import-progress" value={current.progress_percent ?? 0} max={100} />
+      </div>}
+
       {current && headers.length > 0 && (current.status === "Uploaded" || current.status === "Ready") && <div className="card spaced">
         <h2>{t("modules:imports.mapping")}</h2>
         <p className="muted">{t("modules:imports.dryRunHelp")}</p>
+        <p className="muted">{t("modules:imports.historyHelp")}</p>
         <div className="importMapping">
           {fields.map((field) => <div className="formRow" key={field.key}>
-            <label htmlFor={`mapping-${field.key}`}>{field.label} {field.required && <span className="requiredMark">({t("modules:imports.required")})</span>}</label>
-            <select id={`mapping-${field.key}`} className="select" value={mapping[field.key] ?? ""} onChange={(event) => setMapping((value) => ({ ...value, [field.key]: event.target.value }))}>
+            <label htmlFor={`mapping-${field.key}`}>{t(`modules:imports.fields.${field.key}`, { defaultValue: field.label })} {field.required && <span className="requiredMark">({t("modules:imports.required")})</span>}</label>
+            <select id={`mapping-${field.key}`} className="select" value={mapping[field.key] ?? ""} disabled={busy !== null} onChange={(event) => setMapping((value) => ({ ...value, [field.key]: event.target.value }))}>
               <option value="">{t("modules:imports.notMapped")}</option>
               {headers.map((header) => <option key={header} value={header}>{header}</option>)}
             </select>
@@ -215,8 +238,9 @@ export default function ImportsPage() {
         </div>
         <div className="formRow importMode">
           <label htmlFor="update-mode">{t("modules:imports.updateMode")}</label>
-          <select id="update-mode" className="select" value={updateMode} onChange={(event) => setUpdateMode(event.target.value as ImportUpdateMode)}>
+          <select id="update-mode" className="select" value={updateMode} disabled={busy !== null} onChange={(event) => setUpdateMode(event.target.value as ImportUpdateMode)}>
             <option value="create_only">{t("modules:imports.createOnly")}</option>
+            <option value="create_or_skip">{t("modules:imports.createOrSkip")}</option>
             <option value="update_existing">{t("modules:imports.updateExisting")}</option>
           </select>
           {updateMode === "update_existing" && <div className="errorText">{t("modules:imports.updateWarning")}</div>}
@@ -233,15 +257,15 @@ export default function ImportsPage() {
           {current.error_report_path && <button className="secondaryButton" type="button" onClick={() => void apiDownload(`${current.error_report_path!}?language=${language}`, `import-${current.id}-errors.csv`)}>{t("modules:imports.errorReport")}</button>}
           {current.status === "Ready" && <>
             <label className="formRow importTransaction"><span>{t("modules:imports.transactionMode")}</span><select className="select" value={transactionMode} onChange={(event) => setTransactionMode(event.target.value as ImportTransactionMode)}><option value="row">{t("modules:imports.rowTransaction")}</option><option value="file">{t("modules:imports.fileTransaction")}</option></select></label>
-            <button className="button" type="button" disabled={busy !== null || current.valid_rows === 0} onClick={() => void confirmImport()}>{busy === "confirm" ? t("modules:imports.confirming") : t("modules:imports.confirm")}</button>
+            <button className="button" type="button" disabled={busy !== null || current.valid_rows === 0 || validationChanged || (transactionMode === "file" && current.invalid_rows > 0)} onClick={() => void confirmImport()}>{busy === "confirm" ? t("modules:imports.confirming") : t("modules:imports.confirm")}</button>
           </>}
         </div>
       </div>}
 
       {current && current.rows.length > 0 && <div className="spaced">
         <h2>{t("modules:imports.preview")}</h2>
-        <div className="tableScroll"><table className="table importPreview"><thead><tr><th>{t("modules:imports.row")}</th><th>{t("modules:imports.result")}</th><th>{t("modules:imports.proposedAction")}</th><th>{t("modules:imports.errors")}</th></tr></thead><tbody>
-          {current.rows.map((row) => <tr key={row.id}><td>{row.row_number}</td><td><span className={row.status === "Invalid" || row.status === "Failed" ? "dangerBadge" : "successBadge"}>{t(`modules:imports.statuses.${row.status}`, { defaultValue: row.status })}</span></td><td>{t(`modules:imports.actions.${row.action}`, { defaultValue: row.action })}</td><td>{row.errors.length ? <ul className="importErrors">{row.errors.map((item, index) => <li key={`${item.code}-${index}`}><strong>{item.field}</strong>: {errorText(item.code, item.message)}</li>)}</ul> : <span className="muted">{t("modules:imports.noErrors")}</span>}</td></tr>)}
+        <div className="tableScroll"><table className="table importPreview"><thead><tr><th>{t("modules:imports.row")}</th><th>{t("modules:imports.result")}</th><th>{t("modules:imports.proposedAction")}</th><th>{t("modules:imports.values")}</th><th>{t("modules:imports.errors")}</th></tr></thead><tbody>
+          {current.rows.map((row) => <tr key={row.id}><td>{row.row_number}</td><td><span className={row.status === "Invalid" || row.status === "Failed" ? "dangerBadge" : "successBadge"}>{t(`modules:imports.statuses.${row.status}`, { defaultValue: row.status })}</span></td><td>{t(`modules:imports.actions.${row.action}`, { defaultValue: row.action })}</td><td><details><summary>{t("modules:imports.values")}</summary><dl>{Object.entries(row.mapped_data ?? {}).map(([key, value]) => <div key={key}><dt>{t(`modules:imports.fields.${key}`, { defaultValue: key })}</dt><dd>{String(value ?? "—")}</dd></div>)}</dl></details></td><td>{row.errors.length ? <ul className="importErrors">{row.errors.map((item, index) => <li key={`${item.code}-${index}`}><strong>{item.field}</strong>: {errorText(item.code, item.message)}</li>)}</ul> : <span className="muted">{t("modules:imports.noErrors")}</span>}{(row.warnings ?? []).map((warning, index) => <p key={index} className="warningText">{t("modules:imports.warning")}: {errorText(warning.code, warning.message)}</p>)}</td></tr>)}
         </tbody></table></div>
       </div>}
     </section>

@@ -102,6 +102,20 @@ class User(TenantMixin, Base):
     company_memberships = relationship("CompanyUser", back_populates="user", cascade="all, delete-orphan", foreign_keys="CompanyUser.user_id")
 
 
+class LoginRateLimit(Base):
+    """Privacy-preserving, shared login throttle bucket."""
+
+    __tablename__ = "LoginRateLimits"
+    __table_args__ = (
+        Index("ix_login_rate_limits_updated_at", "UpdatedAt"),
+    )
+
+    key_hash = Column("KeyHash", String(64), primary_key=True)
+    attempt_count = Column("AttemptCount", Integer, nullable=False, default=0)
+    window_started_at = Column("WindowStartedAt", DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column("UpdatedAt", DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Permission(Base):
     __tablename__ = "Permissions"
     __table_args__ = (UniqueConstraint("Code", name="uq_permissions_code"),)

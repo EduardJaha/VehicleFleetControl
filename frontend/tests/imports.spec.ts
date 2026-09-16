@@ -4,7 +4,6 @@ const kinds = ["Historical Services", "Fuel and Charging Records", "Vehicle Assi
 
 for (const kind of kinds) {
   test(`${kind}: template, upload, map, validate, preview, explicit mode and confirm`, async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem("vehicle_fleet_control_token", "test-token"));
     let current: Record<string, any> = {
       id: 1, entity_type: kind, filename: "source.csv", uploaded_by: 1, status: "Uploaded",
       source_headers: ["Identifier"], fields: [{ key: "name", label: "Name", required: true }],

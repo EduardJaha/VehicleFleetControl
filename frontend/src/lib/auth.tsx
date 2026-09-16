@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost, apiPut, clearAuthToken, getAuthToken, setAuthToken } from "@/lib/api";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { apiGet, apiPost, apiPut, clearAuthState } from "@/lib/api";
 import {
   applyLanguage,
   getStoredLanguage,
@@ -64,10 +64,10 @@ type PermissionKey = keyof typeof PERMISSIONS;
 type AuthContextValue = {
   user: CurrentUser | null;
   ready: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  registerFirstAdmin: (payload: { company_name: string; email: string; full_name: string; password: string }) => Promise<void>;
+  login: (email: string, password: string) => Promise<CurrentUser>;
+  registerFirstAdmin: (payload: { company_name: string; email: string; full_name: string; password: string }) => Promise<CurrentUser>;
   switchCompany: (companyId: number) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   can: (permission: PermissionKey | string) => boolean;
 };
 
@@ -76,6 +76,17 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [ready, setReady] = useState(false);
+  const generation = useRef(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const saveLanguage = (event: Event) => {
+      const language = (event as CustomEvent<LanguageCode>).detail;
+      void apiPut("/auth/me/language", { language }).catch(() => { /* Local preference is retained. */ });
+    };
+    window.addEventListener("language:save", saveLanguage);
+    return () => window.removeEventListener("language:save", saveLanguage);
+  }, [user]);
 
   async function reconcileLanguage(current: CurrentUser): Promise<CurrentUser> {
     if (current.preferred_language !== "sq" && current.preferred_language !== "en") {
@@ -95,23 +106,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    // One-time cleanup of the previous browser-readable credential. Never read it.
+    window.localStorage.removeItem("vehicle_fleet_control_token");
     async function loadCurrentUser() {
-      const token = getAuthToken();
-      if (!token) {
-        setReady(true);
-        return;
-      }
+      const currentGeneration = generation.current;
       try {
         const current = await reconcileLanguage(await apiGet<CurrentUser>("/auth/me"));
-        if (active) setUser(current);
+        if (active && currentGeneration === generation.current) setUser(current);
       } catch {
-        if (active) setUser(null);
+        if (active && currentGeneration === generation.current) setUser(null);
       } finally {
-        if (active) setReady(true);
+        if (active && currentGeneration === generation.current) setReady(true);
       }
     }
 
     function handleLogout() {
+      generation.current += 1;
       setUser(null);
       setReady(true);
     }
@@ -135,25 +145,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     ready,
     async login(email: string, password: string) {
+      generation.current += 1;
       const result = await apiPost<AuthResponse>("/auth/login", { email, password });
-      setAuthToken(result.access_token);
-      setUser(await reconcileLanguage(result.user));
+      const current = await reconcileLanguage(result.user);
+      setUser(current);
       setReady(true);
+      return current;
     },
     async registerFirstAdmin(payload: { company_name: string; email: string; full_name: string; password: string }) {
       const result = await apiPost<AuthResponse>("/auth/register", payload);
-      setAuthToken(result.access_token);
-      setUser(await reconcileLanguage(result.user));
+      const current = await reconcileLanguage(result.user);
+      setUser(current);
       setReady(true);
+      return current;
     },
     async switchCompany(companyId: number) {
-      const result = await apiPost<AuthResponse>("/auth/switch-company", { company_id: companyId });
-      setAuthToken(result.access_token);
-      setUser(await reconcileLanguage(result.user));
-      setReady(true);
+      await apiPost<AuthResponse>("/auth/switch-company", { company_id: companyId });
+      // Discard page state and outstanding requests from the previous tenant.
+      window.location.assign("/dashboard");
     },
-    logout() {
-      clearAuthToken();
+    async logout() {
+      await apiPost<void>("/auth/logout", {});
+      clearAuthState();
       setUser(null);
       setReady(true);
     },

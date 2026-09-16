@@ -1,10 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from uuid import uuid4
 
 from app.core.authorization import active_role, get_user_permissions, require_permission
-from app.core.security import create_access_token, get_current_user, hash_password, verify_password
+from app.core.errors import localized_http_exception
+from app.core.security import (
+    clear_auth_cookie,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    set_auth_cookie,
+    verify_password,
+    verify_password_or_dummy,
+)
 from app.db.session import get_db, set_tenant_context
 from app.models import Company, CompanySettings, CompanyUser, Role, User, UserRole as UserRoleAssignment
 from app.schemas import (
@@ -21,6 +32,7 @@ from app.schemas import (
     UserRole,
 )
 from app.services.audit import record_audit
+from app.services.login_security import reserve_login_attempt, reset_login_failures
 
 router = APIRouter()
 
@@ -33,12 +45,14 @@ def user_out(user: User, db: Session | None = None) -> UserOut:
             CompanyUser.user_id == user.id,
             CompanyUser.is_active.is_(True),
         ).order_by(CompanyUser.is_default.desc(), CompanyUser.id).all()
+        if db.info.get("user_id") not in (None, user.id):
+            memberships = [item for item in memberships if item.company_id == db.info.get("company_id")]
     companies = []
     for membership in memberships:
         company = db.query(Company).filter(Company.id == membership.company_id).first() if db else None
         if company and company.is_active:
             companies.append({"id": company.id, "name": company.name, "role": membership.role})
-    selected_role = active_role(db, user)
+    selected_role = active_role(db, user) if db is None or db.info.get("user_id") in (None, user.id) else user.role
     return UserOut(
         id=user.id,
         email=user.email,
@@ -76,6 +90,7 @@ def create_user_record(db: Session, payload: UserCreate | FirstAdminCreate, role
         role=selected_role.value if isinstance(selected_role, UserRole) else str(selected_role),
         is_active=getattr(payload, "is_active", True),
         preferred_language=getattr(payload, "preferred_language", LanguageCode.en).value,
+        password_reset_required=not isinstance(payload, FirstAdminCreate),
     )
     db.add(user)
     try:
@@ -99,7 +114,7 @@ def create_user_record(db: Session, payload: UserCreate | FirstAdminCreate, role
 
 
 @router.post("/register", response_model=TokenOut, status_code=201)
-def register_company_admin(payload: FirstAdminCreate, db: Session = Depends(get_db)):
+def register_company_admin(payload: FirstAdminCreate, db: Session = Depends(get_db), response: Response = None):
     # Registration is company onboarding, not a one-time database bootstrap.
     # Email remains a global login identity; existing users must be invited to
     # another company from authenticated administration instead of re-registering.
@@ -116,57 +131,61 @@ def register_company_admin(payload: FirstAdminCreate, db: Session = Depends(get_
         description="Company Administrator user created.",
     )
     db.commit()
-    return TokenOut(access_token=create_access_token(user.id, session_version=user.session_version, company_id=company.id), user=user_out(user, db))
+    if response is not None:
+        set_auth_cookie(response, create_access_token(user.id, session_version=user.session_version, company_id=company.id))
+    return TokenOut(user=user_out(user, db))
 
 
 @router.post("/login", response_model=TokenOut)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    threshold = reserve_login_attempt(db, client_ip, payload.email)
     user = find_user_by_email(db, payload.email)
-    if not user or not verify_password(payload.password, user.hashed_password):
-        if user:
+    password_valid = verify_password_or_dummy(payload.password, user.hashed_password if user else None)
+    if not user or not password_valid or not user.is_active:
+        if user and threshold:
             set_tenant_context(db, user.company_id)
             db.info["user_id"] = user.id
             db.info["company_role"] = user.role
             record_audit(
                 db, action="Login failure", entity_type="User", entity_id=user.id,
-                user=user, new_values={"email": payload.email}, description="Login failed: invalid credentials.",
+                user=user,
+                description="Repeated login failures reached the temporary cooldown threshold.",
+                ip_address=client_ip,
             )
             db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")
-    if not user.is_active:
-        set_tenant_context(db, user.company_id)
-        db.info["user_id"] = user.id
-        db.info["company_role"] = user.role
-        record_audit(
-            db, action="Login failure", entity_type="User", entity_id=user.id, user=user,
-            description="Login failed: inactive account.",
-        )
-        db.commit()
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive.")
+        raise localized_http_exception(status.HTTP_401_UNAUTHORIZED, "invalid_credentials")
     memberships = db.query(CompanyUser).filter(
         CompanyUser.user_id == user.id,
         CompanyUser.is_active.is_(True),
     ).order_by(CompanyUser.is_default.desc(), CompanyUser.id).all()
+    any_memberships = db.query(CompanyUser).execution_options(skip_tenant_scope=True).filter(
+        CompanyUser.user_id == user.id,
+    ).count()
+    if any_memberships and not memberships:
+        raise localized_http_exception(status.HTTP_401_UNAUTHORIZED, "invalid_credentials")
     company_id = memberships[0].company_id if memberships else user.company_id
     company = db.query(Company).filter(Company.id == company_id, Company.is_active.is_(True)).first()
     if memberships and company is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Company is inactive.")
+        raise localized_http_exception(status.HTTP_401_UNAUTHORIZED, "invalid_credentials")
     set_tenant_context(db, company_id)
     db.info["user_id"] = user.id
     db.info["company_role"] = memberships[0].role if memberships else user.role
-    from datetime import datetime
     user.last_login_at = datetime.utcnow()
+    reset_login_failures(db, client_ip, payload.email)
     record_audit(
         db, action="Login success", entity_type="User", entity_id=user.id, user=user,
-        description="User logged in successfully.",
+        description="User logged in successfully.", ip_address=client_ip,
     )
     db.commit()
-    return TokenOut(access_token=create_access_token(user.id, session_version=user.session_version, company_id=company_id), user=user_out(user, db))
+    set_auth_cookie(response, create_access_token(user.id, session_version=user.session_version, company_id=company_id))
+    return TokenOut(user=user_out(user, db))
 
 
 @router.post("/switch-company", response_model=TokenOut)
 def switch_company(
     payload: CompanySwitchRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -180,10 +199,11 @@ def switch_company(
         raise HTTPException(status_code=404, detail="Company was not found.")
     set_tenant_context(db, company.id)
     db.info["company_role"] = membership.role
-    return TokenOut(
-        access_token=create_access_token(current_user.id, session_version=current_user.session_version, company_id=company.id),
-        user=user_out(current_user, db),
+    set_auth_cookie(
+        response,
+        create_access_token(current_user.id, session_version=current_user.session_version, company_id=company.id),
     )
+    return TokenOut(user=user_out(current_user, db))
 
 
 @router.get("/me", response_model=UserOut)
@@ -230,20 +250,41 @@ def update_my_language(
 @router.put("/me/password", response_model=TokenOut)
 def change_my_password(
     payload: PasswordChangeRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if not verify_password(payload.current_password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+        raise localized_http_exception(400, "current_password_incorrect")
     current_user.hashed_password = hash_password(payload.new_password)
     current_user.password_reset_required = False
-    current_user.session_version = (current_user.session_version or 0) + 1
+    current_user.session_version = User.session_version + 1
     record_audit(db, action="Password changed", entity_type="User", entity_id=current_user.id, user=current_user, description="User changed their password and existing sessions were revoked.")
     db.commit()
-    return TokenOut(
-        access_token=create_access_token(current_user.id, session_version=current_user.session_version, company_id=db.info.get("company_id")),
-        user=user_out(current_user, db),
+    set_auth_cookie(
+        response,
+        create_access_token(current_user.id, session_version=current_user.session_version, company_id=db.info.get("company_id")),
     )
+    return TokenOut(user=user_out(current_user, db))
+
+
+@router.post("/logout", status_code=204)
+def logout(
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.session_version = User.session_version + 1
+    record_audit(
+        db,
+        action="Logout",
+        entity_type="User",
+        entity_id=current_user.id,
+        user=current_user,
+        description="User logged out and all their sessions were revoked.",
+    )
+    db.commit()
+    clear_auth_cookie(response)
 
 
 @router.post("/users", response_model=UserOut, status_code=201)

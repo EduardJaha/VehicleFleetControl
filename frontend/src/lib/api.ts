@@ -11,35 +11,18 @@ import { getActiveLanguage } from "@/i18n/language";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
-export const AUTH_TOKEN_KEY = "vehicle_fleet_control_token";
-
-export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
-}
-
-export function setAuthToken(token: string): void {
+export function clearAuthState(): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-}
-
-export function clearAuthToken(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(AUTH_TOKEN_KEY);
   window.dispatchEvent(new Event("auth:logout"));
 }
 
 function authHeaders(): HeadersInit {
-  const token = getAuthToken();
-  return {
-    "Accept-Language": getActiveLanguage(),
-    ...(token ? { Authorization: `Bearer ${token}` } : {})
-  };
+  return { "Accept-Language": getActiveLanguage() };
 }
 
 async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(input, init);
+    return await fetch(input, { credentials: "include", ...init });
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error(i18n.t("errors:network"));
@@ -121,11 +104,14 @@ function apiErrorMessage(body: unknown): string | null {
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
-      clearAuthToken();
+      clearAuthState();
     }
     let message = i18n.t("errors:api");
     try {
       const body: unknown = await response.json();
+      if (body && typeof body === "object" && "code" in body && body.code === "password_change_required" && typeof window !== "undefined") {
+        window.location.assign("/account/password");
+      }
       message = apiErrorMessage(body) ?? message;
     } catch {
       const text = await response.text();

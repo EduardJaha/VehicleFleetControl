@@ -46,6 +46,7 @@ VehicleFleetControl currently includes the following modules:
 * Administrators can create and edit users, activate or deactivate accounts, link Driver profiles, set preferred language, reset passwords, and revoke sessions
 * Locations, Departments, and Cost Centers are managed master data while legacy free-text fields remain available during migration
 * Administration pages are available at `/admin/users`, `/admin/roles`, and `/admin/settings`
+* Browser sessions use expiring JWTs in Secure, HttpOnly cookies with session-version revocation, login throttling, and mandatory temporary-password changes; see [Authentication security](docs/authentication-security.md)
 
 ### Dashboard
 

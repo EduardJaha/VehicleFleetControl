@@ -5,7 +5,6 @@ async function programApi(page: Page, role = "admin") {
   const rules: Array<Record<string, unknown>> = [];
   const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
   await page.addInitScript(() => {
-    localStorage.setItem("vehicle_fleet_control_token", "program-test");
     localStorage.setItem("vehicleFleetControl.language", "en");
   });
   await page.route("http://localhost:8000/api/v1/**", async route => {

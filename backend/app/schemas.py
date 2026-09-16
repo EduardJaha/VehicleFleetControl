@@ -252,16 +252,19 @@ class UserBase(BaseModel):
         return name
 
 
+NEW_PASSWORD_MIN_LENGTH = 12
+
+
 class UserCreate(UserBase):
     role: UserRole = UserRole.viewer
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=NEW_PASSWORD_MIN_LENGTH, max_length=128)
 
 
 class FirstAdminCreate(BaseModel):
     company_name: str = Field(default="My Company", min_length=1, max_length=255)
     email: str = Field(min_length=3, max_length=255)
     full_name: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=NEW_PASSWORD_MIN_LENGTH, max_length=128)
 
     @field_validator("email")
     @classmethod
@@ -342,7 +345,8 @@ class RoleUpdate(BaseModel):
 class AdminUserCreate(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     full_name: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=NEW_PASSWORD_MIN_LENGTH, max_length=128)
+    require_password_change: bool = True
     is_active: bool = True
     preferred_language: LanguageCode = LanguageCode.en
     driver_id: int | None = None
@@ -379,13 +383,13 @@ class AdminUserUpdate(BaseModel):
 
 
 class PasswordResetRequest(BaseModel):
-    temporary_password: str = Field(min_length=8, max_length=128)
+    temporary_password: str = Field(min_length=NEW_PASSWORD_MIN_LENGTH, max_length=128)
     require_change: bool = True
 
 
 class PasswordChangeRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=NEW_PASSWORD_MIN_LENGTH, max_length=128)
 
 
 class MasterDataCreate(BaseModel):
@@ -417,8 +421,8 @@ class CompanySettingsOut(CompanySettingsUpdate):
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: str = Field(max_length=255)
+    password: str = Field(max_length=128)
 
     @field_validator("email")
     @classmethod
@@ -427,8 +431,6 @@ class LoginRequest(BaseModel):
 
 
 class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
     user: UserOut
 
 

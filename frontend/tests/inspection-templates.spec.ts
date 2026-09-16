@@ -5,7 +5,7 @@ async function mock(page: Page, role = "admin") {
   const rows: Template[] = [];
   const assignments: Assignment[] = [];
   const schedules: Schedule[] = [];
-  await page.addInitScript(() => {localStorage.setItem("vehicle_fleet_control_token", "test"); localStorage.setItem("vehicleFleetControl.language", "en");});
+  await page.addInitScript(() => localStorage.setItem("vehicleFleetControl.language", "en"));
   await page.route("http://localhost:8000/api/v1/**", async route => {
     const req = route.request(); const path = new URL(req.url()).pathname.replace("/api/v1", ""); const method = req.method();
     const body = ["GET", "DELETE"].includes(method) ? {} : req.postDataJSON();

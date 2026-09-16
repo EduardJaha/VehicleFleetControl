@@ -25,10 +25,11 @@ export default function LoginPage() {
     try {
       if (mode === "register") {
         await registerFirstAdmin({ company_name: companyName, email, full_name: fullName, password });
+        router.replace("/dashboard");
       } else {
-        await login(email, password);
+        const user = await login(email, password);
+        router.replace(user.password_reset_required ? "/account/password" : "/dashboard");
       }
-      router.replace("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("modules:auth.authenticationFailed"));
     } finally {
@@ -66,7 +67,7 @@ export default function LoginPage() {
           </div>
           <div className="formRow">
             <label htmlFor="password">{t("common:labels.password")}</label>
-            <input id="password" className="input" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required />
+            <input id="password" className="input" type="password" minLength={mode === "register" ? 12 : undefined} value={password} onChange={(event) => setPassword(event.target.value)} required />
           </div>
           <button className="button" type="submit" disabled={loading}>
             {loading ? t("common:states.pleaseWait") : mode === "register" ? t("modules:auth.createAdmin") : t("common:actions.login")}

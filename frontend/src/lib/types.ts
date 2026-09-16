@@ -106,8 +106,6 @@ export type ScopeAssignment = { role_id: number; location_id?: number | null; de
 export type MasterDataItem = { id: number; code: string; name: string; is_active: boolean };
 
 export type AuthResponse = {
-  access_token: string;
-  token_type: "bearer";
   user: CurrentUser;
 };
 

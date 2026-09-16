@@ -8,6 +8,11 @@ services:
       DATABASE_URL: sqlite:///./data/vehiclemanagement.db
       ENVIRONMENT: development
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-local-development-secret}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+      LOGIN_RATE_LIMIT_ATTEMPTS: ${LOGIN_RATE_LIMIT_ATTEMPTS:-5}
+      LOGIN_RATE_LIMIT_WINDOW_SECONDS: ${LOGIN_RATE_LIMIT_WINDOW_SECONDS:-900}
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       UPLOAD_DIRECTORY: uploads
     ports:

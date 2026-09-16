@@ -14,7 +14,7 @@ A fleet operations application for administrators, fleet managers, mechanics, dr
 
 ```mermaid
 flowchart LR
-    UI[Next.js App Router / React] -->|fetch + Bearer JWT| API[FastAPI /api/v1]
+    UI[Next.js App Router / React] -->|credentialed fetch + HttpOnly JWT cookie| API[FastAPI /api/v1]
     API --> AUTH[Permissions + tenant session]
     AUTH --> LOGIC[Endpoint logic + domain services]
     LOGIC --> ORM[SQLAlchemy synchronous ORM]
@@ -96,7 +96,7 @@ Endpoints coordinate ORM writes and domain services; **no repository/data-access
 
 Forms use controlled inputs, HTML constraints, and manual validation. Reuse domain forms. Styles: `F/globals.css`, with `F/admin/inspection-templates/templates.module.css` as a scoped exception. `@/` resolves to `frontend/src/`.
 
-`api.ts` sends Bearer tokens from localStorage plus `Accept-Language`; GET uses `cache: "no-store"`. Errors become localized `Error` messages; 401 clears the token and dispatches `auth:logout`. `auth.tsx` restores `/auth/me`, manages login/registration/company switching, and exposes `can()`. UI gating is not backend authorization. Password-reset-required users are directed to `/account/password`.
+`api.ts` sends `credentials: "include"` plus `Accept-Language`; GET uses `cache: "no-store"`. JWTs live only in HttpOnly cookies in the browser; old localStorage credentials are removed, not read. Errors become localized `Error` messages; 401 clears authentication state and dispatches `auth:logout`. `auth.tsx` restores `/auth/me`, manages login/registration/server logout/company switching, and exposes `can()`. Company switching reloads the page to discard tenant state. UI gating is not backend authorization. Password-reset-required users are directed to `/account/password` and blocked from normal APIs until changed.
 
 ## 5. Backend Architecture
 
@@ -106,7 +106,7 @@ Flow: request → dependencies/validation → endpoint/shared service → SQLAlc
 
 `backend/app/db/session.py` creates one engine and request-scoped `TenantSession`; `get_db` closes it in `finally`, but does not commit automatically. Authentication sets `db.info` company/user/role context. ORM loader criteria scope `TenantMixin` records; flush hooks check new/dirty tenant ownership. Unscoped sessions, identity-map reuse, raw SQL, and bulk operations need particular care: validate related IDs and explicitly constrain company ownership. The notification job clears the identity map between companies.
 
-`core/security.py` handles JWT identity/company/session-version checks. `core/authorization.py` owns permission catalog, six default roles, custom role grants, and location/department/cost-center/own-record scopes; endpoints must apply those scopes. Roles/permissions are global definitions, while grants and operational data are company-owned. Legacy role/membership fallback remains.
+`core/security.py` handles cookie JWT identity/company/session-version checks (legacy Bearer validation retained). `core/http_security.py` validates trusted Origin/Referer for cookie mutations and login, and adds API security headers. `S/login_security.py` uses atomic database-backed IP/account and IP-only fixed windows. New passwords use bcrypt_sha256 with legacy bcrypt verification; the shared new-password minimum is 12 characters. Logout revokes all of the user's sessions. `core/authorization.py` owns permission catalog, six default roles, custom role grants, and location/department/cost-center/own-record scopes; endpoints must apply those scopes. Roles/permissions are global definitions, while grants and operational data are company-owned. Legacy role/membership fallback remains only where no membership row exists, never for an explicitly inactive row. See `docs/authentication-security.md` for deployment requirements.
 
 `core/errors.py` returns `{code, message, params}` or 422 `{code, message, field_errors}`. Prefer explicit codes: fallback inference can conceal errors. `S/audit.py` snapshots/redacts AuditLog data. Other logging is Uvicorn/Alembic output; no central structured logging setup exists.
 
@@ -118,6 +118,7 @@ All entities: `backend/app/models.py`. Primary keys are integer `id` / SQL `Id`;
 |---|---|
 | `Company`, `CompanySettings`, `CompanyUser` | Unique company slug; one settings row/company (language, timezone, currency, logo, notification rules); unique company/user membership with role/active/default flags |
 | `User`, `Role`, `Permission`, `RolePermission`, `UserRole` | Globally unique normalized login email; hash, active flag, language, session version; unique role/permission codes; tenant role grants carry optional organizational scope |
+| `LoginRateLimit` | Global HMAC-keyed IP/account and IP-only throttle buckets; attempt count, fixed-window start, last update; no new User security columns |
 | `VehicleBrand`, `VehicleModel` | Global catalog; normalized brand name unique, model name unique within brand; active flags |
 | `Vehicle` | Country, formatted/normalized plate, brand/model IDs and display snapshots, fuel type, location/category, integer status, odometer; purchase/lease/warranty/disposal/capacity fields. Unique `(CompanyId, RegistrationCountry, LicensePlateNormalized)`, including archives |
 | `Driver` | Employee/license identifiers, expiry/status, optional linked user and legacy assigned vehicle, department/cost center; company-scoped uniqueness for email, employee number, license number, user |
@@ -171,7 +172,7 @@ Paths are relative to `/api/v1`; placeholders are descriptive. This map omits so
 
 | Domain | Method / route | Purpose | File under E |
 |---|---|---|---|
-| Auth | POST `/auth/register`, `/auth/login`, `/auth/switch-company`; GET `/auth/me`; PUT `/auth/me/language`, `/auth/me/password` | Company onboarding, JSON login, session/preferences | `auth.py` |
+| Auth | POST `/auth/register`, `/auth/login`, `/auth/switch-company`, `/auth/logout`; GET `/auth/me`; PUT `/auth/me/language`, `/auth/me/password` | Existing onboarding, cookie login, all-session logout, session/preferences; auth responses contain user only | `auth.py` |
 | Admin | GET/POST `/admin/users`, `/admin/roles`; PUT respective `/{id}`; GET/PUT `/admin/company-settings`; GET/POST logo; GET/POST `/admin/{kind}` | Users, grants, company/organization settings | `admin.py` |
 | Vehicles | GET/POST `/vehicles`; GET/PUT/DELETE `/vehicles/{id}`; POST restore; GET maintenance-summary/timeline; GET/POST operating-costs | Fleet, lifecycle, archive, maintenance context | `vehicles.py` |
 | Catalog | GET `/vehicle-registration/countries`, `/vehicle-catalog/brands`, `/vehicle-catalog/brands/{id}/models` | Plate metadata/catalog; catalog writes also exist | `vehicle_registration.py`, `vehicle_catalog.py` |
@@ -242,7 +243,7 @@ Frontend uses `apiPostForm` with browser-generated multipart boundaries and auth
 
 `DATABASE_URL` configures SQLAlchemy; the default resolves from backend working directory to `backend/data/vehiclemanagement.db`. Request mutations explicitly commit/rollback. Tenant isolation is application-level.
 
-Alembic uses `Base.metadata`, `compare_type=True`, SQLite batch operations, and settings-based URL in `backend/alembic/env.py`. Current source head: **`20260915_0020`**. Migration history includes the intentional no-op `20260810_0015` legacy bridge before lifecycle revision `20260812_0015`; do not delete/reorder it. Early migrations bootstrap empty DBs from current metadata, while later migrations freeze definitions/check existing schemas. Test both fresh and populated upgrade paths.
+Alembic uses `Base.metadata`, `compare_type=True`, SQLite batch operations, and settings-based URL in `backend/alembic/env.py`. Current source head: **`20260915_0021`** (adds only login throttle state). Migration history includes the intentional no-op `20260810_0015` legacy bridge before lifecycle revision `20260812_0015`; do not delete/reorder it. Early migrations bootstrap empty DBs from current metadata, while later migrations freeze definitions/check existing schemas. Test both fresh and populated upgrade paths.
 
 From `backend/`, with dependencies/environment ready:
 
@@ -268,13 +269,15 @@ Settings read backend `.env` relative to working directory; cached by `get_setti
 | `ENVIRONMENT`, `DEBUG` | Production security checks / FastAPI debug |
 | `CORS_ORIGINS` (alias `FRONTEND_ORIGINS`) | Comma-separated allowed browser origins |
 | `JWT_SECRET_KEY` (alias `SECRET_KEY`), `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES` | JWT signing and lifetime |
+| `AUTH_COOKIE_NAME`, `COOKIE_SECURE`, `COOKIE_SAMESITE` | Host-only HttpOnly session; Secure required in production, SameSite lax/strict, path `/` |
+| `LOGIN_RATE_LIMIT_ATTEMPTS`, `LOGIN_RATE_LIMIT_WINDOW_SECONDS` | IP/account fixed window (defaults 5/900); IP-only budget is 10× attempts |
 | `UPLOAD_DIRECTORY` (alias `UPLOADS_DIR`) | Private upload root |
 | `MAX_DOCUMENT_SIZE`, `MAX_IMAGE_SIZE` | Byte limits |
 | `ALLOWED_DOCUMENT_TYPES`, `ALLOWED_IMAGE_TYPES` | Comma-separated MIME allowlists; extensions/signatures also constrain uploads |
 | `ANTIVIRUS_PROVIDER` | Reserved setting; scanner currently no-op |
 | `NEXT_PUBLIC_API_URL` | Browser-visible API base, default `http://localhost:8000/api/v1` |
 
-Production rejects the development JWT default/keys under 32 characters, debug mode, or wildcard CORS. No upload retention, scheduler, SMTP, or SQL Server-specific environment variables exist. Reference examples: `backend/.env.example`, `frontend/.env.example`, root `.env.example` (Compose JWT override). Custom API prefixes need coordinated changes: security token URL, file URLs, and frontend origin/download helpers hardcode `/api/v1`.
+Production rejects default/placeholder/repetitive JWT keys or keys under 32 characters, debug mode, insecure cookies, and empty/non-HTTPS/non-exact CORS origins. Cookie deployment requires same-site frontend/API hosting and trusted proxy configuration; use matching localhost hostnames in development. See `docs/authentication-security.md`. Reference examples: `backend/.env.example`, `frontend/.env.example`, root `.env.example` (local Compose overrides). Custom API prefixes need coordinated changes: security token URL, file URLs, and frontend origin/download helpers hardcode `/api/v1`.
 
 ## 13. Running the Project
 
@@ -329,11 +332,12 @@ npm run i18n:scan
 npm run test:e2e
 ```
 
-Playwright requires Chromium, starts/reuses Next at `127.0.0.1:3000`, and mocks `localhost:8000/api/v1` in three specs. These are not live database integration tests. No Jest/Vitest or CI exists.
+Playwright requires Chromium and starts/reuses Next at `127.0.0.1:3000`; most feature specs mock `localhost:8000/api/v1`. `auth-cookie-live.spec.ts` uses browser-visible localhost and forwards to a real isolated FastAPI process with in-memory SQLite (`backend/tests/auth_browser_server.py`), requiring `backend/.venv/bin/python`. It tests real cookie/reload/CSRF/logout behavior without operational data; other browser specs are not live database integration tests. No Jest/Vitest or CI exists.
 
 | Change | Focused verification |
 |---|---|
 | API/model/permissions | Domain tests, `test_permissions.py`, `test_tenant_isolation.py`; test HTTP dependencies as well as direct calls |
+| Authentication/security | `test_auth_security.py`, `test_auth_security_edges.py`, browser `auth-security.spec.ts` and `auth-cookie-live.spec.ts`; cookie/CSRF, temporary passwords, revocation, tenant administration, throttling/concurrency and migration preservation |
 | Plates/fuel | `test_license_plates.py`, `test_vehicle_catalog.py`, `test_fuel_energy.py`; normalization, units, money, odometer |
 | Handovers/reservations | `test_vehicle_assignments.py`, `test_vehicle_checkout_return.py`; overlap/status/conflicts and both handover entry points |
 | Completion/supply/programs | `test_reliability.py`, `test_supply_workflows.py`, `test_maintenance_supply.py`, `test_service_programs.py`; atomicity, duplicate calls, stock/cost history |
@@ -407,7 +411,7 @@ Contract → model/migration → transactional API/permissions → client/form/d
 - Reservation overlap, generic accident transitions, and reminder date boundaries need attention (§7).
 - Tenant/record scopes vary by handler; legacy membership fallbacks remain. UI gating cannot substitute for API scope checks.
 - Files: antivirus stub, permissive auto-size policy, transaction orphans. Legacy accident downloads omit the generic ownership check; attachment archive omits the upload/download entity-access helper.
-- Tokens live in localStorage; no refresh/cookie flow or rate limiter appears. Required password-change redirection is not a universal API restriction.
+- Browser authentication uses expiring HttpOnly cookies with CSRF checks and a shared database rate limiter; no refresh flow. Same-site hosting/HTTPS/trusted proxy configuration are deployment requirements. Script-restricting CSP, optional MFA and self-service recovery remain future work; see `docs/authentication-security.md`.
 - Company notification rules gate selected generation categories, not every event. Stored timezone/currency do not imply universal timezone conversion or currency conversion.
 - Imports reject formulas and bound expanded XLSX content to 100 MiB. Bulk import requires unrestricted domain grants; scoped bulk imports and live Active/Overdue assignment imports are not supported. Jobs run synchronously without distributed workers; a process crash during a claimed job requires operator recovery after verifying the process stopped.
 - Preserve legacy columns, metadata-coupled bootstrap migrations, and migration bridge compatibility (§11).

@@ -27,7 +27,7 @@ async function mockApi(page: Page) {
     const url = new URL(route.request().url());
     const path = url.pathname.replace("/api/v1", "");
     if (path === "/auth/login") {
-      return route.fulfill({ json: { access_token: "test-token", token_type: "bearer", user: admin } });
+      return route.fulfill({ json: { user: admin } });
     }
     if (path === "/auth/me") return route.fulfill({ json: admin });
     if (path === "/dashboard/overview") {
@@ -176,7 +176,6 @@ test("Admin can log in and view the notification centre", async ({ page }) => {
 
 test("Admin can filter and inspect redacted audit details", async ({ page }) => {
   await mockApi(page);
-  await page.addInitScript(() => localStorage.setItem("vehicle_fleet_control_token", "test-token"));
   await page.goto("/audit-logs");
   await expect(page.getByRole("heading", { name: "Audit Logs" })).toBeVisible();
   await expect(page.getByText("Vehicle created").first()).toBeVisible();
@@ -187,7 +186,6 @@ test("Admin can filter and inspect redacted audit details", async ({ page }) => 
 
 test("Vehicle registration country controls formatting and creation", async ({ page }) => {
   await mockApi(page);
-  await page.addInitScript(() => localStorage.setItem("vehicle_fleet_control_token", "test-token"));
   await page.goto("/vehicles");
   await page.getByRole("button", { name: "Add Vehicle" }).click();
 
@@ -222,7 +220,6 @@ test("Vehicle registration country controls formatting and creation", async ({ p
 
 test("Fuel form derives Electric units from the selected Vehicle and resets safely", async ({ page }) => {
   await mockApi(page);
-  await page.addInitScript(() => localStorage.setItem("vehicle_fleet_control_token", "test-token"));
   await page.goto("/fuel");
   await page.getByRole("button", { name: "Add Fuel Record" }).click();
 

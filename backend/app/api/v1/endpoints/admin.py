@@ -45,6 +45,14 @@ from app.utils.files import attachment_path, store_upload
 router = APIRouter()
 
 
+def managed_user(db: Session, user_id: int, actor: User) -> User:
+    # Explicit predicate also protects against an already-loaded identity-map row.
+    user = db.query(User).filter(User.id == user_id, User.company_id == db.info.get("company_id", actor.company_id)).first()
+    if user is None:
+        raise HTTPException(404, detail="User was not found.")
+    return user
+
+
 def ensure_defaults(db: Session) -> None:
     if db.query(Permission).count() != len(PERMISSION_CATALOG):
         seed_authorization_defaults(db)
@@ -94,7 +102,9 @@ def validate_assignments(db: Session, assignments: list[ScopeAssignmentIn]) -> l
             (Department, assignment.department_id, "department"),
             (CostCenter, assignment.cost_center_id, "cost center"),
         ):
-            if value is not None and db.get(model, value) is None:
+            if value is not None and db.query(model).filter(
+                model.id == value, model.company_id == db.info.get("company_id", 1),
+            ).first() is None:
                 raise HTTPException(400, detail=f"Unknown {label} {value}.")
         result.append((role, assignment))
     return result
@@ -126,7 +136,9 @@ def link_driver(db: Session, user: User, driver_id: int | None) -> None:
         user.driver_profile.user_id = None
     if driver_id is None:
         return
-    driver = db.get(Driver, driver_id)
+    driver = db.query(Driver).filter(
+        Driver.id == driver_id, Driver.company_id == db.info.get("company_id", user.company_id),
+    ).first()
     if driver is None:
         raise HTTPException(400, detail="Driver profile was not found.")
     if driver.user_id not in (None, user.id):
@@ -193,6 +205,7 @@ def create_user(payload: AdminUserCreate, db: Session = Depends(get_db), current
         email=payload.email.strip().lower(), full_name=payload.full_name.strip(),
         hashed_password=hash_password(payload.password), role=validated[0][0].code,
         is_active=payload.is_active, preferred_language=payload.preferred_language.value,
+        password_reset_required=payload.require_password_change,
     )
     db.add(user)
     try:
@@ -217,20 +230,43 @@ def create_user(payload: AdminUserCreate, db: Session = Depends(get_db), current
 
 @router.put("/users/{user_id}", response_model=UserOut)
 def update_user(user_id: int, payload: AdminUserUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("users.manage"))):
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(404, detail="User was not found.")
-    old = {"email": user.email, "role": user.role, "is_active": user.is_active, "preferred_language": user.preferred_language}
+    user = managed_user(db, user_id, current_user)
+    old = {"email": user.email, "full_name": user.full_name, "role": user.role, "is_active": user.is_active, "preferred_language": user.preferred_language}
     user.email = payload.email.strip().lower()
     user.full_name = payload.full_name.strip()
     user.preferred_language = payload.preferred_language.value
     if user.is_active and not payload.is_active:
-        user.session_version = (user.session_version or 0) + 1
+        user.session_version = User.session_version + 1
     user.is_active = payload.is_active
     replace_assignments(db, user, payload.role_assignments)
     link_driver(db, user, payload.driver_id)
     try:
-        record_audit(db, action="User updated", entity_type="User", entity_id=user.id, user=current_user, old_values=old, new_values={"email": user.email, "role": user.role, "is_active": user.is_active, "preferred_language": user.preferred_language})
+        new = {"email": user.email, "full_name": user.full_name, "role": user.role, "is_active": user.is_active, "preferred_language": user.preferred_language}
+        if old["is_active"] != user.is_active:
+            record_audit(
+                db,
+                action="User activated" if user.is_active else "User deactivated",
+                entity_type="User",
+                entity_id=user.id,
+                user=current_user,
+                old_values={"is_active": old["is_active"]},
+                new_values={"is_active": user.is_active},
+            )
+        if old["role"] != user.role:
+            record_audit(
+                db,
+                action="Role changed",
+                entity_type="User",
+                entity_id=user.id,
+                user=current_user,
+                old_values={"role": old["role"]},
+                new_values={"role": user.role},
+            )
+        if (
+            (old["is_active"] == user.is_active and old["role"] == user.role)
+            or any(old[key] != new[key] for key in ("email", "full_name", "preferred_language"))
+        ):
+            record_audit(db, action="User updated", entity_type="User", entity_id=user.id, user=current_user, old_values=old, new_values=new)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -241,22 +277,18 @@ def update_user(user_id: int, payload: AdminUserUpdate, db: Session = Depends(ge
 
 @router.post("/users/{user_id}/reset-password", status_code=204)
 def reset_password(user_id: int, payload: PasswordResetRequest, db: Session = Depends(get_db), current_user: User = Depends(require_permission("users.manage"))):
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(404, detail="User was not found.")
+    user = managed_user(db, user_id, current_user)
     user.hashed_password = hash_password(payload.temporary_password)
     user.password_reset_required = payload.require_change
-    user.session_version = (user.session_version or 0) + 1
+    user.session_version = User.session_version + 1
     record_audit(db, action="Password reset", entity_type="User", entity_id=user.id, user=current_user, description="Administrator reset the user's password and revoked existing sessions.")
     db.commit()
 
 
 @router.post("/users/{user_id}/revoke-sessions", status_code=204)
 def revoke_sessions(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_permission("users.manage"))):
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(404, detail="User was not found.")
-    user.session_version = (user.session_version or 0) + 1
+    user = managed_user(db, user_id, current_user)
+    user.session_version = User.session_version + 1
     record_audit(db, action="Sessions revoked", entity_type="User", entity_id=user.id, user=current_user, description="Administrator revoked all user sessions.")
     db.commit()
 

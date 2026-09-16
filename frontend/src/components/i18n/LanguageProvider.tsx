@@ -10,7 +10,6 @@ import {
   LanguageCode,
   resolveInitialLanguage
 } from "@/i18n/language";
-import { apiPut, getAuthToken } from "@/lib/api";
 
 const LOCALES: Record<LanguageCode, string> = { en: "en-GB", sq: "sq-AL" };
 
@@ -47,11 +46,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     applyLanguage(next);
     setLanguageState(next);
     void i18n.changeLanguage(next);
-    if (persistBackend && getAuthToken()) {
-      void apiPut<{ preferred_language: LanguageCode }>("/auth/me/language", { language: next }).catch(() => {
-        // The local preference remains usable; API errors are surfaced on the next authenticated request.
-      });
-    }
+    if (persistBackend) window.dispatchEvent(new CustomEvent("language:save", { detail: next }));
   }, []);
 
   useEffect(() => {

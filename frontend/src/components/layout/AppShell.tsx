@@ -46,9 +46,10 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   const [recentNotifications, setRecentNotifications] = useState<Notification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sessionError, setSessionError] = useState("");
 
   const loadNotifications = useCallback(async () => {
-    if (!user) return;
+    if (!user || user.password_reset_required) return;
     try {
       const [count, recent] = await Promise.all([
         apiGet<{ unread_count: number }>("/notifications/unread-count"),
@@ -64,23 +65,26 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (ready && !user && !isLoginPage) {
       router.replace("/login");
+    } else if (ready && user?.password_reset_required && pathname !== "/account/password") {
+      router.replace("/account/password");
     }
-  }, [isLoginPage, ready, router, user]);
+  }, [isLoginPage, pathname, ready, router, user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.password_reset_required) return;
     void loadNotifications();
     const timer = window.setInterval(() => void loadNotifications(), 60_000);
     return () => window.clearInterval(timer);
   }, [loadNotifications, pathname, user]);
 
   useEffect(() => setMobileNavOpen(false), [pathname]);
+  useEffect(() => { setUnreadCount(0); setRecentNotifications([]); setNotificationsOpen(false); }, [user?.id, user?.company_id]);
 
   if (isLoginPage) {
     return <>{children}</>;
   }
 
-  if (!ready || !user) {
+  if (!ready || !user || (user.password_reset_required && pathname !== "/account/password")) {
     return (
       <div className="authLoading">
         <div className="card">{t("common:states.loadingSession")}</div>
@@ -124,9 +128,8 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
           {user.companies?.length > 1 && <label className="companySwitcher">
             <span>{t("modules:admin.company")}</span>
             <select value={user.company_id} onChange={async (event) => {
-              await switchCompany(Number(event.target.value));
-              router.replace("/dashboard");
-              router.refresh();
+              try { await switchCompany(Number(event.target.value)); }
+              catch (error) { setSessionError(error instanceof Error ? error.message : t("modules:admin.requestFailed")); }
             }}>
               {user.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
             </select>
@@ -134,10 +137,11 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
           <div className="userName">{user.full_name}</div>
           <div className="userRole">{t(`common:roles.${user.role}`, { defaultValue: user.role.replaceAll("_", " ") })}</div>
           <Link href="/account/notifications" className={pathname === "/account/notifications" ? "navLink active" : "navLink"}>{t("navigation:notificationPreferences")}</Link>
-          <button className="logoutButton" type="button" onClick={logout}>{t("common:actions.logout")}</button>
+          <button className="logoutButton" type="button" onClick={() => { void logout().catch((error) => setSessionError(error instanceof Error ? error.message : t("modules:admin.requestFailed"))); }}>{t("common:actions.logout")}</button>
         </div>
       </aside>
       <main className="content">
+        {sessionError && <div className="error" role="alert">{sessionError}</div>}
         <div className="appTopBar">
           <LanguageSelector compact />
           <div className="notificationBellWrap">

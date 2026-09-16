@@ -102,6 +102,8 @@ DEFAULT_ROLE_NAMES = {
 
 
 def active_role(db: Session | None, user: User) -> str:
+    if isinstance(db, Session) and db.info.get("user_id") not in (None, user.id):
+        return user.role
     return str(db.info.get("company_role", user.role)) if isinstance(db, Session) else user.role
 
 

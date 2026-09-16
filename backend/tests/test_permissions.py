@@ -75,7 +75,7 @@ def test_inactive_users_and_revoked_session_versions_are_rejected(db: Session):
 
     with pytest.raises(HTTPException) as disabled:
         get_current_user(create_access_token(inactive.id), db)
-    assert disabled.value.status_code == 403
+    assert disabled.value.status_code == 401
 
     token = create_access_token(active.id, session_version=0)
     assert get_current_user(token, db).id == active.id

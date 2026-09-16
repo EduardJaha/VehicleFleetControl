@@ -1,5 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
+from typing import Literal
+
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,6 +24,11 @@ class Settings(BaseSettings):
     )
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 8
+    auth_cookie_name: str = "vehicle_fleet_control_session"
+    cookie_secure: bool = False
+    cookie_samesite: Literal["lax", "strict"] = "lax"
+    login_rate_limit_attempts: int = 5
+    login_rate_limit_window_seconds: int = 900
     max_document_size: int = 10 * 1024 * 1024
     max_image_size: int = 8 * 1024 * 1024
     allowed_document_types: str = "application/pdf"
@@ -50,13 +58,30 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
+        for origin in self.cors_origins:
+            parsed = urlsplit(origin)
+            if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username
+                    or parsed.password or parsed.path or parsed.query or parsed.fragment or "*" in origin):
+                raise ValueError("CORS_ORIGINS must contain exact HTTP(S) origins without paths or wildcards.")
+        if not self.auth_cookie_name or any(c in self.auth_cookie_name for c in " ;=\r\n"):
+            raise ValueError("AUTH_COOKIE_NAME must be a valid cookie name.")
         if self.environment.lower() == "production":
-            if self.jwt_secret_key == "change-this-local-development-secret" or len(self.jwt_secret_key) < 32:
+            secret = self.jwt_secret_key.strip()
+            if (len(secret) < 32 or len(set(secret)) < 12 or any(marker in secret.lower() for marker in
+                    ("change-this", "replace-with", "changeme", "your-secret", "development-secret"))):
                 raise ValueError("Production requires a non-default JWT_SECRET_KEY with at least 32 characters.")
             if self.debug:
                 raise ValueError("DEBUG must be false in production.")
-            if "*" in self.cors_origins:
-                raise ValueError("CORS_ORIGINS cannot contain '*' in production.")
+            if not self.cors_origins or "*" in self.cors_origins:
+                raise ValueError("Production CORS_ORIGINS must contain explicit trusted origins.")
+            if any(not origin.startswith("https://") for origin in self.cors_origins):
+                raise ValueError("Production CORS_ORIGINS must use HTTPS.")
+            if not self.cookie_secure:
+                raise ValueError("COOKIE_SECURE must be true in production.")
+        if self.access_token_expire_minutes <= 0:
+            raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be positive.")
+        if self.login_rate_limit_attempts <= 0 or self.login_rate_limit_window_seconds <= 0:
+            raise ValueError("Login rate-limit settings must be positive.")
         if self.email_backend not in {"console", "smtp", "mock"}:
             raise ValueError("EMAIL_BACKEND must be console, mock, or smtp.")
         if self.email_backend == "smtp" and (not self.smtp_host or not self.smtp_from_email):

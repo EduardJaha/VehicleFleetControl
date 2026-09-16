@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.i18n import request_language, translate
+from app.core.config import get_settings
 
 RESOURCE_CODES = (
     ("/notifications", "notification_not_found"),
@@ -72,11 +73,21 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         message = translate(code, language)
         if code == "api_error" and language == "en":
             message = fallback
-    return JSONResponse(
+    response = JSONResponse(
         status_code=exc.status_code,
         content={"code": code, "message": message, "params": params},
         headers=exc.headers,
     )
+    if exc.status_code == 401:
+        settings = get_settings()
+        response.delete_cookie(
+            settings.auth_cookie_name,
+            path="/",
+            secure=settings.cookie_secure,
+            httponly=True,
+            samesite=settings.cookie_samesite,
+        )
+    return response
 
 
 def validation_code(error_type: str, message: str) -> str:

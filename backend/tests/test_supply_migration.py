@@ -265,7 +265,7 @@ def test_populated_legacy_supply_preserves_every_row_and_maps_all_columns(
             assert {col.name for col in Base.metadata.tables[name].columns} == actual
         assert (
             c.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == "20260915_0020"
+            == "20260915_0021"
         )
     with Session(engine) as db:
         assert db.get(Part, 1).unit_cost == 10

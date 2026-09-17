@@ -1673,3 +1673,15 @@ class ServiceProgramReminder(TenantMixin, Base):
     task = relationship("ServiceProgramTask")
     vehicle = relationship("Vehicle")
     work_order = relationship("WorkOrder", back_populates="program_reminder")
+
+
+class MobileOperation(TenantMixin, Base):
+    """Durable retry receipts committed in the same transaction as the domain write."""
+    __tablename__ = "MobileOperations"
+    __table_args__ = (UniqueConstraint("CompanyId", "UserId", "OperationKey", name="uq_mobile_operation"),)
+    id = Column("Id", Integer, primary_key=True)
+    user_id = Column("UserId", Integer, ForeignKey("Users.Id"), nullable=False)
+    operation_key = Column("OperationKey", String(100), nullable=False)
+    payload_hash = Column("PayloadHash", String(64), nullable=False)
+    result = Column("Result", JSON, nullable=True)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)

@@ -128,6 +128,10 @@ async def upload_file(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    return await upload_file_transaction(entity_type, entity_id, category, file, db, current_user)
+
+
+async def upload_file_transaction(entity_type: str, entity_id: int, category: str, file: UploadFile, db: Session, current_user: User, *, commit: bool = True):
     normalized_entity = entity_type.strip()
     if normalized_entity not in ENTITY_MODELS:
         raise HTTPException(status_code=422, detail="Unsupported attachment entity type.")
@@ -168,7 +172,10 @@ async def upload_file(
         new_values={"attachment_id": attachment.id, "filename": attachment.original_filename, "mime_type": attachment.mime_type, "file_size": attachment.file_size},
         description=f"Attachment #{attachment.id} uploaded.",
     )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return attachment_out(attachment)
 
 

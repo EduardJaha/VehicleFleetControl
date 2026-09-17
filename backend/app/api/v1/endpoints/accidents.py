@@ -191,6 +191,10 @@ def create_accident(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("accidents.manage")),
 ):
+    return create_accident_transaction(payload, request, db, current_user)
+
+
+def create_accident_transaction(payload: AccidentCreate, request: Request, db: Session, current_user: User, *, commit: bool = True):
     vehicle = db.get(Vehicle, payload.vehicle_id)
     if not vehicle or vehicle.archived:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
@@ -225,7 +229,10 @@ def create_accident(
         description=f"Accident #{accident.id} reported for {vehicle.license_plate}.",
     )
     notify_accident(db, accident, "Accident reported", "Critical" if not accident.vehicle_available_after_accident else "High")
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return accident_out(get_accident(db, accident.id), request)
 
 

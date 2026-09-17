@@ -9,6 +9,12 @@ DEFAULT_LANGUAGE = "en"
 
 MESSAGES: dict[str, dict[str, str]] = {
     "en": {
+        'mobile_account_changed': 'The signed-in account or company changed. Return to the original account to synchronize.',
+        'mobile_conflict': 'The inspection changed on the server. Your local draft is retained. Review both versions before proceeding.',
+        'mobile_retry_changed': 'This retry key was already used for different data. Your draft is retained.',
+        'mobile_version_required': 'Download the inspection version before synchronizing.',
+        'mobile_invalid_fields': 'Review the offline report fields before retrying.',
+        'mobile_photo_size': 'A photo cannot exceed 8 MiB.',
         'import_unknown_reference': 'Referenced record was not found or is unavailable in this company.',
         'import_energy_unit': 'Use L or KWH matching the historical fuel type and a positive quantity.',
         'import_cost_mismatch': 'Total cost must equal quantity multiplied by unit cost, rounded to two decimals.',
@@ -112,6 +118,12 @@ MESSAGES: dict[str, dict[str, str]] = {
         "invalid_value": "Enter a valid value.",
     },
     "sq": {
+        'mobile_account_changed': 'Llogaria ose kompania aktive ndryshoi. Kthehuni te llogaria fillestare për të sinkronizuar.',
+        'mobile_conflict': 'Inspektimi ndryshoi në server. Drafti lokal ruhet. Kontrolloni të dy versionet para se të vazhdoni.',
+        'mobile_retry_changed': 'Ky identifikues riprovimi është përdorur për të dhëna të tjera. Drafti juaj ruhet.',
+        'mobile_version_required': 'Shkarkoni versionin e inspektimit përpara sinkronizimit.',
+        'mobile_invalid_fields': 'Kontrolloni fushat e raportit lokal përpara riprovimit.',
+        'mobile_photo_size': 'Fotografia nuk mund të kalojë 8 MiB.',
         'import_unknown_reference': 'Rekordi i referuar nuk u gjet ose nuk është i disponueshëm në këtë kompani.',
         'import_energy_unit': 'Përdorni L ose KWH sipas llojit historik të karburantit dhe një sasi pozitive.',
         'import_cost_mismatch': 'Kostoja totale duhet të jetë sasia shumëzuar me koston për njësi, e rrumbullakosur në dy shifra dhjetore.',

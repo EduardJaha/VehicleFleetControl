@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { clearOffline, rememberOwner, ownerOf } from "@/lib/mobile/offline";
 import { apiGet, apiPost, apiPut, clearAuthState } from "@/lib/api";
 import {
   applyLanguage,
@@ -112,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const currentGeneration = generation.current;
       try {
         const current = await reconcileLanguage(await apiGet<CurrentUser>("/auth/me"));
-        if (active && currentGeneration === generation.current) setUser(current);
+        if (active && currentGeneration === generation.current) { rememberOwner(ownerOf(current)); setUser(current); }
       } catch {
         if (active && currentGeneration === generation.current) setUser(null);
       } finally {
@@ -133,9 +134,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     window.addEventListener("auth:logout", handleLogout);
     window.addEventListener(LANGUAGE_CHANGE_EVENT, handleLanguage);
+    const scopeChanged = (event: StorageEvent) => {
+      if (event.key === "vfc-mobile-owner") { setUser(null); void loadCurrentUser(); }
+    };
+    window.addEventListener("storage", scopeChanged);
+    window.addEventListener("online", loadCurrentUser);
     void loadCurrentUser();
     return () => {
       active = false;
+      window.removeEventListener("online", loadCurrentUser);
+      window.removeEventListener("storage", scopeChanged);
       window.removeEventListener("auth:logout", handleLogout);
       window.removeEventListener(LANGUAGE_CHANGE_EVENT, handleLanguage);
     };
@@ -148,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       generation.current += 1;
       const result = await apiPost<AuthResponse>("/auth/login", { email, password });
       const current = await reconcileLanguage(result.user);
+      rememberOwner(ownerOf(current));
       setUser(current);
       setReady(true);
       return current;
@@ -155,20 +164,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async registerFirstAdmin(payload: { company_name: string; email: string; full_name: string; password: string }) {
       const result = await apiPost<AuthResponse>("/auth/register", payload);
       const current = await reconcileLanguage(result.user);
+      rememberOwner(ownerOf(current));
       setUser(current);
       setReady(true);
       return current;
     },
     async switchCompany(companyId: number) {
       await apiPost<AuthResponse>("/auth/switch-company", { company_id: companyId });
+      localStorage.removeItem("vfc-mobile-owner");
       // Discard page state and outstanding requests from the previous tenant.
       window.location.assign("/dashboard");
     },
     async logout() {
       await apiPost<void>("/auth/logout", {});
-      clearAuthState();
-      setUser(null);
-      setReady(true);
+      try { await clearOffline(); }
+      finally {
+        clearAuthState();
+        setUser(null);
+        setReady(true);
+      }
     },
     can(permission: PermissionKey | string) {
       if (!user) return false;

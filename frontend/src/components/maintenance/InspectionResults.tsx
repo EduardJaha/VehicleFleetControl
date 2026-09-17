@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { downloadInspection, ownerOf } from "@/lib/mobile/offline";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiDownload, apiPostForm, apiPut } from "@/lib/api";
@@ -11,6 +13,7 @@ import { translateStatus } from "@/i18n/translate";
 export default function InspectionResults({ inspection, onSave }: { inspection: Inspection; onSave: (value: Inspection) => void }) {
   const { t } = useTranslation(["modules", "common"]);
   const { can, user } = useAuth();
+  const router = useRouter();
   const [items, setItems] = useState(inspection.items);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,6 +41,11 @@ export default function InspectionResults({ inspection, onSave }: { inspection: 
     } catch (e) { setError(e instanceof Error ? e.message : tr("error")); } finally { setBusy(false); }
   }
   return <section className="card detailCard"><h2>{inspection.template_snapshot?.name}</h2><p>{inspection.template_snapshot?.description}</p><p>{inspection.completed_at ? tr("completedLocked") : tr("snapshotHelp")}</p>
+    {editable && user && <button className="secondaryButton" disabled={busy} onClick={async () => {
+      setBusy(true); setError("");
+      try { await downloadInspection(inspection.id, ownerOf(user)); router.push("/mobile/offline"); }
+      catch(e) { setError(e instanceof Error ? e.message : tr("error")); } finally { setBusy(false); }
+    }}>{t("modules:mobile.downloadTemplate")}</button>}
     {error && <div className="error" role="alert">{error}</div>}
     {items.map(item => <fieldset key={item.id} className="card spaced" disabled={busy}>
       <legend><strong>{item.item_name}</strong></legend><p>{item.item_snapshot?.description}</p>

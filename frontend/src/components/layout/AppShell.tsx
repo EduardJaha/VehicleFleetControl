@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PwaProvider } from "@/components/mobile/PwaProvider";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -27,7 +28,7 @@ const navItems = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
-      <ProtectedShell>{children}</ProtectedShell>
+      <PwaProvider /><ProtectedShell>{children}</ProtectedShell>
     </AuthProvider>
   );
 }
@@ -38,6 +39,8 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   const { user, ready, logout, can, switchCompany } = useAuth();
   const { t } = useTranslation(["common", "navigation", "modules"]);
   const { formatDateTime } = useLanguage();
+  const isOfflinePage = pathname === "/mobile/offline";
+  const mobileRole = ["driver", "mechanic", "technician"].includes(user?.role || "");
   const isLoginPage = pathname === "/login";
   const maintenanceActive = pathname.startsWith("/maintenance") || pathname.startsWith("/work-orders") || pathname.startsWith("/services") || pathname.startsWith("/inspections") || pathname.startsWith("/admin/inspection-templates");
   const administrationActive = pathname === "/audit-logs" || pathname.startsWith("/admin/users") || pathname.startsWith("/admin/roles");
@@ -63,12 +66,12 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    if (ready && !user && !isLoginPage) {
+    if (ready && !user && !isLoginPage && !isOfflinePage) {
       router.replace("/login");
     } else if (ready && user?.password_reset_required && pathname !== "/account/password") {
       router.replace("/account/password");
-    }
-  }, [isLoginPage, pathname, ready, router, user]);
+    } else if (ready && mobileRole && pathname === "/dashboard") router.replace("/mobile");
+  }, [isLoginPage, isOfflinePage, mobileRole, pathname, ready, router, user]);
 
   useEffect(() => {
     if (!user || user.password_reset_required) return;
@@ -80,11 +83,11 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   useEffect(() => setMobileNavOpen(false), [pathname]);
   useEffect(() => { setUnreadCount(0); setRecentNotifications([]); setNotificationsOpen(false); }, [user?.id, user?.company_id]);
 
-  if (isLoginPage) {
+  if (isLoginPage || isOfflinePage) {
     return <>{children}</>;
   }
 
-  if (!ready || !user || (user.password_reset_required && pathname !== "/account/password")) {
+  if (!ready || !user || (mobileRole && pathname === "/dashboard") || (user.password_reset_required && pathname !== "/account/password")) {
     return (
       <div className="authLoading">
         <div className="card">{t("common:states.loadingSession")}</div>
@@ -93,7 +96,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="shell">
+    <div className={mobileRole ? "shell mobileRoleShell" : "shell"}>
       <aside className={mobileNavOpen ? "sidebar mobileOpen" : "sidebar"}>
         <div className="sidebarHeader">
           <div className="brand">{t("common:appName")}</div>
@@ -102,6 +105,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav id="primary-navigation">
+          {mobileRole ? <><Link className="navLink" href="/mobile">{t("modules:mobile.home")}</Link><Link className="navLink" href="/mobile/offline">{t("modules:mobile.offlineWork")}</Link></> : <>
           {navItems.slice(0, 3).filter((item) => can(item.permission)).map((item) => <Link key={item.href} href={item.href} className={pathname === item.href ? "navLink active" : "navLink"}>{t(`navigation:${item.labelKey}`)}</Link>)}
           {MAINTENANCE_LINKS.some(item => can(item.permission)) && <details className="navGroup" open={maintenanceActive}>
             <summary className={maintenanceActive ? "navLink active" : "navLink"}>{t("navigation:maintenance")}</summary>
@@ -123,6 +127,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
             </div>
           </details>}
           {can("settings.manage") && <Link href="/admin/settings" className={pathname.startsWith("/admin/settings") ? "navLink active" : "navLink"}>{t("navigation:organizationSettings")}</Link>}
+          </>}
         </nav>
         <div className="userPanel">
           {user.companies?.length > 1 && <label className="companySwitcher">

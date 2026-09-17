@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test:e2e": "playwright test",
     "i18n:check": "node scripts/check-i18n.mjs",
-    "i18n:scan": "node scripts/scan-hardcoded-i18n.mjs"
+    "i18n:scan": "node scripts/scan-hardcoded-i18n.mjs",
+    "test:e2e:mobile": "npm run build && playwright test --config playwright.mobile.config.ts"
   },
   "dependencies": {
     "@types/node": "^20.19.0",

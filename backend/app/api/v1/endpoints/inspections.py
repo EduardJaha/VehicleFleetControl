@@ -260,6 +260,10 @@ def list_inspections(
 
 @router.post("", response_model=InspectionOut, status_code=201)
 def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_permission("inspections.create"))):
+    return create_inspection_transaction(payload, db, current_user)
+
+
+def create_inspection_transaction(payload: InspectionCreate, db: Session, current_user: User, *, commit: bool = True):
     inspection = Inspection(created_by_user_id=current_user.id)
     apply_payload(inspection, payload, db)
     inspection.inspector = inspection.inspector or current_user.full_name
@@ -283,7 +287,10 @@ def create_inspection(payload: InspectionCreate, db: Session = Depends(get_db), 
             deduplication_key=f"inspection:{inspection.id}:failed",
             message_params={"id": inspection.id, "vehicle_id": inspection.vehicle_id},
         )
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(inspection)
     return inspection_out(inspection_query(db).filter(Inspection.id == inspection.id).one())
 
@@ -307,6 +314,10 @@ def get_inspection(inspection_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{inspection_id}", response_model=InspectionOut)
 def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return update_inspection_transaction(inspection_id, payload, db, current_user)
+
+
+def update_inspection_transaction(inspection_id: int, payload: InspectionUpdate, db: Session, current_user: User, *, commit: bool = True):
     inspection = db.query(Inspection).filter(Inspection.id == inspection_id).with_for_update().populate_existing().first()
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found.")
@@ -323,7 +334,10 @@ def update_inspection(inspection_id: int, payload: InspectionUpdate, db: Session
         description=f"Inspection #{inspection.id} updated.",
     )
     inspection.updated_at = datetime.utcnow()
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(inspection)
     return inspection_out(inspection_query(db).filter(Inspection.id == inspection.id).one())
 

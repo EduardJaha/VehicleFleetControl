@@ -31,6 +31,9 @@ PERMISSION_CATALOG: dict[str, tuple[str, str]] = {
     "drivers.view": ("Drivers", "View drivers"),
     "drivers.manage": ("Drivers", "Create, edit, and archive drivers"),
     "assignments.view": ("Assignments", "View vehicle assignments"),
+    "assignments.self_service": ("Assignments", "Check out and return own assigned vehicles"),
+    "accidents.report": ("Accidents", "Report accidents for own vehicles"),
+    "maintenance.report_issue": ("Maintenance", "Report issues for own vehicles"),
     "assignments.manage": ("Assignments", "Manage vehicle assignments"),
     "fuel.view": ("Fuel", "View fuel and charging records"),
     "fuel.create": ("Fuel", "Create fuel and charging records"),
@@ -74,6 +77,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         "documents.view", "accidents.view",
     }),
     "driver": frozenset({
+        "assignments.self_service", "accidents.report", "maintenance.report_issue",
         "dashboard.view", "vehicles.view", "assignments.view", "fuel.view", "fuel.create",
         "maintenance.view", "inspections.view", "inspections.create", "documents.view",
         "documents.upload", "reservations.view", "reservations.create", "accidents.view",

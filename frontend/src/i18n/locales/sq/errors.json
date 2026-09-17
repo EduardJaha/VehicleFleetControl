@@ -112,5 +112,11 @@
   "import_archived": "Rekordet e arkivuara nuk mund të përditësohen me import.",
   "import_linked_record": "Rekordet aktive ose të lidhura duhet të ndryshohen përmes rrjedhës së tyre normale.",
   "import_rolled_back": "Asnjë rresht nuk u ruajt sepse transaksioni i skedarit dështoi.",
-  "import_permission_required": "Importet masive kërkojnë leje të pakufizuara të kompanisë për këtë lloj rekordi."
+  "import_permission_required": "Importet masive kërkojnë leje të pakufizuara të kompanisë për këtë lloj rekordi.",
+  "mobile_account_changed": "Llogaria ose kompania aktive ndryshoi. Kthehuni te llogaria fillestare për të sinkronizuar.",
+  "mobile_conflict": "Inspektimi ndryshoi në server. Drafti lokal ruhet. Kontrolloni të dy versionet para se të vazhdoni.",
+  "mobile_retry_changed": "Ky identifikues riprovimi është përdorur për të dhëna të tjera. Drafti juaj ruhet.",
+  "mobile_version_required": "Shkarkoni versionin e inspektimit përpara sinkronizimit.",
+  "mobile_invalid_fields": "Kontrolloni fushat e raportit lokal përpara riprovimit.",
+  "mobile_photo_size": "Fotografia nuk mund të kalojë 8 MiB."
 }

@@ -243,7 +243,7 @@ Frontend uses `apiPostForm` with browser-generated multipart boundaries and auth
 
 `DATABASE_URL` configures SQLAlchemy; the default resolves from backend working directory to `backend/data/vehiclemanagement.db`. Request mutations explicitly commit/rollback. Tenant isolation is application-level.
 
-Alembic uses `Base.metadata`, `compare_type=True`, SQLite batch operations, and settings-based URL in `backend/alembic/env.py`. Current source head: **`20260915_0021`** (adds only login throttle state). Migration history includes the intentional no-op `20260810_0015` legacy bridge before lifecycle revision `20260812_0015`; do not delete/reorder it. Early migrations bootstrap empty DBs from current metadata, while later migrations freeze definitions/check existing schemas. Test both fresh and populated upgrade paths.
+Alembic uses `Base.metadata`, `compare_type=True`, SQLite batch operations, and settings-based URL in `backend/alembic/env.py`. Current source head: **`20260917_0022`** (mobile retry receipts and narrow driver self-service grants). Migration history includes the intentional no-op `20260810_0015` legacy bridge before lifecycle revision `20260812_0015`; do not delete/reorder it. Early migrations bootstrap empty DBs from current metadata, while later migrations freeze definitions/check existing schemas. Test both fresh and populated upgrade paths.
 
 From `backend/`, with dependencies/environment ready:
 
@@ -465,3 +465,14 @@ Prefixes are defined above; shared model/DTO/client files are in §§4–6.
 - `deploy/backup/backup.py`: daily age-encrypted snapshots, retention and guarded restore verification. Private recovery key stays off the backup host.
 - `backend/tests/test_deployment.py`, `test_postgresql_deployment.py`, `test_backup_restore.py`, `deploy/compose.test.yml`: health, S3, authorization, migration/persistence and backup checks. PostgreSQL tests use only disposable randomly named databases; configure `TEST_POSTGRES_URL`.
 - `scripts/clean-source-archive.py`: commit-based filtered release archive. Never package the working directory recursively.
+
+
+## 23. Driver/technician PWA
+
+- `F/mobile/page.tsx` is the role landing for drivers/mechanics; `F/mobile/offline/page.tsx` is a public, data-free shell that reads only deliberately saved local drafts. Other authenticated routes still use normal session protection.
+- `frontend/public/sw.js` caches only the offline shell, its build assets, manifest and icons. Never add API/auth/attachment responses or ordinary authenticated HTML to its cache. Bump its version on shell changes. Updates are user-activated without forced reload.
+- `frontend/src/lib/mobile/offline.ts` owns company/user-isolated IndexedDB drafts, compressed photo queues, cross-tab locks, local revision checks and synchronization. A 401 retains drafts; explicit logout clears local work. Do not introduce background credential storage.
+- `E/mobile.py` exposes own-assignment projections, prepare/sync/download/photo operations, check-out/return and issue reporting. It reuses transaction-aware domain helpers. `MobileOperation` retry receipts commit with domain mutations; never split that transaction. Inspection sync checks `UpdatedAt` atomically and returns conflicts without overwriting.
+- Driver self-service grants: `assignments.self_service`, `accidents.report`, `maintenance.report_issue`. Existing management grants remain distinct. Technician identity uses `Technician.user_id` and order assignments, never display-name matching. Mobile reservation ownership uses assignment FKs because `reserved_by` is free text.
+- Offline inspection downloads reserve a frozen server draft per vehicle/type/date; existing scheduled drafts preserve their schedule/item IDs. Accident packs allow new local drafts offline. Labor, inventory, handovers and completion of work orders remain online.
+- Verification: `backend/tests/test_mobile.py`, `frontend/tests/mobile.spec.ts`; `npm run test:e2e:mobile` builds and tests production service-worker behavior on port 3102. It is separate from the default desktop suite. See `docs/mobile-pwa.md` for storage limits, retry/retention rules, deployment and device-test boundaries.

@@ -1,4 +1,5 @@
 "use client";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiDelete, apiPost, apiPostForm, apiPut, filesApi } from "@/lib/api";
@@ -39,7 +40,8 @@ export function WorkOrderWorkspace({
   const text = (key: string) => t(`supply.${key}`);
   const { can } = useAuth();
   const { formatNumber, formatCurrency, formatDateTime } = useLanguage();
-  const [tab, setTab] = useState<Tab>("Overview");
+  const requestedTab = useSearchParams().get("tab");
+  const [tab, setTab] = useState<Tab>(["Parts", "Labor", "Attachments"].includes(requestedTab || "") ? requestedTab as Tab : "Overview");
   const [mode, setMode] = useState<string | null>(null);
   const [values, setValues] = useState<Values>({});
   const [busy, setBusy] = useState(false);

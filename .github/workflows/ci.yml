@@ -68,6 +68,8 @@ jobs:
         working-directory: frontend
       - run: npm run test:e2e
         working-directory: frontend
+      - run: npx playwright test --config playwright.mobile.config.ts
+        working-directory: frontend
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

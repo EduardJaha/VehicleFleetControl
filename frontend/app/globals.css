@@ -469,3 +469,43 @@ a .maintenanceKpi:hover { transform: translateY(-2px); box-shadow: 0 10px 25px r
 .supplyField input[type="checkbox"] { align-self: flex-start; width: 18px; height: 18px; accent-color: var(--accent); }
 button.maintenanceTab { font-family: inherit; cursor: pointer; border: 0; }
 button.maintenanceTab:focus-visible { outline: 3px solid rgba(31, 94, 255, .25); outline-offset: 2px; }
+
+/* Mobile field workspace: large targets and single-column forms at narrow widths. */
+.mobileWorkspace { max-width: 900px; margin: 0 auto; padding: 12px 4px 40px; }
+body > .mobileWorkspace, .mobileWorkspace:only-child { padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)); }
+.mobileHeading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mobileEyebrow { color: #39766c; text-transform: uppercase; letter-spacing: .12em; font-size: .78rem; font-weight: 700; }
+.mobileWorkspace h1 { font-size: clamp(1.8rem, 5vw, 2.5rem); margin: 8px 0; }
+.mobileWorkspace h2 { font-size: 1.25rem; }
+.mobileGrid, .mobileActions, .mobileStats { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; margin: 16px 0; }
+.mobileTile { display: flex; flex-direction: column; justify-content: center; gap: 8px; border-radius: 16px; background: white; border: 1px solid #dce4e9; padding: 22px; min-height: 90px; color: #123544; text-decoration: none; }
+.mobileTile.accent { background: #123544; color: white; }
+.mobileTile span { font-size: .9rem; opacity: .85; }
+.mobileActions a, .mobileActions button { min-height: 48px; padding: 12px; border: 1px solid #dce4e9; border-radius: 10px; background: white; color: #123544; font: inherit; text-align: center; text-decoration: none; }
+.mobileActions button:disabled { opacity: .5; }
+.mobileStats .card { display: flex; flex-direction: column; gap: 8px; }
+.mobileStats strong { font-size: 2rem; }
+.mobileForm, .mobileCheck { display: grid; gap: 14px; }
+.mobileWorkspace label { display: grid; gap: 6px; }
+.mobileWorkspace input, .mobileWorkspace select, .mobileWorkspace button, .mobileWorkspace textarea { min-height: 44px; font-size: 16px; max-width: 100%; }
+.mobileWorkspace fieldset { border: 0; padding: 0; min-width: 0; }
+.mobileWorkspace progress { width: 100%; }
+.mobileDraft, .mobileOrder { margin-top: 20px; overflow-wrap: anywhere; }
+.mobileCheck { border-top: 1px solid #dce4e9; padding: 18px 0; }
+.mobileStatus { font-size: .8rem; border-radius: 24px; background: #e7eef3; padding: 7px 12px; }
+.status-Conflict, .status-Failed { background: #fff0dc; color: #834909; }
+.status-Synced { background: #dff6eb; color: #185e40; }
+.mobilePhotos { display: flex; gap: 10px; flex-wrap: wrap; }
+.mobilePhotos img { width: 90px; height: 90px; object-fit: cover; border-radius: 10px; }
+.mobileConflict { border-left: 4px solid #d39138; padding: 12px; background: #fff9ed; margin-bottom: 16px; }
+.pwaBar:empty { display: none; }
+.pwaBar { background: #e6f4ef; padding: 8px 16px; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 12px; }
+@media (max-width: 640px) {
+ .mobileWorkspace { padding-top: 4px; }
+ .mobileWorkspace .card { padding: 16px; }
+ .mobileWorkspace .actions { display: grid; grid-template-columns: 1fr; }
+ .mobileStats { grid-template-columns: 1fr 1fr; }
+ .mobileRoleShell .content { padding: 16px 12px; min-width: 0; }
+ .mobileRoleShell .userPanel .userName, .mobileRoleShell .userPanel .userRole, .mobileRoleShell .userPanel > .navLink { display: none; }
+ .mobileRoleShell .sidebar:not(.mobileOpen) .userPanel { display: none; }
+}

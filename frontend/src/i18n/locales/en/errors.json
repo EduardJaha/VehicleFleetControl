@@ -112,5 +112,11 @@
   "import_archived": "Archived records cannot be updated by import.",
   "import_linked_record": "Live or linked records must be edited through their normal workflow.",
   "import_rolled_back": "No rows were saved because the file transaction failed.",
-  "import_permission_required": "Bulk imports require unrestricted company permission for this entity."
+  "import_permission_required": "Bulk imports require unrestricted company permission for this entity.",
+  "mobile_account_changed": "The signed-in account or company changed. Return to the original account to synchronize.",
+  "mobile_conflict": "The inspection changed on the server. Your local draft is retained. Review both versions before proceeding.",
+  "mobile_retry_changed": "This retry key was already used for different data. Your draft is retained.",
+  "mobile_version_required": "Download the inspection version before synchronizing.",
+  "mobile_invalid_fields": "Review the offline report fields before retrying.",
+  "mobile_photo_size": "A photo cannot exceed 8 MiB."
 }

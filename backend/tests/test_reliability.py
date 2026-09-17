@@ -330,7 +330,10 @@ def test_private_download_requires_authentication_and_serves_authorized_file(db:
     db.commit()
     response = download_file(attachment.id, db, users["admin"])
     assert response.media_type == "application/pdf"
-    assert str(response.path).endswith(stored.stored_filename)
+    async def read_body():
+        return b"".join([chunk async for chunk in response.body_iterator])
+    assert asyncio.run(read_body()) == b"%PDF-1.7\nbody"
+    assert response.headers["cache-control"] == "private, no-store"
 
     client = TestClient(app)
     assert client.get(f"/api/v1/files/{attachment.id}/download").status_code == 401

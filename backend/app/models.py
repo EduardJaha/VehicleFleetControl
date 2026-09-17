@@ -17,6 +17,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import relationship
+from sqlalchemy.schema import conv
 from app.db.session import Base, TenantMixin
 
 
@@ -271,7 +272,7 @@ class Vehicle(TenantMixin, Base):
             "CompanyId",
             "RegistrationCountry",
             "LicensePlateNormalized",
-            name="uq_vehicles_company_registration_country_license_plate_normalized",
+            name=conv("uq_vehicles_company_registration_country_license_plate_normalized"),
         ),
         Index("ix_vehicles_brand_id", "BrandId"),
         Index("ix_vehicles_model_id", "ModelId"),

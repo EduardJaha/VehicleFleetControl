@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "VehicleManagement API"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./data/vehiclemanagement.db"
-    environment: str = "development"
+    environment: Literal["development", "test", "staging", "production"] = "development"
     debug: bool = False
     cors_origins_value: str = Field(
         default="http://localhost:3000,http://127.0.0.1:3000",
@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     max_image_size: int = 8 * 1024 * 1024
     allowed_document_types: str = "application/pdf"
     allowed_image_types: str = "image/jpeg,image/png,image/webp"
+    storage_provider: Literal["local", "s3"] = "local"
+    s3_endpoint: str | None = None
+    s3_bucket: str | None = None
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
+    s3_region: str = "us-east-1"
+    s3_addressing_style: Literal["auto", "path", "virtual"] = "auto"
+    error_monitoring_provider: Literal["none", "sentry"] = "none"
+    sentry_dsn: str | None = None
+    release: str = "development"
     antivirus_provider: str = "none"
     email_backend: str = "console"
     smtp_host: str | None = None
@@ -54,10 +64,24 @@ class Settings(BaseSettings):
     claim_scan_interval_minutes: int = 1440
     claim_reminder_after_days: int = 7
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", hide_input_in_errors=True)
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
+        # Standard PostgreSQL URLs use psycopg 3; SQLite remains the local default.
+        if self.database_url.startswith(("postgres://", "postgresql://")):
+            self.database_url = "postgresql+psycopg://" + self.database_url.split("://", 1)[1]
+        if not self.database_url.startswith(("sqlite:", "sqlite+pysqlite:", "postgresql+psycopg:")):
+            raise ValueError("DATABASE_URL must use SQLite or PostgreSQL (psycopg).")
+        if self.storage_provider == "s3":
+            if not self.s3_bucket:
+                raise ValueError("S3_BUCKET is required for object storage.")
+            if bool(self.s3_access_key) != bool(self.s3_secret_key):
+                raise ValueError("Supply both S3 credentials, or neither to use the IAM credential chain.")
+            if self.s3_endpoint and urlsplit(self.s3_endpoint).scheme not in {"http", "https"}:
+                raise ValueError("S3_ENDPOINT must use HTTP(S).")
+        if self.error_monitoring_provider == "sentry" and not self.sentry_dsn:
+            raise ValueError("SENTRY_DSN is required for Sentry monitoring.")
         for origin in self.cors_origins:
             parsed = urlsplit(origin)
             if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username
@@ -65,7 +89,7 @@ class Settings(BaseSettings):
                 raise ValueError("CORS_ORIGINS must contain exact HTTP(S) origins without paths or wildcards.")
         if not self.auth_cookie_name or any(c in self.auth_cookie_name for c in " ;=\r\n"):
             raise ValueError("AUTH_COOKIE_NAME must be a valid cookie name.")
-        if self.environment.lower() == "production":
+        if self.environment in {"staging", "production"}:
             secret = self.jwt_secret_key.strip()
             if (len(secret) < 32 or len(set(secret)) < 12 or any(marker in secret.lower() for marker in
                     ("change-this", "replace-with", "changeme", "your-secret", "development-secret"))):

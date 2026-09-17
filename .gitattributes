@@ -1,0 +1,12 @@
+.gitignore export-ignore
+**/.env export-ignore
+**/.env.local export-ignore
+**/node_modules export-ignore
+**/.next export-ignore
+**/.next-dev export-ignore
+**/.venv export-ignore
+**/__pycache__ export-ignore
+backend/data export-ignore
+backend/uploads export-ignore
+**/playwright-report export-ignore
+**/test-results export-ignore

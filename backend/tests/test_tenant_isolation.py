@@ -140,12 +140,11 @@ def test_company_logo_lookup_uses_the_active_tenant(tenant_db, monkeypatch):
     alpha_settings = db.query(CompanySettings).first()
     alpha_settings.logo_path = "alpha/logo.png"
     db.commit()
-    monkeypatch.setattr("app.api.v1.endpoints.admin.attachment_path", lambda path: path)
+    monkeypatch.setattr("app.api.v1.endpoints.admin.download_response", lambda key, filename, **kwargs: key)
 
     response = get_company_logo(db, db.query(User).first())
 
-    assert response.path == "alpha/logo.png"
-    assert response.headers["cache-control"] == "private, no-store"
+    assert response == "alpha/logo.png"
 
 
 def test_background_notification_generation_only_targets_active_tenant_users(tenant_db):

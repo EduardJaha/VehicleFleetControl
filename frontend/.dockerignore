@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+node_modules
+.next
+.next-dev
+out
+test-results
+playwright-report
+*.tsbuildinfo
+tests
+
+**/*.env
+**/*.env.*
+*.env
+*.env.*

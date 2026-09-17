@@ -34,11 +34,11 @@ def upgrade() -> None:
         f"""
         UPDATE "VehicleAssignments" AS scheduled
         SET "Status" = 'Cancelled',
-            "Archived" = 1,
+            "Archived" = true,
             "ArchivedAt" = COALESCE("ArchivedAt", CURRENT_TIMESTAMP),
             "UpdatedAt" = CURRENT_TIMESTAMP
         WHERE scheduled."Status" = 'Scheduled'
-          AND scheduled."Archived" = 0
+          AND scheduled."Archived" = false
           AND EXISTS (
               SELECT 1
               FROM "VehicleAssignments" AS continued
@@ -46,7 +46,7 @@ def upgrade() -> None:
                 ON checkout_condition."VehicleAssignmentId" = continued."Id"
                AND checkout_condition."RecordType" = 'Checkout'
               WHERE continued."Id" > scheduled."Id"
-                AND continued."Archived" = 0
+                AND continued."Archived" = false
                 AND continued."Status" IN ('Active', 'Overdue', 'Completed')
                 AND continued."VehicleId" = scheduled."VehicleId"
                 AND continued."DriverId" = scheduled."DriverId"

@@ -46,3 +46,11 @@ Thumbs.db
 
 # Local safety backups
 backend/data/backups/
+
+# Deployment secrets / release artifacts
+*.env
+*.env.local
+!deploy/*.env.example
+*.tar.gz
+*.dump
+*.age

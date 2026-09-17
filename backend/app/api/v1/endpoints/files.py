@@ -2,7 +2,8 @@ from datetime import datetime
 import mimetypes
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from pathlib import PurePosixPath
+from app.services.storage import download_response
 from sqlalchemy.orm import Session
 
 from app.core.authorization import active_role, has_permission, own_records_only
@@ -25,7 +26,7 @@ from app.models import (
 )
 from app.schemas import AttachmentOut, UserRole
 from app.services.audit import record_audit
-from app.utils.files import attachment_path, legacy_upload_path, safe_original_filename, store_upload
+from app.utils.files import legacy_storage_key, safe_original_filename, store_upload
 
 router = APIRouter()
 UPLOAD_ROLES = (UserRole.admin, UserRole.fleet_manager, UserRole.mechanic, UserRole.finance, UserRole.driver)
@@ -198,7 +199,10 @@ def download_legacy_file(
         authorize_entity_permission(db, current_user, "VehicleService")
     elif isinstance(authorized, AccidentFile):
         authorize_entity_permission(db, current_user, "VehicleAccident")
-    file_path = legacy_upload_path(path)
+    if isinstance(authorized, AccidentFile):
+        authorize_entity_access(db, current_user, "VehicleAccident", authorized.accident)
+    key = legacy_storage_key(path)
+    file_path = PurePosixPath(key)
     mime_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
     record_audit(
         db, action="Document downloaded", entity_type="LegacyAttachment", entity_id=None,
@@ -206,11 +210,7 @@ def download_legacy_file(
         description="Legacy attachment downloaded.",
     )
     db.commit()
-    return FileResponse(
-        file_path, media_type=mime_type, filename=safe_original_filename(file_path.name),
-        content_disposition_type="attachment",
-        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
-    )
+    return download_response(key, safe_original_filename(file_path.name), mime_type)
 
 
 @router.get("/{file_id}/download")
@@ -228,7 +228,6 @@ def download_file(
         raise HTTPException(status_code=404, detail="Related record not found.")
     authorize_entity_permission(db, current_user, attachment.entity_type)
     authorize_entity_access(db, current_user, attachment.entity_type, entity)
-    path = attachment_path(attachment.storage_path)
     record_audit(
         db, action="Document downloaded", entity_type=attachment.entity_type,
         entity_id=attachment.entity_id, user=current_user,
@@ -236,13 +235,7 @@ def download_file(
         description=f"Attachment #{attachment.id} downloaded.",
     )
     db.commit()
-    return FileResponse(
-        path,
-        media_type=attachment.mime_type,
-        filename=attachment.original_filename,
-        content_disposition_type="attachment",
-        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
-    )
+    return download_response(attachment.storage_path, attachment.original_filename, attachment.mime_type)
 
 
 @router.delete("/{file_id}")

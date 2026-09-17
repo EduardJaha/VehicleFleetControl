@@ -161,6 +161,10 @@ def upgrade() -> None:
             'WHERE NOT EXISTS (SELECT 1 FROM "CompanyUsers" cu WHERE cu."CompanyId" = "Users"."CompanyId" AND cu."UserId" = "Users"."Id")'
         ), {"default": True})
 
+    if bind.dialect.name == "postgresql":
+        # An explicit legacy Id does not advance a PostgreSQL identity sequence.
+        bind.execute(sa.text("SELECT setval(pg_get_serial_sequence('\"Companies\"', 'Id'), (SELECT MAX(\"Id\") FROM \"Companies\"))"))
+
     _replace_company_aware_uniques(bind, set(present), broken_tables)
     _replace_active_assignment_indexes(bind, set(present), broken_tables)
 
@@ -187,8 +191,10 @@ def _replace_company_aware_uniques(bind, present: set[str], broken_tables: set[s
             for name in old_names:
                 if name in existing:
                     batch.drop_constraint(name, type_="unique")
-            if new_name and new_name not in existing:
-                batch.create_unique_constraint(new_name, columns)
+            rendered_name = (bind.dialect.identifier_preparer.truncate_and_render_constraint_name(
+                sa.schema.conv(new_name), _alembic_quote=False) if new_name else None)
+            if new_name and rendered_name not in existing:
+                batch.create_unique_constraint(sa.schema.conv(new_name), columns)
             if table == "Drivers":
                 for name, driver_columns in (
                     ("uq_drivers_company_email", ["CompanyId", "Email"]),

@@ -1,0 +1,18 @@
+# Deliberate runtime lock inputs. Resolve for Python 3.12/Linux and test before promotion.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.36,<1.0
+sqlalchemy>=2.0,<3.0
+alembic>=1.13,<2.0
+pydantic>=2.0,<3.0
+pydantic-settings>=2.0,<3.0
+python-multipart>=0.0.32,<1.0
+passlib[bcrypt]>=1.7,<2.0
+bcrypt>=3.2,<4.1
+python-jose[cryptography]>=3.3,<4.0
+openpyxl>=3.1,<4.0
+APScheduler>=3.10,<4.0
+psycopg[binary]>=3.2,<4.0
+boto3>=1.42,<2.0
+gunicorn>=23,<24
+uvicorn-worker>=0.4,<0.5
+sentry-sdk>=2.53,<3.0

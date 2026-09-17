@@ -3,8 +3,8 @@ from sqlalchemy.orm import DeclarativeBase, Session, declared_attr, sessionmaker
 from app.core.config import get_settings
 
 settings = get_settings()
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-engine = create_engine(settings.database_url, connect_args=connect_args)
+connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {"connect_timeout": 5, "options": "-c statement_timeout=120000"}
+engine = create_engine(settings.database_url, connect_args=connect_args, pool_pre_ping=True)
 
 
 class TenantSession(Session):

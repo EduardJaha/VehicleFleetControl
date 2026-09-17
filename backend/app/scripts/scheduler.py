@@ -8,7 +8,8 @@ from app.core.config import get_settings
 from app.services.scheduled_jobs import run_scheduled_job
 
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+from app.core.observability import configure_logging
+configure_logging()
 
 
 def build_scheduler() -> BlockingScheduler:
@@ -32,6 +33,8 @@ def build_scheduler() -> BlockingScheduler:
 
 
 def main() -> None:
+    from app.core.deployment import validate_deployment
+    validate_deployment()
     scheduler = build_scheduler()
     for job_name in (
         "notification_scan", "document_compliance_scan", "maintenance_reminder_scan",

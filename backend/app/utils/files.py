@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
+from tempfile import TemporaryDirectory
+from starlette.concurrency import run_in_threadpool
+from app.services.storage import get_storage, validate_key
 
 from fastapi import HTTPException, Request, UploadFile
 
@@ -76,15 +79,13 @@ async def store_upload(file: UploadFile, subfolder: str = "", category: str = "a
     if mime_type not in allowed_mime_types:
         raise HTTPException(status_code=415, detail=f"MIME type '{mime_type or '(missing)'}' is not allowed.")
 
-    base = settings.uploads_path.resolve()
-    target_dir = (base / subfolder).resolve() if subfolder else base
-    if target_dir != base and base not in target_dir.parents:
-        raise HTTPException(status_code=400, detail="Invalid upload destination.")
-    target_dir.mkdir(parents=True, exist_ok=True)
     stored_filename = f"{uuid4().hex}{extension}"
-    target = (target_dir / stored_filename).resolve()
-    if base not in target.parents:
-        raise HTTPException(status_code=400, detail="Invalid upload path.")
+    try:
+        key = validate_key(f"{subfolder}/{stored_filename}" if subfolder else stored_filename)
+    except ValueError:
+        raise HTTPException(400, "Invalid upload destination.") from None
+    temporary = TemporaryDirectory(prefix="fleet-upload-")
+    target = Path(temporary.name) / stored_filename
 
     file_size = 0
     header = b""
@@ -108,16 +109,21 @@ async def store_upload(file: UploadFile, subfolder: str = "", category: str = "a
         if not _content_matches(mime_type, header):
             raise HTTPException(status_code=415, detail="File content does not match its declared type.")
         scanner().scan(target)
+        def persist():
+            with target.open("rb") as source:
+                get_storage().put(key, source, mime_type)
+        await run_in_threadpool(persist)
     except Exception:
         target.unlink(missing_ok=True)
         raise
     finally:
         await file.close()
+        temporary.cleanup()
 
     return StoredUpload(
         original_filename=original,
         stored_filename=stored_filename,
-        storage_path=target.relative_to(base).as_posix(),
+        storage_path=key,
         mime_type=mime_type,
         file_size=file_size,
     )
@@ -162,3 +168,22 @@ def file_url(file_path: str | None, request: Request) -> str | None:
     # Kept for legacy response compatibility. New uploads return authenticated
     # /api/v1/files/{id}/download links instead.
     return file_path
+
+
+def legacy_storage_key(file_path: str) -> str:
+    base = settings.uploads_path.resolve()
+    candidate = Path(file_path.replace("\\", "/"))
+    if candidate.is_absolute():
+        try:
+            key = candidate.resolve().relative_to(base).as_posix()
+        except ValueError:
+            raise HTTPException(404, "File not found.") from None
+    else:
+        parts = list(candidate.parts)
+        if parts and parts[0] == base.name:
+            parts = parts[1:]
+        key = "/".join(parts)
+    try:
+        return validate_key(key)
+    except ValueError:
+        raise HTTPException(404, "File not found.") from None

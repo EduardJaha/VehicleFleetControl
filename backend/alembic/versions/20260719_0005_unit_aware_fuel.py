@@ -113,8 +113,8 @@ def upgrade() -> None:
         '"EnergyUnit" = COALESCE("EnergyUnit", '
         "CASE WHEN LOWER(TRIM(\"FuelType\")) = 'electric' THEN 'KWH' ELSE 'L' END), "
         '"UnitReviewRequired" = CASE '
-        "WHEN LOWER(TRIM(\"FuelType\")) = 'electric' THEN 1 "
-        'ELSE COALESCE("UnitReviewRequired", 0) END'
+        "WHEN LOWER(TRIM(\"FuelType\")) = 'electric' THEN true "
+        'ELSE COALESCE("UnitReviewRequired", false) END'
     ))
 
     missing = bind.execute(sa.text(

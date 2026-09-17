@@ -32,6 +32,8 @@ from app.schemas import (
 )
 from app.services import import_entities
 from app.services.import_source import source_rows
+from app.services.storage import get_storage, materialize
+from starlette.concurrency import run_in_threadpool
 from app.services.import_progress import write_progress
 from app.services.audit import record_audit, snapshot
 from app.services.license_plates import PlateValidationError, RegistrationCountry, normalize_license_plate, validate_license_plate
@@ -244,21 +246,14 @@ async def store_import(file: UploadFile, entity_type: str, user: User, db: Sessi
         raise HTTPException(413 if data else 400, "Import file must be nonempty and no larger than 10 MB.")
     with source_rows(io.BytesIO(data), extension) as (headers, rows):
         total_rows = sum(1 for _ in rows)
-    base = get_settings().uploads_path.resolve()
-    folder = (base / "imports").resolve()
-    if base not in folder.parents:
-        raise HTTPException(status_code=400, detail="Invalid import storage path.")
-    folder.mkdir(parents=True, exist_ok=True)
-    target = (folder / f"{uuid4().hex}{extension}").resolve()
-    if base not in target.parents:
-        raise HTTPException(status_code=400, detail="Invalid import storage path.")
+    key = f"imports/{uuid4().hex}{extension}"
     try:
-        target.write_bytes(data)
+        await run_in_threadpool(get_storage().put, key, io.BytesIO(data), file.content_type or "application/octet-stream")
         job = ImportJob(
             company_id=db.info.get("company_id", user.company_id),
             entity_type=entity_type,
             filename=filename,
-            source_path=target.relative_to(base).as_posix(),
+            source_path=key,
             uploaded_by=user.id,
             status=ImportJobStatus.uploaded.value,
             source_headers=headers,
@@ -275,19 +270,15 @@ async def store_import(file: UploadFile, entity_type: str, user: User, db: Sessi
         db.refresh(job)
         return job
     except Exception:
-        target.unlink(missing_ok=True)
         db.rollback()
         raise
 
 
 @contextmanager
 def read_job_source(job):
-    base = get_settings().uploads_path.resolve()
-    path = (base / job.source_path).resolve()
-    if base not in path.parents or not path.is_file():
-        raise HTTPException(404, "The retained import source file was not found.")
-    with path.open("rb") as stream, source_rows(stream, path.suffix.lower()) as result:
-        yield result
+    with materialize(job.source_path) as path:
+        with path.open("rb") as stream, source_rows(stream, path.suffix.lower()) as result:
+            yield result
 
 
 def read_job_rows(job):

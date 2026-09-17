@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from pathlib import PurePosixPath
+from app.services.storage import download_response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -40,7 +41,7 @@ from app.schemas import (
     CompanySettingsUpdate,
 )
 from app.services.audit import record_audit
-from app.utils.files import attachment_path, store_upload
+from app.utils.files import store_upload
 
 router = APIRouter()
 
@@ -385,11 +386,7 @@ def get_company_logo(
     settings = db.query(CompanySettings).filter(CompanySettings.company_id == db.info["company_id"]).first()
     if settings is None or not settings.logo_path:
         raise HTTPException(404, detail="Company logo was not found.")
-    return FileResponse(
-        attachment_path(settings.logo_path),
-        content_disposition_type="inline",
-        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"},
-    )
+    return download_response(settings.logo_path, PurePosixPath(settings.logo_path).name, inline=True)
 
 
 @router.get("/{kind}", response_model=list[MasterDataOut])

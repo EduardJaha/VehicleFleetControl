@@ -1,0 +1,169 @@
+name: Verify and release
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        type: boolean
+        default: false
+      environment:
+        type: choice
+        options: [staging, production]
+        default: staging
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_USER: fleet
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: fleet_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U fleet -d fleet_test" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      ENVIRONMENT: test
+      TEST_POSTGRES_URL: postgresql+psycopg://fleet:ci-only-password@localhost:5432/fleet_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
+      - run: python -m compileall -q app alembic
+      - run: pytest -q
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements-dev.txt
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run i18n:check && npm run lint && npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:e2e
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: frontend/test-results
+  containers:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install httpx==0.28.1
+      - run: docker compose -p fleet-ci -f deploy/compose.test.yml up --build --wait --wait-timeout 240 backend frontend proxy
+      - run: python scripts/container-smoke.py
+      - run: docker compose -p fleet-ci -f deploy/compose.test.yml restart database storage backend frontend proxy
+      - run: docker compose -p fleet-ci -f deploy/compose.test.yml up --wait --wait-timeout 180 backend frontend proxy && python scripts/container-smoke.py --verify
+      - run: bash scripts/container-backup-test.sh
+      - run: docker run --rm -e DOMAIN=fleet.example.com -e ACME_EMAIL=ops@example.com -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+      - name: Save tested production images
+        run: docker save fleet-backend:test fleet-frontend:test fleet-backup:test | gzip > /tmp/fleet-images.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tested-images
+          path: /tmp/fleet-images.tar.gz
+          compression-level: 0
+          retention-days: 2
+      - run: python scripts/clean-source-archive.py --output /tmp/fleet-source.tar.gz
+      - run: docker compose -p fleet-ci -f deploy/compose.test.yml logs --no-color
+        if: failure()
+      - run: docker compose -p fleet-ci -f deploy/compose.test.yml down -v
+        if: always()
+  publish:
+    needs: [containers]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend_image: ${{ steps.push.outputs.backend_image }}
+      frontend_image: ${{ steps.push.outputs.frontend_image }}
+      backup_image: ${{ steps.push.outputs.backup_image }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: names
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: tested-images
+          path: /tmp/tested-images
+      - run: docker load < /tmp/tested-images/fleet-images.tar.gz
+      - id: push
+        env:
+          IMAGE_PREFIX: ${{ steps.names.outputs.prefix }}
+        run: |
+          set -euo pipefail
+          for component in backend frontend backup; do
+            reference="$IMAGE_PREFIX-$component:$GITHUB_SHA"
+            docker tag "fleet-$component:test" "$reference"
+            docker push "$reference"
+            digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$reference")
+            echo "${component}_image=$digest" >> "$GITHUB_OUTPUT"
+          done
+  deploy:
+    needs: [publish]
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deployment-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy tested revision
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          BACKEND_IMAGE: ${{ needs.publish.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.publish.outputs.frontend_image }}
+          BACKUP_IMAGE: ${{ needs.publish.outputs.backup_image }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          python scripts/clean-source-archive.py --output /tmp/fleet-source.tar.gz
+          scp /tmp/fleet-source.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/fleet-$GITHUB_SHA.tar.gz"
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$GITHUB_SHA" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" "$BACKUP_IMAGE" "$TARGET_ENVIRONMENT" < deploy/remote-deploy.sh

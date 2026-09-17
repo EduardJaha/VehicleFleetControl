@@ -8,9 +8,9 @@ A fleet operations application for administrators, fleet managers, mechanics, dr
 
 **Implemented:** company registration/switching, tenant isolation, permission administration, lifecycle/TCO reports, vehicle/driver imports, in-app notifications, service programs, and inspection templates/schedules.
 
-**Partial/stubbed:** antivirus is a no-op. Imports cover Vehicles, Drivers, historical Services, Fuel/Charging, Assignments, Documents Metadata, Vendors, and Parts; live assignment activation remains in the handover workflow. Company isolation is a SaaS foundation; billing/subscriptions, email/SMS delivery, and an installed periodic scheduler are absent.
+**Partial/stubbed:** antivirus is a no-op. Imports cover Vehicles, Drivers, historical Services, Fuel/Charging, Assignments, Documents Metadata, Vendors, and Parts; live assignment activation remains in the handover workflow. Company isolation is a SaaS foundation; billing/subscriptions and SMS delivery are absent; SMTP delivery and a dedicated scheduler are implemented.
 
-**Actual database:** SQLite is configured in examples, Compose, and tests. SQL Server is intended in the brief but has no configured driver, container, or verified migration workflow.
+**Databases:** SQLite remains the development/test default. PostgreSQL with psycopg 3 is required by the staging/production deployment validator. Production architecture, backup/restore, CI and release procedures: `docs/production-deployment.md`. SQL Server is not supported by deployment validation.
 
 ```mermaid
 flowchart LR
@@ -19,7 +19,7 @@ flowchart LR
     AUTH --> LOGIC[Endpoint logic + domain services]
     LOGIC --> ORM[SQLAlchemy synchronous ORM]
     ORM --> DB[(SQLite default)]
-    LOGIC --> DISK[Private local uploads]
+    LOGIC --> DISK[Private local or S3 object storage]
     JOB[Notification generation command] --> LOGIC
 ```
 
@@ -37,7 +37,7 @@ flowchart LR
 | Verification | pytest, unittest, HTTPX/TestClient; Playwright, ESLint | Backend rules/migrations and mocked browser workflows |
 | Development | Python 3.11+ / Node 18+ per README; Compose uses Python 3.12 / Node 20 | Two separately started applications |
 
-Dependencies/scripts: `backend/requirements.txt`, `frontend/package.json`. Frontend has `package-lock.json`; Python has unpinned ranges.
+Dependencies/scripts: `backend/requirements.txt`, `frontend/package.json`. Frontend has `package-lock.json`; Python runtime/transitive dependencies are exact-pinned in `backend/requirements.txt`; test dependencies are in `requirements-dev.txt`.
 
 ## 3. Repository Structure
 
@@ -100,7 +100,7 @@ Forms use controlled inputs, HTML constraints, and manual validation. Reuse doma
 
 ## 5. Backend Architecture
 
-`backend/app/main.py` registers CORS, HTTP/validation exception handlers, `/health`, and `api_router` under configurable `/api/v1`. It does not create tables or migrate at startup. `backend/app/api/v1/router.py` registers all feature routers, including supply routes **without an extra prefix**.
+`backend/app/main.py` registers CORS, HTTP/validation exception handlers, `/health` and `/health/live` (liveness), `/health/ready` (database/schema/storage readiness), and `api_router` under configurable `/api/v1`. It does not create tables or migrate at startup. `backend/app/api/v1/router.py` registers all feature routers, including supply routes **without an extra prefix**.
 
 Flow: request → dependencies/validation → endpoint/shared service → SQLAlchemy → explicit commit → output DTO. Most handlers are synchronous; async handlers mainly read uploads. Logic lives in endpoints and S services, which sometimes import endpoint helpers.
 
@@ -108,7 +108,7 @@ Flow: request → dependencies/validation → endpoint/shared service → SQLAlc
 
 `core/security.py` handles cookie JWT identity/company/session-version checks (legacy Bearer validation retained). `core/http_security.py` validates trusted Origin/Referer for cookie mutations and login, and adds API security headers. `S/login_security.py` uses atomic database-backed IP/account and IP-only fixed windows. New passwords use bcrypt_sha256 with legacy bcrypt verification; the shared new-password minimum is 12 characters. Logout revokes all of the user's sessions. `core/authorization.py` owns permission catalog, six default roles, custom role grants, and location/department/cost-center/own-record scopes; endpoints must apply those scopes. Roles/permissions are global definitions, while grants and operational data are company-owned. Legacy role/membership fallback remains only where no membership row exists, never for an explicitly inactive row. See `docs/authentication-security.md` for deployment requirements.
 
-`core/errors.py` returns `{code, message, params}` or 422 `{code, message, field_errors}`. Prefer explicit codes: fallback inference can conceal errors. `S/audit.py` snapshots/redacts AuditLog data. Other logging is Uvicorn/Alembic output; no central structured logging setup exists.
+`core/errors.py` returns `{code, message, params}` or 422 `{code, message, field_errors}`. Prefer explicit codes: fallback inference can conceal errors. `S/audit.py` snapshots/redacts AuditLog data. Request/scheduler logging uses allowlisted JSON in staging/production and readable console output in development/test, with correlation IDs and safe tenant/user IDs. `core/observability.py` provides optional sanitized Sentry events; never log arbitrary payloads or exception values.
 
 ## 6. Core Data Model
 
@@ -219,7 +219,7 @@ F/C paths use the opening prefixes. Calls use `frontend/src/lib/api.ts`; there i
 
 ## 10. File Upload Architecture
 
-`backend/app/utils/files.py:store_upload` checks extension, MIME, leading signature, size/emptiness, and destination boundaries. It streams 1 MiB chunks into UUID filenames, retains sanitized original names, and cleans partial writes on failure.
+`backend/app/services/storage.py` provides LocalStorageProvider/ObjectStorageProvider. Attachments, logos, retained import sources and progress sidecars use private local or S3-compatible storage. Authorized downloads stream through the API. `backend/app/utils/files.py:store_upload` checks extension, MIME, leading signature, size/emptiness, and destination boundaries. It validates 1 MiB chunks in temporary UUID files, persists through the selected provider, retains sanitized names, and cleans temporary files on exit.
 
 | Entry | Accepted category / storage subfolder |
 |---|---|
@@ -289,13 +289,13 @@ From repository root; copy examples only for initial setup, preserving existing 
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env
 alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Set a private JWT secret. Windows activation: `.venv\Scripts\Activate.ps1` / `.venv\Scripts\activate`. `/health` checks liveness only; API docs: `http://localhost:8000/docs`.
+Set a private JWT secret. Windows activation: `.venv\Scripts\Activate.ps1` / `.venv\Scripts\activate`. `/health` and `/health/live` check liveness; `/health/ready` checks database, Alembic head and storage; API docs: `http://localhost:8000/docs`.
 
 ### Frontend
 
@@ -314,9 +314,9 @@ Production frontend commands: `npm run build`, then `npm run start`. Development
 
 Default SQLite needs no server. Start dependencies/environment → migrations → API → frontend. Register a **company administrator** through `/login` / `POST /api/v1/auth/register`; registration onboards each company.
 
-Root `docker compose up` installs dependencies, migrates, and starts both bind-mounted development services. No Dockerfiles/production pipeline exist. Launchers: `bash scripts/run-local.sh` (macOS Terminal/fallback), `scripts/run-local.bat` (Windows).
+Root `docker compose up` installs dependencies, migrates, and starts bind-mounted development services. `docker-compose.prod.yml` is a separate deployment with non-root built images, PostgreSQL, external S3 storage, Caddy HTTPS and encrypted backups. `.github/workflows/ci.yml` gates image publication/deployment on tests, migrations, browser checks and container backup/restore. See `docs/production-deployment.md`. Launchers: `bash scripts/run-local.sh` (macOS Terminal/fallback), `scripts/run-local.bat` (Windows).
 
-From backend: `python -m app.scripts.seed_vehicle_catalog` seeds catalog; `python -m app.scripts.generate_notifications` processes active companies, reminders/programs, inspection requirements, and time-based alerts. Run the latter periodically using deployment scheduling; this repository does not install that schedule.
+From backend: `python -m app.scripts.seed_vehicle_catalog` seeds catalog; `python -m app.scripts.generate_notifications` processes active companies, reminders/programs, inspection requirements, and time-based alerts. The Compose scheduler runs periodic notification/maintenance/compliance/email jobs; run one scheduler replica per environment.
 
 ## 14. Testing
 
@@ -332,7 +332,7 @@ npm run i18n:scan
 npm run test:e2e
 ```
 
-Playwright requires Chromium and starts/reuses Next at `127.0.0.1:3000`; most feature specs mock `localhost:8000/api/v1`. `auth-cookie-live.spec.ts` uses browser-visible localhost and forwards to a real isolated FastAPI process with in-memory SQLite (`backend/tests/auth_browser_server.py`), requiring `backend/.venv/bin/python`. It tests real cookie/reload/CSRF/logout behavior without operational data; other browser specs are not live database integration tests. No Jest/Vitest or CI exists.
+Playwright requires Chromium and starts/reuses Next at `127.0.0.1:3000`; most feature specs mock `localhost:8000/api/v1`. `auth-cookie-live.spec.ts` uses browser-visible localhost and forwards to a real isolated FastAPI process with in-memory SQLite (`backend/tests/auth_browser_server.py`), requiring `backend/.venv/bin/python`. It tests real cookie/reload/CSRF/logout behavior without operational data; other browser specs are not live database integration tests. No Jest/Vitest exists. GitHub Actions runs backend/frontend/browser and container deployment checks.
 
 | Change | Focused verification |
 |---|---|
@@ -410,12 +410,12 @@ Contract → model/migration → transactional API/permissions → client/form/d
 - Large models/schemas/pages/supply router, endpoint cross-imports, duplicate enum/permission definitions, and inconsistent date/pagination contracts increase coupling.
 - Reservation overlap, generic accident transitions, and reminder date boundaries need attention (§7).
 - Tenant/record scopes vary by handler; legacy membership fallbacks remain. UI gating cannot substitute for API scope checks.
-- Files: antivirus stub, permissive auto-size policy, transaction orphans. Legacy accident downloads omit the generic ownership check; attachment archive omits the upload/download entity-access helper.
+- Files: antivirus stub, permissive auto-size policy, transaction orphans. Legacy accident downloads now apply ownership checks; attachment archive still omits the upload/download entity-access helper.
 - Browser authentication uses expiring HttpOnly cookies with CSRF checks and a shared database rate limiter; no refresh flow. Same-site hosting/HTTPS/trusted proxy configuration are deployment requirements. Script-restricting CSP, optional MFA and self-service recovery remain future work; see `docs/authentication-security.md`.
 - Company notification rules gate selected generation categories, not every event. Stored timezone/currency do not imply universal timezone conversion or currency conversion.
 - Imports reject formulas and bound expanded XLSX content to 100 MiB. Bulk import requires unrestricted domain grants; scoped bulk imports and live Active/Overdue assignment imports are not supported. Jobs run synchronously without distributed workers; a process crash during a claimed job requires operator recovery after verifying the process stopped.
 - Preserve legacy columns, metadata-coupled bootstrap migrations, and migration bridge compatibility (§11).
-- README's first-admin narrative and historical notes lag onboarding/features. No production Docker build, CI, installed scheduler, or comprehensive live integration suite exists.
+- README's first-admin narrative and historical notes lag onboarding/features. Production Docker builds, CI and a dedicated scheduler now exist. Container integration checks use disposable PostgreSQL/MinIO; operational readiness still requires a production backup restore rehearsal.
 
 ## 20. Agent Rules
 
@@ -456,3 +456,12 @@ Prefixes are defined above; shared model/DTO/client files are in §§4–6.
 | Notifications/imports | `S/notification_generation.py`, `S/imports.py`, `S/import_entities.py`, `S/import_source.py`, matching E routers | `F/notifications/page.tsx`, `F/imports/page.tsx` |
 | Database/config/new endpoint | `backend/app/db/session.py`, `backend/app/core/config.py`, `backend/alembic/versions/`, `backend/app/api/v1/router.py` | `frontend/src/lib/api.ts` |
 | New page/shared UI | Match the domain endpoint/DTO | `frontend/app/`, `frontend/src/components/ui/`, shell navigation |
+
+## 22. Production deployment additions
+
+- `backend/Dockerfile`, `backend/gunicorn.conf.py`: pinned runtime dependencies, non-root Gunicorn with uvicorn-worker, no startup install/reload. `frontend/Dockerfile` builds and runs Next standalone.
+- `backend/app/core/deployment.py`: fail-closed staging/production checks; settings normalize PostgreSQL URLs to psycopg. `app/scripts/migrate.py` runs Alembic under a PostgreSQL advisory lock.
+- `deploy/Caddyfile`, `docker-compose.prod.yml`, `deploy/*.env.example`: isolated production configuration, HTTPS, upload/time limits, dedicated scheduler, durable database volume. Source mounts exist only in development; proxy config is mounted read-only.
+- `deploy/backup/backup.py`: daily age-encrypted snapshots, retention and guarded restore verification. Private recovery key stays off the backup host.
+- `backend/tests/test_deployment.py`, `test_postgresql_deployment.py`, `test_backup_restore.py`, `deploy/compose.test.yml`: health, S3, authorization, migration/persistence and backup checks. PostgreSQL tests use only disposable randomly named databases; configure `TEST_POSTGRES_URL`.
+- `scripts/clean-source-archive.py`: commit-based filtered release archive. Never package the working directory recursively.

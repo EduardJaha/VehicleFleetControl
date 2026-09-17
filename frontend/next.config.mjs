@@ -4,6 +4,7 @@ import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 export default function nextConfig(phase) {
   return {
     reactStrictMode: true,
+    output: "standalone",
     poweredByHeader: false,
     async headers() {
       return [{ source: "/:path*", headers: [

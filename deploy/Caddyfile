@@ -1,0 +1,42 @@
+{
+    email {$ACME_EMAIL}
+    servers {
+        timeouts {
+            read_body 180s
+            read_header 10s
+            write 180s
+            idle 120s
+        }
+    }
+}
+{$DOMAIN} {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Content-Security-Policy "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+        -Server
+    }
+    request_body {
+        max_size 12MB
+    }
+    @api path /api/* /health /health/*
+    handle @api {
+        reverse_proxy backend:8000 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 180s
+            }
+        }
+    }
+    handle {
+        reverse_proxy frontend:3000 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 180s
+            }
+        }
+    }
+}

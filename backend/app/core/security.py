@@ -147,7 +147,11 @@ def get_current_user(
             detail="Could not validate credentials.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return validate_access_token(access_token, db, request_path=request.url.path if request is not None else None)
+    user = validate_access_token(access_token, db, request_path=request.url.path if request is not None else None)
+    if request is not None:
+        request.state.user_id = user.id
+        request.state.company_id = db.info.get("company_id")
+    return user
 
 
 def require_roles(*roles: UserRole):

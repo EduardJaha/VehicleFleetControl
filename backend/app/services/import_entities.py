@@ -364,10 +364,11 @@ def prepare(db, job, mapped):
                         owner_document = unique(db, VehiclePaper, company, id=version.document_id)
             if not owner_document or owner_document.archived or owner_document.vehicle_id != data["vehicle_id"] or owner_document.driver_id != data["driver_id"]:
                 fail("attachment_id", "import_unsafe_attachment", "Use an existing secure PDF attachment belonging to a document for the same owner and company.")
-            from app.core.config import get_settings
-            base = get_settings().uploads_path.resolve()
-            path = (base / attachment.storage_path).resolve()
-            if base not in path.parents or not path.is_file():
+            from app.services.storage import get_storage
+            try:
+                with get_storage().open(attachment.storage_path):
+                    pass
+            except (OSError, ValueError):
                 fail("attachment_id", "import_unsafe_attachment", "Secure attachment file is unavailable.")
             data["_attachment_id"] = attachment.id
             data["file_path"] = f"/api/v1/files/{attachment.id}/download"

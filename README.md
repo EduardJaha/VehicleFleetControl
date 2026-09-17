@@ -1,8 +1,12 @@
 # VehicleFleetControl
 
+## Production deployment
+
+Use PostgreSQL, private S3-compatible storage and the separate production Compose stack. The [deployment runbook](docs/production-deployment.md) covers first installation, staging, HTTPS, secrets, migrations, encrypted backup/restore, gated releases and clean source archives. Development remains available through `docker-compose.yml` and SQLite.
+
 VehicleFleetControl is a full-stack vehicle fleet management system designed to help companies manage their vehicles, service history, fuel records, vehicle papers, accidents, and reservations from one centralized platform.
 
-The project is built with a **Next.js + TypeScript frontend** and a **Python FastAPI backend**. It uses a local SQLite database for development and provides a clean API structure that can later be extended to support production databases such as PostgreSQL.
+The project is built with a **Next.js + TypeScript frontend** and a **Python FastAPI backend**. It uses SQLite for local development and PostgreSQL for staging and production.
 
 ---
 
@@ -283,7 +287,7 @@ python -m venv .venv
 
 .venv\Scripts\Activate.ps1
 
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -297,7 +301,7 @@ python -m venv .venv
 
 .venv\Scripts\activate
 
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -311,7 +315,7 @@ python3 -m venv .venv
 
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -374,7 +378,7 @@ For a new environment, install dependencies and migrate before starting:
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 alembic upgrade head
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
@@ -606,7 +610,7 @@ npm run dev
 
 ```bash
 cd backend
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 ### Install Frontend Dependencies

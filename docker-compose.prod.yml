@@ -1,0 +1,121 @@
+# Use separately: docker compose --env-file deploy/production.env -f docker-compose.prod.yml ...
+x-backend: &backend
+  image: ${BACKEND_IMAGE:?Set an immutable backend image tag or digest}
+  env_file: ${APP_ENV_FILE:?Set the absolute path of the backend environment file}
+  environment:
+    FORWARDED_ALLOW_IPS: ${APP_SUBNET:-172.30.10.0/24}
+  read_only: true
+  tmpfs:
+    - /tmp:mode=1777,size=536870912
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  networks: [app]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '5'
+
+services:
+  database:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:?Set the non-superuser application role}
+      POSTGRES_APP_PASSWORD_FILE: /run/secrets/app_database_password
+    secrets: [postgres_password, app_database_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init-app.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    networks: [app]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  migrate:
+    <<: *backend
+    command: [python, -m, app.scripts.migrate]
+    restart: 'no'
+    healthcheck:
+      disable: true
+    depends_on:
+      database:
+        condition: service_healthy
+
+  backend:
+    <<: *backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *backend
+    command: [python, -m, app.scripts.scheduler]
+    healthcheck:
+      disable: true
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set an immutable frontend image tag or digest}
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=67108864
+      - /app/.next/cache:uid=10001,gid=10001,mode=0700,size=134217728
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [app]
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2.10-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports: ['80:80', '443:443', '443:443/udp']
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [app]
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+
+  backup:
+    image: ${BACKUP_IMAGE:?Set an immutable backup image tag or digest}
+    env_file: ${BACKUP_ENV_FILE:?Set the absolute backup environment path}
+    secrets: [app_database_password]
+    networks: [app]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=2147483648
+    depends_on:
+      database:
+        condition: service_healthy
+
+networks:
+  app:
+    ipam:
+      config:
+        - subnet: ${APP_SUBNET:-172.30.10.0/24}
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:?Set the absolute database password file path}
+  app_database_password:
+    file: ${APP_DATABASE_PASSWORD_FILE:?Set the absolute application database password file path}

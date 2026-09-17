@@ -25,12 +25,20 @@ def upgrade() -> None:
     if not {"DocumentRequirements", "VehiclePapers"}.issubset(tables):
         return
 
+    # Fresh bootstrap metadata already has tenant FKs before revision 0016.
+    if "Companies" in tables:
+        bind.execute(sa.text(
+            'INSERT INTO "Companies" ("Id", "Name", "Slug", "IsActive", "CreatedAt", "UpdatedAt") '
+            "SELECT 1, 'Default Company', 'default-company', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP "
+            'WHERE NOT EXISTS (SELECT 1 FROM "Companies" WHERE "Id" = 1)'
+        ))
+
     canonical_id = bind.execute(sa.text(
         """
         SELECT "Id"
         FROM "DocumentRequirements"
         WHERE LOWER("DocumentType") = 'registration'
-          AND "AppliesToDriver" = 0
+          AND "AppliesToDriver" = false
           AND "AppliesToCountry" IS NULL
           AND "AppliesToVehicleCategory" IS NULL
         ORDER BY "IsActive" DESC, "Id"
@@ -44,7 +52,7 @@ def upgrade() -> None:
                 ("DocumentType", "AppliesToDriver", "Required", "ValidityMonths",
                  "WarningDays", "IsActive", "CreatedAt", "UpdatedAt")
             VALUES
-                ('Registration', 0, 1, 12, 30, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ('Registration', false, true, 12, 30, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """
         ))
         canonical_id = bind.execute(sa.text(
@@ -52,7 +60,7 @@ def upgrade() -> None:
             SELECT "Id"
             FROM "DocumentRequirements"
             WHERE LOWER("DocumentType") = 'registration'
-              AND "AppliesToDriver" = 0
+              AND "AppliesToDriver" = false
               AND "AppliesToCountry" IS NULL
               AND "AppliesToVehicleCategory" IS NULL
             ORDER BY "Id"
@@ -88,7 +96,7 @@ def upgrade() -> None:
     bind.execute(sa.text(
         """
         UPDATE "DocumentRequirements"
-        SET "IsActive" = 0,
+        SET "IsActive" = false,
             "UpdatedAt" = CURRENT_TIMESTAMP
         WHERE "DocumentType" IN (
             'Kosovo registration documentation',
@@ -100,7 +108,7 @@ def upgrade() -> None:
         sa.text(
             """
             UPDATE "DocumentRequirements"
-            SET "IsActive" = 1,
+            SET "IsActive" = true,
                 "UpdatedAt" = CURRENT_TIMESTAMP
             WHERE "Id" = :canonical_id
             """
@@ -116,7 +124,7 @@ def downgrade() -> None:
     bind.execute(sa.text(
         """
         UPDATE "DocumentRequirements"
-        SET "IsActive" = 1,
+        SET "IsActive" = true,
             "UpdatedAt" = CURRENT_TIMESTAMP
         WHERE "DocumentType" IN (
             'Kosovo registration documentation',

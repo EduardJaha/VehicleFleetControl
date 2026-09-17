@@ -139,7 +139,7 @@ def upgrade() -> None:
                 WHERE a."EntityType" = 'VehiclePaper' AND a."EntityId" = p."Id"
                 ORDER BY a."Id" LIMIT 1),
                COALESCE(p."CreatedAt", CURRENT_TIMESTAMP),
-               'Approved', 1, p."Archived"
+               'Approved', true, p."Archived"
         FROM "VehiclePapers" p
         """
     ))
@@ -162,7 +162,7 @@ def upgrade() -> None:
                      "IsActive", "CreatedAt", "UpdatedAt")
                 VALUES
                     (:document_type, :category, :country, :driver, :required,
-                     :validity, :warning, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                     :validity, :warning, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """
             ),
             {

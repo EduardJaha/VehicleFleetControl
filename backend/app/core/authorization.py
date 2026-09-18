@@ -10,6 +10,7 @@ from app.models import Permission, Role, RolePermission, User, UserRole as UserR
 
 
 PERMISSION_CATALOG: dict[str, tuple[str, str]] = {
+    "integrations.manage": ("Administration", "Manage API keys and webhooks"),
     "parts.view": ('Parts', 'View parts catalog'),
     "parts.manage": ('Parts', 'Manage parts catalog'),
     "inventory.view": ('Inventory', 'View stock and transactions'),
@@ -68,7 +69,7 @@ PERMISSION_CATALOG: dict[str, tuple[str, str]] = {
 ALL_PERMISSIONS = frozenset(PERMISSION_CATALOG)
 DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "admin": ALL_PERMISSIONS,
-    "fleet_manager": frozenset(p for p in ALL_PERMISSIONS if p not in {"users.manage", "roles.manage", "settings.manage"}),
+    "fleet_manager": frozenset(p for p in ALL_PERMISSIONS if p not in {"users.manage", "roles.manage", "settings.manage", "integrations.manage"}),
     "mechanic": frozenset({
         "parts.view", "inventory.view", "inventory.manage", "vendors.view", "technicians.view", "labor.manage",
         "dashboard.view", "vehicles.view", "drivers.view", "assignments.view",
@@ -157,6 +158,8 @@ def _assignments(db: Session, user: User) -> list[UserRoleAssignment]:
 
 
 def get_user_permissions(db: Session | None, user: User) -> set[str]:
+    if db is not None and "api_key_permissions" in db.info:
+        return set(db.info["api_key_permissions"])
     if db is not None and user.id is not None:
         assignments = _assignments(db, user)
         if assignments:

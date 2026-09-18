@@ -2062,5 +2062,55 @@
       "Conflict": "Conflict",
       "Failed": "Failed"
     }
+  },
+  "integrations": {
+    "apiKeys": "API keys",
+    "webhooks": "Webhooks",
+    "keysDescription": "Grant selected access to external clients. Keys are limited to your current company and permissions.",
+    "hooksDescription": "Send signed events to public HTTPS endpoints. Delivery runs in the background. Rotation replaces the secret immediately; in-flight requests may use the previous secret.",
+    "saved": "Changes saved.",
+    "saveSecret": "Save this secret now",
+    "shownOnce": "This secret is shown only once. Store it securely before leaving this page.",
+    "dismiss": "Dismiss secret",
+    "create": "Create",
+    "name": "Name",
+    "expires": "Expires at (optional)",
+    "url": "Webhook URL",
+    "scopes": "Scopes",
+    "events": "Events",
+    "loading": "Loading…",
+    "refresh": "Refresh",
+    "empty": "No integrations yet.",
+    "details": "Details",
+    "actions": "Actions",
+    "revoked": "Revoked",
+    "expired": "Expired",
+    "active": "Active",
+    "lastUsed": "Last used",
+    "version": "Secret version",
+    "rotate": "Rotate",
+    "revoke": "Revoke",
+    "deliveries": "Inspect deliveries",
+    "noDeliveries": "No deliveries yet.",
+    "eventId": "Event ID",
+    "attempts": "Attempts",
+    "nextAttempt": "Scheduled attempt",
+    "resendOf": "Resend of delivery",
+    "retry": "Resend",
+    "older": "Load older deliveries",
+    "status": {
+      "Pending": "Pending",
+      "Delivered": "Delivered",
+      "Failed": "Failed",
+      "Retrying": "Retrying",
+      "Dead": "Dead"
+    },
+    "outcome": {
+      "InFlight": "In progress",
+      "Interrupted": "Interrupted",
+      "Delivered": "Delivered",
+      "HTTPError": "HTTP error",
+      "TransportError": "Connection or configuration error"
+    }
   }
 }

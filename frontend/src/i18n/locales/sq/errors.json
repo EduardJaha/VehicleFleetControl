@@ -118,5 +118,12 @@
   "mobile_retry_changed": "Ky identifikues riprovimi është përdorur për të dhëna të tjera. Drafti juaj ruhet.",
   "mobile_version_required": "Shkarkoni versionin e inspektimit përpara sinkronizimit.",
   "mobile_invalid_fields": "Kontrolloni fushat e raportit lokal përpara riprovimit.",
-  "mobile_photo_size": "Fotografia nuk mund të kalojë 8 MiB."
+  "mobile_photo_size": "Fotografia nuk mund të kalojë 8 MiB.",
+  "integration_key_invalid": "Çelës API i pavlefshëm ose i skaduar.",
+  "integration_scope_denied": "Fusha e aksesit të çelësit API nuk lejon këtë veprim.",
+  "integration_not_configured": "Enkriptimi i webhook-ut nuk është konfiguruar.",
+  "integration_url_invalid": "Përdorni një adresë publike HTTPS për webhook-un në portën 443.",
+  "integration_not_found": "Regjistrimi i integrimit nuk u gjet.",
+  "integration_inactive": "Integrimi është revokuar ose ka skaduar.",
+  "integration_retry_unavailable": "Kjo dërgesë nuk mund të ridërgohet tani."
 }

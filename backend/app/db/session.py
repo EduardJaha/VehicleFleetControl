@@ -83,3 +83,21 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# Lazy imports avoid model/service cycles; every writer uses the same outbox hooks.
+@event.listens_for(Session, "after_flush")
+def _capture_integration_events(db, context):
+    from app.services.integration_events import capture_events
+    capture_events(db, context)
+
+
+@event.listens_for(Session, "after_flush_postexec")
+def _persist_integration_events(db, context):
+    from app.services.integration_events import persist_events
+    persist_events(db, context)
+
+
+@event.listens_for(Session, "after_rollback")
+def _clear_integration_events(db):
+    db.info.pop("integration_events", None)

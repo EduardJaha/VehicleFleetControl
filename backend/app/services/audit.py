@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.models import AuditLog, User
 
 SENSITIVE_KEYS = {
+    "key_hash",
+    "raw_key",
     "password",
     "hashed_password",
     "password_hash",

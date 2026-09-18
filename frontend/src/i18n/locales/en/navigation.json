@@ -34,5 +34,6 @@
   "supplyReports": "Maintenance Supply Reports",
   "maintenancePrograms": "Maintenance Programs",
   "inspectionTemplates": "Inspection Templates",
-  "notificationPreferences": "Notification Preferences"
+  "notificationPreferences": "Notification Preferences",
+  "integrations": "Integrations"
 }

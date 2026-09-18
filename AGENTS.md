@@ -243,7 +243,7 @@ Frontend uses `apiPostForm` with browser-generated multipart boundaries and auth
 
 `DATABASE_URL` configures SQLAlchemy; the default resolves from backend working directory to `backend/data/vehiclemanagement.db`. Request mutations explicitly commit/rollback. Tenant isolation is application-level.
 
-Alembic uses `Base.metadata`, `compare_type=True`, SQLite batch operations, and settings-based URL in `backend/alembic/env.py`. Current source head: **`20260917_0022`** (mobile retry receipts and narrow driver self-service grants). Migration history includes the intentional no-op `20260810_0015` legacy bridge before lifecycle revision `20260812_0015`; do not delete/reorder it. Early migrations bootstrap empty DBs from current metadata, while later migrations freeze definitions/check existing schemas. Test both fresh and populated upgrade paths.
+Alembic uses `Base.metadata`, `compare_type=True`, SQLite batch operations, and settings-based URL in `backend/alembic/env.py`. Current source head: **`20260917_0023`** (tenant API keys and webhook outbox). Migration history includes the intentional no-op `20260810_0015` legacy bridge before lifecycle revision `20260812_0015`; do not delete/reorder it. Early migrations bootstrap empty DBs from current metadata, while later migrations freeze definitions/check existing schemas. Test both fresh and populated upgrade paths.
 
 From `backend/`, with dependencies/environment ready:
 
@@ -476,3 +476,13 @@ Prefixes are defined above; shared model/DTO/client files are in §§4–6.
 - Driver self-service grants: `assignments.self_service`, `accidents.report`, `maintenance.report_issue`. Existing management grants remain distinct. Technician identity uses `Technician.user_id` and order assignments, never display-name matching. Mobile reservation ownership uses assignment FKs because `reserved_by` is free text.
 - Offline inspection downloads reserve a frozen server draft per vehicle/type/date; existing scheduled drafts preserve their schedule/item IDs. Accident packs allow new local drafts offline. Labor, inventory, handovers and completion of work orders remain online.
 - Verification: `backend/tests/test_mobile.py`, `frontend/tests/mobile.spec.ts`; `npm run test:e2e:mobile` builds and tests production service-worker behavior on port 3102. It is separate from the default desktop suite. See `docs/mobile-pwa.md` for storage limits, retry/retention rules, deployment and device-test boundaries.
+
+
+## 24. External integrations
+
+- `APIKey`, `WebhookEndpoint`, `WebhookDelivery` are company-owned models. `E/integrations.py` manages them under `/admin/integrations`; `F/admin/integrations/{api-keys,webhooks}/page.tsx` provides the admin UI. Only unrestricted `integrations.manage` grants permit administration (default: admin only).
+- API keys are 256-bit random bearer credentials, stored as SHA-256 hashes with a display prefix. Create/rotate returns plaintext once. `S/api_keys.py` maintains an explicit method/path scope allowlist and intersects grants with the active creator's current unrestricted domain permissions. No admin/auth/mobile/files/import access. Never persist or audit raw keys or hashes.
+- `S/integration_events.py` uses lazy Session flush hooks registered in `db/session.py` to enqueue committed domain events. No network IO in application transactions. Raw/bulk SQL writers must enqueue explicitly. The document compliance scan emits deduplicated `document.expiring` events.
+- `S/webhooks.py` encrypts signing secrets with the separate `INTEGRATIONS_ENCRYPTION_KEY` Fernet environment key (same key on API and scheduler), pins public HTTPS destinations after DNS validation, signs exact bytes with HMAC-SHA256, and claims deliveries with expiring leases. The scheduler runs `webhook_delivery` every minute. Six attempts, exponential delays, at-least-once delivery; receiver inbox deduplication by company/event ID is required.
+- Secret rotation replaces the secret immediately; already in-flight requests can use the previous version. Manual resend creates a new delivery retaining the event/payload and original history. See `docs/external-integrations.md` for setup, scopes, signatures, rotation, replay handling and operational limits.
+- Verification: `backend/tests/test_integrations.py`, `frontend/tests/integrations.spec.ts`, auth/permissions/tenant regressions and fresh/populated migrations. Tests use disposable databases and mocked DNS/HTTPS/browser APIs.

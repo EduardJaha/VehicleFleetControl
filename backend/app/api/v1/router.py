@@ -36,3 +36,6 @@ api_router.include_router(service_programs.router, prefix="/maintenance/programs
 
 from app.api.v1.endpoints import inspection_templates
 api_router.include_router(inspection_templates.router, prefix="/inspection-templates", tags=["inspection templates"])
+
+from app.api.v1.endpoints import integrations
+api_router.include_router(integrations.router, prefix="/admin/integrations", tags=["integrations"])

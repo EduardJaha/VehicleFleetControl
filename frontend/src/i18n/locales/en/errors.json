@@ -118,5 +118,12 @@
   "mobile_retry_changed": "This retry key was already used for different data. Your draft is retained.",
   "mobile_version_required": "Download the inspection version before synchronizing.",
   "mobile_invalid_fields": "Review the offline report fields before retrying.",
-  "mobile_photo_size": "A photo cannot exceed 8 MiB."
+  "mobile_photo_size": "A photo cannot exceed 8 MiB.",
+  "integration_key_invalid": "Invalid or expired API key.",
+  "integration_scope_denied": "API key scope does not permit this operation.",
+  "integration_not_configured": "Webhook encryption is not configured.",
+  "integration_url_invalid": "Use a public HTTPS webhook URL on port 443.",
+  "integration_not_found": "Integration record not found.",
+  "integration_inactive": "Integration is revoked or expired.",
+  "integration_retry_unavailable": "This delivery cannot be resent now."
 }

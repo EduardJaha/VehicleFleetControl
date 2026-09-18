@@ -34,5 +34,6 @@
   "supplyReports": "Raportet e furnizimeve të mirëmbajtjes",
   "maintenancePrograms": "Programet e Mirëmbajtjes",
   "inspectionTemplates": "Modelet e inspektimit",
-  "notificationPreferences": "Preferencat e njoftimeve"
+  "notificationPreferences": "Preferencat e njoftimeve",
+  "integrations": "Integrimet"
 }

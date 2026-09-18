@@ -509,3 +509,6 @@ body > .mobileWorkspace, .mobileWorkspace:only-child { padding: max(16px, env(sa
  .mobileRoleShell .userPanel .userName, .mobileRoleShell .userPanel .userRole, .mobileRoleShell .userPanel > .navLink { display: none; }
  .mobileRoleShell .sidebar:not(.mobileOpen) .userPanel { display: none; }
 }
+
+.integrationSecret { display: block; overflow-wrap: anywhere; padding: 1rem 0; }
+.integrationPayload { white-space: pre-wrap; overflow-wrap: anywhere; }

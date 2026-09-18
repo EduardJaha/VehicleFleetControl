@@ -16,3 +16,5 @@ boto3>=1.42,<2.0
 gunicorn>=23,<24
 uvicorn-worker>=0.4,<0.5
 sentry-sdk>=2.53,<3.0
+cryptography>=49,<50
+urllib3>=2.8,<3

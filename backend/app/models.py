@@ -1685,3 +1685,56 @@ class MobileOperation(TenantMixin, Base):
     payload_hash = Column("PayloadHash", String(64), nullable=False)
     result = Column("Result", JSON, nullable=True)
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+
+class APIKey(TenantMixin, Base):
+    __tablename__ = "APIKeys"
+    id = Column("Id", Integer, primary_key=True)
+    name = Column("Name", String(100), nullable=False)
+    key_prefix = Column("KeyPrefix", String(24), nullable=False)
+    key_hash = Column("KeyHash", String(64), nullable=False, unique=True)
+    scopes = Column("Scopes", JSON, nullable=False)
+    expires_at = Column("ExpiresAt", DateTime)
+    last_used_at = Column("LastUsedAt", DateTime)
+    revoked_at = Column("RevokedAt", DateTime)
+    created_by = Column("CreatedBy", Integer, ForeignKey("Users.Id"), nullable=False)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+
+class WebhookEndpoint(TenantMixin, Base):
+    __tablename__ = "WebhookEndpoints"
+    id = Column("Id", Integer, primary_key=True)
+    name = Column("Name", String(100), nullable=False)
+    url = Column("Url", String(2048), nullable=False)
+    events = Column("Events", JSON, nullable=False)
+    secret_ciphertext = Column("SecretCiphertext", Text, nullable=False)
+    secret_version = Column("SecretVersion", Integer, nullable=False, default=1)
+    revoked_at = Column("RevokedAt", DateTime)
+    created_by = Column("CreatedBy", Integer, ForeignKey("Users.Id"), nullable=False)
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+
+class WebhookDelivery(TenantMixin, Base):
+    __tablename__ = "WebhookDeliveries"
+    __table_args__ = (
+        CheckConstraint('"Status" IN (\'Pending\', \'Delivered\', \'Failed\', \'Retrying\', \'Dead\')', name="ck_webhook_delivery_status"),
+        Index("ix_webhook_deliveries_due", "Status", "NextAttemptAt"),
+        Index("uq_webhook_original_event", "CompanyId", "EndpointId", "EventId", unique=True,
+              sqlite_where=text('"ResendOf" IS NULL'), postgresql_where=text('"ResendOf" IS NULL')),
+        Index("ix_webhook_deliveries_event", "CompanyId", "EventId", "EndpointId"),
+    )
+    id = Column("Id", Integer, primary_key=True)
+    endpoint_id = Column("EndpointId", Integer, ForeignKey("WebhookEndpoints.Id"), nullable=False)
+    event_id = Column("EventId", String(36), nullable=False)
+    delivery_id = Column("DeliveryId", String(36), nullable=False, unique=True)
+    event_type = Column("EventType", String(80), nullable=False)
+    payload = Column("Payload", Text, nullable=False)
+    status = Column("Status", String(16), nullable=False, default="Pending")
+    attempt_count = Column("AttemptCount", Integer, nullable=False, default=0)
+    attempts = Column("Attempts", JSON, nullable=False, default=list)
+    next_attempt_at = Column("NextAttemptAt", DateTime, nullable=False, default=datetime.utcnow)
+    lease_token = Column("LeaseToken", String(36))
+    lease_until = Column("LeaseUntil", DateTime)
+    delivered_at = Column("DeliveredAt", DateTime)
+    resend_of = Column("ResendOf", Integer, ForeignKey("WebhookDeliveries.Id"))
+    created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)

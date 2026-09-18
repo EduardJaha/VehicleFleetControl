@@ -43,8 +43,8 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
   const mobileRole = ["driver", "mechanic", "technician"].includes(user?.role || "");
   const isLoginPage = pathname === "/login";
   const maintenanceActive = pathname.startsWith("/maintenance") || pathname.startsWith("/work-orders") || pathname.startsWith("/services") || pathname.startsWith("/inspections") || pathname.startsWith("/admin/inspection-templates");
-  const administrationActive = pathname === "/audit-logs" || pathname.startsWith("/admin/users") || pathname.startsWith("/admin/roles");
-  const administrationVisible = can("audit_logs.view") || can("users.manage") || can("roles.manage");
+  const administrationActive = pathname.startsWith("/admin/integrations") || pathname === "/audit-logs" || pathname.startsWith("/admin/users") || pathname.startsWith("/admin/roles");
+  const administrationVisible = can("integrations.manage") || can("audit_logs.view") || can("users.manage") || can("roles.manage");
   const [unreadCount, setUnreadCount] = useState(0);
   const [recentNotifications, setRecentNotifications] = useState<Notification[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -123,6 +123,7 @@ function ProtectedShell({ children }: { children: React.ReactNode }) {
             <div className="navSubmenu">
               {can("audit_logs.view") && <Link href="/audit-logs" className={pathname === "/audit-logs" ? "navLink navSubLink active" : "navLink navSubLink"}>{t("navigation:auditLogs")}</Link>}
               {can("users.manage") && <Link href="/admin/users" className={pathname.startsWith("/admin/users") ? "navLink navSubLink active" : "navLink navSubLink"}>{t("navigation:users")}</Link>}
+              {can("integrations.manage") && <Link href="/admin/integrations/api-keys" className={pathname.startsWith("/admin/integrations") ? "navLink navSubLink active" : "navLink navSubLink"}>{t("navigation:integrations")}</Link>}
               {can("roles.manage") && <Link href="/admin/roles" className={pathname.startsWith("/admin/roles") ? "navLink navSubLink active" : "navLink navSubLink"}>{t("navigation:rolesPermissions")}</Link>}
             </div>
           </details>}

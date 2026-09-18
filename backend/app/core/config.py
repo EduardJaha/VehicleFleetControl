@@ -8,6 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    integrations_encryption_key: str = ""
+
     app_name: str = "VehicleManagement API"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./data/vehiclemanagement.db"

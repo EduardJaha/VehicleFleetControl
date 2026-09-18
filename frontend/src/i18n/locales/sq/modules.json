@@ -2062,5 +2062,55 @@
       "Conflict": "Konflikt",
       "Failed": "Dështoi"
     }
+  },
+  "integrations": {
+    "apiKeys": "Çelësat API",
+    "webhooks": "Webhook-et",
+    "keysDescription": "Lejoni akses të zgjedhur për klientë të jashtëm. Çelësat kufizohen te kompania dhe lejet tuaja aktuale.",
+    "hooksDescription": "Dërgoni ngjarje të nënshkruara te adresa publike HTTPS. Dërgimi kryhet në sfond. Rotacioni zëvendëson sekretin menjëherë; kërkesat në proces mund të përdorin sekretin e mëparshëm.",
+    "saved": "Ndryshimet u ruajtën.",
+    "saveSecret": "Ruajeni këtë sekret tani",
+    "shownOnce": "Ky sekret shfaqet vetëm një herë. Ruajeni në mënyrë të sigurt para se të largoheni nga faqja.",
+    "dismiss": "Fshih sekretin",
+    "create": "Krijo",
+    "name": "Emri",
+    "expires": "Skadon më (opsionale)",
+    "url": "Adresa e webhook-ut",
+    "scopes": "Fushat e aksesit",
+    "events": "Ngjarjet",
+    "loading": "Duke ngarkuar…",
+    "refresh": "Rifresko",
+    "empty": "Ende nuk ka integrime.",
+    "details": "Detajet",
+    "actions": "Veprimet",
+    "revoked": "Revokuar",
+    "expired": "Skaduar",
+    "active": "Aktiv",
+    "lastUsed": "Përdorimi i fundit",
+    "version": "Versioni i sekretit",
+    "rotate": "Rrotullo",
+    "revoke": "Revoko",
+    "deliveries": "Shiko dërgesat",
+    "noDeliveries": "Ende nuk ka dërgesa.",
+    "eventId": "ID e ngjarjes",
+    "attempts": "Përpjekjet",
+    "nextAttempt": "Përpjekja e planifikuar",
+    "resendOf": "Ridërgim i dërgesës",
+    "retry": "Ridërgo",
+    "older": "Ngarko dërgesa më të vjetra",
+    "status": {
+      "Pending": "Në pritje",
+      "Delivered": "Dërguar",
+      "Failed": "Dështuar",
+      "Retrying": "Duke riprovuar",
+      "Dead": "Përfundimisht dështuar"
+    },
+    "outcome": {
+      "InFlight": "Në proces",
+      "Interrupted": "Ndërprerë",
+      "Delivered": "Dërguar",
+      "HTTPError": "Gabim HTTP",
+      "TransportError": "Gabim lidhjeje ose konfigurimi"
+    }
   }
 }

@@ -34,6 +34,7 @@ export const PERMISSIONS = {
 // The API-provided list always wins when present; backend authorization remains authoritative.
 const DEFAULT_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   admin: [
+    "integrations.manage",
     "dashboard.view", "vehicles.view", "vehicles.create", "vehicles.edit", "vehicles.archive",
     "drivers.view", "drivers.manage", "assignments.view", "assignments.manage",
     "fuel.view", "fuel.create", "fuel.edit", "fuel.view_cost",

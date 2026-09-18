@@ -22,6 +22,7 @@ def build_scheduler() -> BlockingScheduler:
         ("low_stock_scan", settings.low_stock_scan_interval_minutes),
         ("insurance_claim_scan", settings.claim_scan_interval_minutes),
         ("email_delivery", settings.email_delivery_interval_minutes),
+        ("webhook_delivery", 1),
     )
     for job_name, minutes in jobs:
         scheduler.add_job(run_scheduled_job, "interval", minutes=minutes, args=[job_name], id=job_name, replace_existing=True)
@@ -38,7 +39,7 @@ def main() -> None:
     scheduler = build_scheduler()
     for job_name in (
         "notification_scan", "document_compliance_scan", "maintenance_reminder_scan",
-        "overdue_return_scan", "low_stock_scan", "insurance_claim_scan", "email_delivery",
+        "overdue_return_scan", "low_stock_scan", "insurance_claim_scan", "email_delivery", "webhook_delivery",
     ):
         run_scheduled_job(job_name)
     scheduler.start()

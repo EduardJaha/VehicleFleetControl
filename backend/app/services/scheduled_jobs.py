@@ -23,7 +23,7 @@ def _active_company_ids() -> list[int]:
 
 def run_scheduled_job(job_name: str, now: datetime | None = None) -> dict[str, int]:
     """Run one named job independently for every active tenant."""
-    if job_name != "email_delivery" and job_name not in SCAN_FUNCTIONS:
+    if job_name not in {"email_delivery", "webhook_delivery"} and job_name not in SCAN_FUNCTIONS:
         raise ValueError(f"Unknown scheduled job: {job_name}")
     now = now or datetime.utcnow()
     summary = {"companies": 0, "created": 0, "sent": 0, "failed_companies": 0}
@@ -33,7 +33,13 @@ def run_scheduled_job(job_name: str, now: datetime | None = None) -> dict[str, i
         try:
             before = db.query(Notification).count()
             details = deliver_pending_emails(db, now=now) if job_name == "email_delivery" else None
-            if job_name != "email_delivery":
+            if job_name == "webhook_delivery":
+                from app.services.webhooks import deliver_pending
+                details = deliver_pending(db, now=now)
+            if job_name == "document_compliance_scan":
+                from app.services.webhooks import scan_expiring_documents
+                scan_expiring_documents(db, now)
+            if job_name not in {"email_delivery", "webhook_delivery"}:
                 SCAN_FUNCTIONS[job_name](db, now)
             db.flush()
             created = db.query(Notification).count() - before

@@ -9,6 +9,13 @@ DEFAULT_LANGUAGE = "en"
 
 MESSAGES: dict[str, dict[str, str]] = {
     "en": {
+        'integration_key_invalid': 'Invalid or expired API key.',
+        'integration_scope_denied': 'API key scope does not permit this operation.',
+        'integration_not_configured': 'Webhook encryption is not configured.',
+        'integration_url_invalid': 'Use a public HTTPS webhook URL on port 443.',
+        'integration_not_found': 'Integration record not found.',
+        'integration_inactive': 'Integration is revoked or expired.',
+        'integration_retry_unavailable': 'This delivery cannot be resent now.',
         'mobile_account_changed': 'The signed-in account or company changed. Return to the original account to synchronize.',
         'mobile_conflict': 'The inspection changed on the server. Your local draft is retained. Review both versions before proceeding.',
         'mobile_retry_changed': 'This retry key was already used for different data. Your draft is retained.',
@@ -118,6 +125,13 @@ MESSAGES: dict[str, dict[str, str]] = {
         "invalid_value": "Enter a valid value.",
     },
     "sq": {
+        'integration_key_invalid': 'Çelës API i pavlefshëm ose i skaduar.',
+        'integration_scope_denied': 'Fusha e aksesit të çelësit API nuk lejon këtë veprim.',
+        'integration_not_configured': 'Enkriptimi i webhook-ut nuk është konfiguruar.',
+        'integration_url_invalid': 'Përdorni një adresë publike HTTPS për webhook-un në portën 443.',
+        'integration_not_found': 'Regjistrimi i integrimit nuk u gjet.',
+        'integration_inactive': 'Integrimi është revokuar ose ka skaduar.',
+        'integration_retry_unavailable': 'Kjo dërgesë nuk mund të ridërgohet tani.',
         'mobile_account_changed': 'Llogaria ose kompania aktive ndryshoi. Kthehuni te llogaria fillestare për të sinkronizuar.',
         'mobile_conflict': 'Inspektimi ndryshoi në server. Drafti lokal ruhet. Kontrolloni të dy versionet para se të vazhdoni.',
         'mobile_retry_changed': 'Ky identifikues riprovimi është përdorur për të dhëna të tjera. Drafti juaj ruhet.',

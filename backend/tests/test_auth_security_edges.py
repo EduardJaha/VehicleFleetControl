@@ -25,6 +25,18 @@ ORIGIN = {"Origin": "http://localhost:3000"}
 STRONG_SECRET = "B7g9N2q4R6t8V0x3Z5c1D7f9H2j4K6m8"
 
 
+@pytest.mark.parametrize("origin", ["http://localhost:3001", "http://127.0.0.1:3001"])
+def test_local_next_fallback_port_allows_login_preflight(origin):
+    with TestClient(app) as client:
+        response = client.options(
+            "/api/v1/auth/login",
+            headers={"Origin": origin, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type"},
+        )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    assert response.headers["access-control-allow-credentials"] == "true"
+
+
 @pytest.mark.parametrize("headers", [{}, {"Origin": "null"}, {"Referer": "not-a-url"}, {"Origin": "https://evil.example"}])
 def test_cookie_and_login_csrf_fail_closed(auth_context, headers):
     with TestClient(app) as client:

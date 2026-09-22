@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     environment: Literal["development", "test", "staging", "production"] = "development"
     debug: bool = False
     cors_origins_value: str = Field(
-        default="http://localhost:3000,http://127.0.0.1:3000",
+        default="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
         validation_alias=AliasChoices("CORS_ORIGINS", "FRONTEND_ORIGINS"),
     )
     upload_directory: str = Field(default="uploads", validation_alias=AliasChoices("UPLOAD_DIRECTORY", "UPLOADS_DIR"))

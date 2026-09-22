@@ -13,7 +13,7 @@ export function PwaProvider() {
     const prompt = (event: Event) => { event.preventDefault(); setInstall(event as InstallEvent); };
     window.addEventListener("beforeinstallprompt", prompt); window.addEventListener("online", online); window.addEventListener("offline", online);
     let stopped = false;
-    if ("serviceWorker" in navigator) void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(reg => {
+    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(reg => {
       if (stopped) return;
       if(reg.waiting) setWaiting(reg.waiting);
       reg.addEventListener("updatefound", () => { const worker = reg.installing;

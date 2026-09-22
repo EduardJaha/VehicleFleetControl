@@ -58,6 +58,13 @@ export function SearchableCombobox({
     setActiveIndex(filtered.length > 0 ? 0 : -1);
   }, [filtered]);
 
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+      setQuery("");
+    }
+  }, [disabled]);
+
   useEffect(() => () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
   }, []);
@@ -85,9 +92,10 @@ export function SearchableCombobox({
       event.preventDefault();
       setOpen(true);
       setActiveIndex((index) => filtered.length === 0 ? -1 : Math.max(index - 1, 0));
-    } else if (event.key === "Enter" && open && activeIndex >= 0) {
+    } else if (event.key === "Enter" && open) {
       event.preventDefault();
-      choose(filtered[activeIndex]);
+      const option = filtered[activeIndex];
+      if (option && !loading && !error && !disabled) choose(option);
     } else if (event.key === "Escape") {
       event.preventDefault();
       setQuery("");
@@ -100,7 +108,10 @@ export function SearchableCombobox({
 
   const unavailableSelection = value !== null && !loading && !error && !selected;
   const displayValue = open ? query : (selected?.name ?? selectedLabel ?? "");
-  const activeOptionId = open && activeIndex >= 0 ? `${listboxId}-option-${filtered[activeIndex].id}` : undefined;
+  const activeOption = open && !disabled && !loading && !error && activeIndex >= 0
+    ? filtered[activeIndex]
+    : undefined;
+  const activeOptionId = activeOption ? `${listboxId}-option-${activeOption.id}` : undefined;
 
   return (
     <div className="combobox">

@@ -3,8 +3,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.db.migrations import run_additive_migrations
-from app.db.session import Base, SessionLocal, engine
+from app.db.session import SessionLocal
 from app.models import VehicleBrand, VehicleModel
 from app.utils.vehicle_catalog import clean_catalog_name, normalize_catalog_name
 
@@ -55,8 +54,6 @@ def seed_vehicle_catalog(db: Session, catalog_path: Path = DEFAULT_CATALOG_PATH)
 
 
 def main() -> None:
-    Base.metadata.create_all(bind=engine)
-    run_additive_migrations(engine)
     with SessionLocal() as db:
         counts = seed_vehicle_catalog(db)
     print(

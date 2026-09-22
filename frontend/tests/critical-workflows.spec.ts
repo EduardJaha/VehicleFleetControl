@@ -206,9 +206,15 @@ test("Vehicle registration country controls formatting and creation", async ({ p
   await plate.fill("01 123 ab");
   await expect(plate).toHaveValue("01-123-AB");
 
-  await dialog.getByLabel("Brand").click();
+  await dialog.getByLabel("Brand", { exact: true }).click();
   await dialog.getByRole("option", { name: "Toyota" }).click();
-  await dialog.getByLabel("Model").click();
+  const model = dialog.getByLabel("Model", { exact: true });
+  await model.fill("NoSuchModel");
+  await expect(dialog.getByText("No models are available for this brand.")).toBeVisible();
+  await expect(model).not.toHaveAttribute("aria-activedescendant");
+  await model.press("Enter");
+  await expect(dialog).toBeVisible();
+  await model.fill("");
   await dialog.getByRole("option", { name: "Corolla" }).click();
   await dialog.getByLabel("Location").fill("Prishtina");
   await dialog.getByRole("button", { name: "Create Vehicle" }).click();
@@ -216,6 +222,58 @@ test("Vehicle registration country controls formatting and creation", async ({ p
   await expect(dialog).toBeHidden();
   await expect(page.getByText("01-123-AB", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("cell", { name: "Kosovo", exact: true }).first()).toBeVisible();
+});
+
+test("Admin can add a missing brand and model while creating a vehicle", async ({ page }) => {
+  await mockApi(page);
+  let brandCreated = false;
+  let modelCreated = false;
+  let vehiclePayload: Record<string, unknown> | null = null;
+  await page.route("http://localhost:8000/api/v1/vehicle-catalog/**", async (route) => {
+    const path = new URL(route.request().url()).pathname.replace("/api/v1", "");
+    if (path === "/vehicle-catalog/brands") {
+      if (route.request().method() === "POST") {
+        expect(route.request().postDataJSON().name).toBe("New Fleet Brand");
+        brandCreated = true;
+        return route.fulfill({ status: 201, json: { id: 99, name: "New Fleet Brand", is_active: true } });
+      }
+      return route.fulfill({ json: brandCreated ? [{ id: 99, name: "New Fleet Brand", is_active: true }] : [] });
+    }
+    if (path === "/vehicle-catalog/brands/99/models") {
+      return route.fulfill({ json: modelCreated ? [{ id: 199, brand_id: 99, name: "New Fleet Model", is_active: true }] : [] });
+    }
+    if (path === "/vehicle-catalog/models" && route.request().method() === "POST") {
+      expect(route.request().postDataJSON()).toMatchObject({ brand_id: 99, name: "New Fleet Model" });
+      modelCreated = true;
+      return route.fulfill({ status: 201, json: { id: 199, brand_id: 99, name: "New Fleet Model", is_active: true } });
+    }
+    return route.fallback();
+  });
+  await page.route("http://localhost:8000/api/v1/vehicles", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    vehiclePayload = route.request().postDataJSON();
+    return route.fulfill({ status: 201, json: { id: 100, ...vehiclePayload } });
+  });
+
+  await page.goto("/vehicles");
+  await page.getByRole("button", { name: "Add Vehicle" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add Vehicle" });
+  await dialog.getByLabel("Brand").click();
+  await expect(dialog.getByText("No vehicle brands found.")).toBeVisible();
+  await dialog.getByRole("button", { name: "Add a brand" }).click();
+  await dialog.getByLabel("New brand name").fill("New Fleet Brand");
+  await dialog.getByRole("button", { name: "Save brand" }).click();
+  await expect(dialog.getByLabel("Brand", { exact: true })).toHaveValue("New Fleet Brand");
+  await dialog.getByRole("button", { name: "Add a model" }).click();
+  await dialog.getByLabel("New model name").fill("New Fleet Model");
+  await dialog.getByRole("button", { name: "Save model" }).click();
+  await expect(dialog.getByLabel("Model", { exact: true })).toHaveValue("New Fleet Model");
+  await dialog.getByLabel("Registration country").selectOption("XK");
+  await dialog.getByLabel("Licence plate").fill("01-123-AB");
+  await dialog.getByLabel("Location").fill("Prishtina");
+  await dialog.getByRole("button", { name: "Create Vehicle" }).click();
+  await expect(dialog).toBeHidden();
+  expect(vehiclePayload).toMatchObject({ brand_id: 99, model_id: 199 });
 });
 
 test("Fuel form derives Electric units from the selected Vehicle and resets safely", async ({ page }) => {

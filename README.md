@@ -438,7 +438,9 @@ third-party API. On startup, the additive migration creates the catalog tables,
 adds nullable catalog references to existing Vehicles, and backfills references
 from the legacy Brand and Model display values without deleting those values.
 
-Seed the practical starter catalog from the `backend` directory:
+Local launch scripts and Docker Compose seed the practical starter catalog after
+applying migrations. For other deployments, run this once from `backend` after
+`alembic upgrade head`:
 
 ```bash
 python -m app.scripts.seed_vehicle_catalog

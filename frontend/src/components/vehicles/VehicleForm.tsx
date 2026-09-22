@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import { DEPRECIATION_METHODS, FUEL_TYPES, OWNERSHIP_TYPES, VEHICLE_STATUSES } from "@/lib/constants";
 import { vehicleCatalogApi, vehicleRegistrationApi } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { formatLicensePlateInput, validateLicensePlateInput } from "@/lib/licensePlates";
 import type {
   RegistrationCountryCode, RegistrationCountryOption, Vehicle, VehicleBrand,
@@ -91,6 +92,8 @@ export function vehicleToPayload(vehicle: Vehicle): VehicleFormInitialValues {
 
 export function VehicleForm({ mode = "create", initialValues, error, submitting, onSubmit, onCancel, className = "" }: VehicleFormProps) {
   const { t, i18n } = useTranslation(["common", "modules"]);
+  const { can } = useAuth();
+  const canManageCatalog = can("settings.manage");
   const fieldPrefix = useId();
   const [form, setForm] = useState<VehicleFormValues>(() => {
     if (!initialValues) return { ...initialVehicleForm };
@@ -136,6 +139,12 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
   const [loadingModels, setLoadingModels] = useState(Boolean(initialValues?.brand_id));
   const [brandError, setBrandError] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
+  const [newBrandName, setNewBrandName] = useState("");
+  const [newModelName, setNewModelName] = useState("");
+  const [addingBrand, setAddingBrand] = useState(false);
+  const [addingModel, setAddingModel] = useState(false);
+  const [savingCatalog, setSavingCatalog] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [countries, setCountries] = useState<RegistrationCountryOption[]>([]);
   const [countryError, setCountryError] = useState<string | null>(null);
@@ -151,7 +160,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
   }, [t]);
 
   useEffect(() => {
-    loadBrands();
+    loadBrands(true);
   }, [loadBrands]);
 
   useEffect(() => {
@@ -170,7 +179,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
     }
     setLoadingModels(true);
     setModelError(null);
-    vehicleCatalogApi.getModelsByBrand(form.brand_id)
+    vehicleCatalogApi.getModelsByBrand(form.brand_id, true)
       .then((items) => {
         if (active) setModels(items);
       })
@@ -182,6 +191,46 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
       });
     return () => { active = false; };
   }, [form.brand_id]);
+
+  async function saveBrand() {
+    const name = newBrandName.trim();
+    if (!name || savingCatalog) return;
+    setSavingCatalog(true);
+    setCatalogError(null);
+    try {
+      const brand = await vehicleCatalogApi.createBrand(name);
+      setBrands((items) => [...items, brand].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((current) => ({ ...current, brand_id: brand.id, model_id: null }));
+      setFallbackLabels({ brand: undefined, model: undefined });
+      setNewBrandName("");
+      setAddingBrand(false);
+      setSelectionError(null);
+    } catch (err) {
+      setCatalogError(err instanceof Error ? err.message : t("modules:vehicles.brandCreateError"));
+    } finally {
+      setSavingCatalog(false);
+    }
+  }
+
+  async function saveModel() {
+    const name = newModelName.trim();
+    if (!name || form.brand_id === null || savingCatalog) return;
+    setSavingCatalog(true);
+    setCatalogError(null);
+    try {
+      const model = await vehicleCatalogApi.createModel(form.brand_id, name);
+      setModels((items) => [...items, model].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((current) => ({ ...current, model_id: model.id }));
+      setFallbackLabels((current) => ({ ...current, model: undefined }));
+      setNewModelName("");
+      setAddingModel(false);
+      setSelectionError(null);
+    } catch (err) {
+      setCatalogError(err instanceof Error ? err.message : t("modules:vehicles.modelCreateError"));
+    } finally {
+      setSavingCatalog(false);
+    }
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -216,7 +265,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
 
   return (
     <form onSubmit={submit} className={`form fullWidthForm ${className}`.trim()}>
-      {(error || selectionError || countryError) && <div className="error" role="alert">{error || selectionError || countryError}</div>}
+      {(error || selectionError || countryError || catalogError) && <div className="error" role="alert">{error || selectionError || countryError || catalogError}</div>}
       <div className="formGrid">
         <div className="formRow">
           <label htmlFor={`${fieldPrefix}-registration-country`}>{t("modules:vehicles.registrationCountry")}</label>
@@ -276,7 +325,12 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
           )}
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-brand`}>{t("common:labels.brand")}</label>
+          <div className="catalogFieldHeader">
+            <label htmlFor={`${fieldPrefix}-brand`}>{t("common:labels.brand")}</label>
+            {canManageCatalog && !addingBrand && (
+              <button type="button" className="linkButton catalogCreateLink" onClick={() => { setAddingBrand(true); setCatalogError(null); }} disabled={loadingBrands || savingCatalog}>{t("modules:vehicles.addBrand")}</button>
+            )}
+          </div>
           <SearchableCombobox
             id={`${fieldPrefix}-brand`}
             options={brands}
@@ -285,6 +339,8 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
             onChange={(brandId) => {
               setFallbackLabels({ brand: undefined, model: undefined });
               setSelectionError(null);
+              setCatalogError(null);
+              setAddingModel(false);
               setForm((current) => ({ ...current, brand_id: brandId, model_id: null }));
             }}
             placeholder={loadingBrands ? t("modules:vehicles.loadingBrands") : t("modules:vehicles.selectBrand")}
@@ -292,13 +348,35 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
             emptyText={t("modules:vehicles.emptyBrands")}
             loadingText={t("modules:vehicles.loadingBrands")}
             loading={loadingBrands}
+            disabled={addingBrand || savingCatalog}
             error={brandError}
             required
           />
           {brandError && <button className="linkButton retryButton" type="button" onClick={() => loadBrands(true)}>{t("modules:vehicles.retryBrands")}</button>}
+          {canManageCatalog && addingBrand && (
+            <div className="catalogCreateControls">
+              <input
+                className="input"
+                value={newBrandName}
+                onChange={(event) => setNewBrandName(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveBrand(); } }}
+                placeholder={t("modules:vehicles.newBrandName")}
+                aria-label={t("modules:vehicles.newBrandName")}
+                maxLength={255}
+                disabled={savingCatalog}
+              />
+              <button type="button" className="secondaryButton smallButton" onClick={() => void saveBrand()} disabled={!newBrandName.trim() || savingCatalog}>{t("modules:vehicles.saveBrand")}</button>
+              <button type="button" className="linkButton" onClick={() => { setAddingBrand(false); setNewBrandName(""); setCatalogError(null); }} disabled={savingCatalog}>{t("common:actions.cancel")}</button>
+            </div>
+          )}
         </div>
         <div className="formRow">
-          <label htmlFor={`${fieldPrefix}-model`}>{t("common:labels.model")}</label>
+          <div className="catalogFieldHeader">
+            <label htmlFor={`${fieldPrefix}-model`}>{t("common:labels.model")}</label>
+            {canManageCatalog && form.brand_id !== null && !addingModel && (
+              <button type="button" className="linkButton catalogCreateLink" onClick={() => { setAddingModel(true); setCatalogError(null); }} disabled={loadingModels || savingCatalog}>{t("modules:vehicles.addModel")}</button>
+            )}
+          </div>
           <SearchableCombobox
             id={`${fieldPrefix}-model`}
             options={models}
@@ -314,7 +392,7 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
             emptyText={t("modules:vehicles.emptyModels")}
             loadingText={t("modules:vehicles.loadingModels")}
             loading={loadingModels}
-            disabled={form.brand_id === null}
+            disabled={form.brand_id === null || addingModel || savingCatalog}
             error={modelError}
             required
           />
@@ -334,6 +412,22 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
             >
               {t("modules:vehicles.retryModels")}
             </button>
+          )}
+          {canManageCatalog && form.brand_id !== null && addingModel && (
+            <div className="catalogCreateControls">
+              <input
+                className="input"
+                value={newModelName}
+                onChange={(event) => setNewModelName(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveModel(); } }}
+                placeholder={t("modules:vehicles.newModelName")}
+                aria-label={t("modules:vehicles.newModelName")}
+                maxLength={255}
+                disabled={savingCatalog}
+              />
+              <button type="button" className="secondaryButton smallButton" onClick={() => void saveModel()} disabled={!newModelName.trim() || savingCatalog}>{t("modules:vehicles.saveModel")}</button>
+              <button type="button" className="linkButton" onClick={() => { setAddingModel(false); setNewModelName(""); setCatalogError(null); }} disabled={savingCatalog}>{t("common:actions.cancel")}</button>
+            </div>
           )}
         </div>
         <div className="formRow">
@@ -446,8 +540,8 @@ export function VehicleForm({ mode = "create", initialValues, error, submitting,
         </div>}
       </div>
       <div className="actions dialogActions">
-        {onCancel && <button className="secondaryButton" type="button" onClick={onCancel} disabled={submitting}>{t("common:actions.cancel")}</button>}
-        <button className="button" type="submit" disabled={submitting || loadingBrands || loadingModels}>
+        {onCancel && <button className="secondaryButton" type="button" onClick={onCancel} disabled={submitting || savingCatalog}>{t("common:actions.cancel")}</button>}
+        <button className="button" type="submit" disabled={submitting || loadingBrands || loadingModels || addingBrand || addingModel || savingCatalog}>
           {submitting ? (mode === "edit" ? t("modules:vehicles.updating") : t("modules:vehicles.creating")) : (mode === "edit" ? t("modules:vehicles.update") : t("modules:vehicles.create"))}
         </button>
       </div>

@@ -125,5 +125,16 @@
   "integration_url_invalid": "Përdorni një adresë publike HTTPS për webhook-un në portën 443.",
   "integration_not_found": "Regjistrimi i integrimit nuk u gjet.",
   "integration_inactive": "Integrimi është revokuar ose ka skaduar.",
-  "integration_retry_unavailable": "Kjo dërgesë nuk mund të ridërgohet tani."
+  "integration_retry_unavailable": "Kjo dërgesë nuk mund të ridërgohet tani.",
+  "telematics_not_found": "Regjistri telematik nuk u gjet.",
+  "telematics_vehicle_archived": "Ky automjet është arkivuar.",
+  "telematics_mapping_conflict": "Automjeti, VIN ose pajisja bie ndesh me një lidhje ekzistuese.",
+  "telematics_mapping_missing": "Lidhni automjetin e ofruesit para importimit të ngjarjeve.",
+  "telematics_event_conflict": "Ky identifikues ngjarjeje është përdorur për të dhëna të tjera.",
+  "telematics_future_event": "Ngjarjet telematike nuk mund të kenë data të ardhshme.",
+  "telematics_inactive": "Kjo lidhje telematike nuk është gati për të marrë ngjarje.",
+  "telematics_not_configured": "Kërkohet përshtatësi i ofruesit dhe kredencialet e konfiguruara nga operatori.",
+  "telematics_webhook_auth": "Nënshkrim webhook i pavlefshëm ose lidhje joaktive.",
+  "telematics_payload_size": "Dërgesat telematike nuk mund të kalojnë 1 MiB.",
+  "telematics_invalid_payload": "Të dhëna telematike kanonike të pavlefshme."
 }

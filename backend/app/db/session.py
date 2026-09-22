@@ -101,3 +101,13 @@ def _persist_integration_events(db, context):
 @event.listens_for(Session, "after_rollback")
 def _clear_integration_events(db):
     db.info.pop("integration_events", None)
+
+
+@event.listens_for(Session, "before_flush")
+def _protect_manual_odometer(db, _context, _instances):
+    from sqlalchemy import inspect
+    from app.models import Vehicle
+    for row in db.dirty:
+        if (isinstance(row, Vehicle) and inspect(row).attrs.odometer_km.history.has_changes()
+                and db.info.get("telematics_odometer_write") != row.id):
+            row.odometer_manual_override = True

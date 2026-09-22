@@ -458,6 +458,12 @@
     }
   },
   "auditActions": {
+    "telematics_mapping_created": "U krijua lidhja telematike",
+    "telematics_connection_created": "U krijua lidhja e ofruesit telematik",
+    "telematics_connection_configured": "U konfigurua lidhja telematike",
+    "telematics_odometer_synchronized": "U sinkronizua kilometrazhi telematik",
+    "telematics_odometer_policy_changed": "U ndryshua politika e kilometrazhit telematik",
+
     "accident_archived": "Aksidenti u arkivua",
     "accident_reported": "Aksidenti u raportua",
     "accident_restored": "Aksidenti u rikthye",
@@ -574,6 +580,12 @@
     "vendor_charge_archived": "Tarifa e furnitorit u arkivua"
   },
   "auditDescriptions": {
+    "telematics_mapping_created": "U krijua lidhja telematike ({{entity_type}} #{{entity_id}})",
+    "telematics_connection_created": "U krijua lidhja e ofruesit telematik ({{entity_type}} #{{entity_id}})",
+    "telematics_connection_configured": "U konfigurua lidhja telematike ({{entity_type}} #{{entity_id}})",
+    "telematics_odometer_synchronized": "U sinkronizua kilometrazhi telematik ({{entity_type}} #{{entity_id}})",
+    "telematics_odometer_policy_changed": "U ndryshua politika e kilometrazhit telematik ({{entity_type}} #{{entity_id}})",
+
     "language_preference_changed": "Gjuha e preferuar e përdoruesit u ndryshua.",
     "user_language_changed": "Gjuha e preferuar e përdoruesit u ndryshua.",
     "login_failure": "Një përpjekje për hyrje dështoi.",

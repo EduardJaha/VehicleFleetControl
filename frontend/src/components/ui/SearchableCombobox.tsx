@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export type ComboboxOption = {
@@ -46,6 +46,7 @@ export function SearchableCombobox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(-1);
+  const closeTimer = useRef<number | null>(null);
   const selected = options.find((option) => option.id === value);
   const filtered = useMemo(() => {
     const search = query.trim().toLocaleLowerCase();
@@ -57,7 +58,19 @@ export function SearchableCombobox({
     setActiveIndex(filtered.length > 0 ? 0 : -1);
   }, [filtered]);
 
+  useEffect(() => () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+  }, []);
+
+  function cancelPendingClose() {
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }
+
   function choose(option: ComboboxOption) {
+    cancelPendingClose();
     onChange(option.id);
     setQuery("");
     setOpen(false);
@@ -109,17 +122,23 @@ export function SearchableCombobox({
           value={displayValue}
           placeholder={open ? searchPlaceholder : placeholder}
           onFocus={() => {
+            cancelPendingClose();
             setQuery("");
             setOpen(true);
           }}
           onClick={() => {
+            cancelPendingClose();
             setQuery("");
             setOpen(true);
           }}
-          onBlur={() => window.setTimeout(() => {
-            setQuery("");
-            setOpen(false);
-          }, 100)}
+          onBlur={() => {
+            cancelPendingClose();
+            closeTimer.current = window.setTimeout(() => {
+              closeTimer.current = null;
+              setQuery("");
+              setOpen(false);
+            }, 100);
+          }}
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);

@@ -9,6 +9,18 @@ DEFAULT_LANGUAGE = "en"
 
 MESSAGES: dict[str, dict[str, str]] = {
     "en": {
+        "telematics_not_found": "Telematics record not found.",
+        "telematics_vehicle_archived": "This vehicle is archived.",
+        "telematics_mapping_conflict": "The vehicle, VIN or device conflicts with an existing mapping.",
+        "telematics_mapping_missing": "Map the provider vehicle before importing events.",
+        "telematics_event_conflict": "This event ID was already used for different data.",
+        "telematics_future_event": "Telematics events cannot be future dated.",
+        "telematics_inactive": "This telematics connection is not ready to receive events.",
+        "telematics_not_configured": "A provider adapter and operator-provisioned credentials are required.",
+        "telematics_webhook_auth": "Invalid webhook signature or inactive connection.",
+        "telematics_payload_size": "Telematics deliveries cannot exceed 1 MiB.",
+        "telematics_invalid_payload": "Invalid canonical telematics payload.",
+
         'integration_key_invalid': 'Invalid or expired API key.',
         'integration_scope_denied': 'API key scope does not permit this operation.',
         'integration_not_configured': 'Webhook encryption is not configured.',
@@ -125,6 +137,18 @@ MESSAGES: dict[str, dict[str, str]] = {
         "invalid_value": "Enter a valid value.",
     },
     "sq": {
+        "telematics_not_found": "Regjistri telematik nuk u gjet.",
+        "telematics_vehicle_archived": "Ky automjet është arkivuar.",
+        "telematics_mapping_conflict": "Automjeti, VIN ose pajisja bie ndesh me një lidhje ekzistuese.",
+        "telematics_mapping_missing": "Lidhni automjetin e ofruesit para importimit të ngjarjeve.",
+        "telematics_event_conflict": "Ky identifikues ngjarjeje është përdorur për të dhëna të tjera.",
+        "telematics_future_event": "Ngjarjet telematike nuk mund të kenë data të ardhshme.",
+        "telematics_inactive": "Kjo lidhje telematike nuk është gati për të marrë ngjarje.",
+        "telematics_not_configured": "Kërkohet përshtatësi i ofruesit dhe kredencialet e konfiguruara nga operatori.",
+        "telematics_webhook_auth": "Nënshkrim webhook i pavlefshëm ose lidhje joaktive.",
+        "telematics_payload_size": "Dërgesat telematike nuk mund të kalojnë 1 MiB.",
+        "telematics_invalid_payload": "Të dhëna telematike kanonike të pavlefshme.",
+
         'integration_key_invalid': 'Çelës API i pavlefshëm ose i skaduar.',
         'integration_scope_denied': 'Fusha e aksesit të çelësit API nuk lejon këtë veprim.',
         'integration_not_configured': 'Enkriptimi i webhook-ut nuk është konfiguruar.',

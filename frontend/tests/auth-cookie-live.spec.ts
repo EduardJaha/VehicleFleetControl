@@ -52,8 +52,12 @@ test("Real FastAPI cookie survives reload, is unreadable to JavaScript, rejects 
   expect(cookie.path).toBe("/");
   expect(await page.evaluate(() => document.cookie)).not.toContain("vehicle_fleet_control_session");
   expect(await page.evaluate(() => localStorage.getItem("vehicle_fleet_control_token"))).toBeNull();
+  const restoredSession = page.waitForResponse(response =>
+    response.url() === "http://localhost:8000/api/v1/auth/me" && response.request().method() === "GET"
+  );
   await page.reload();
-  await expect(page.locator(".userName")).toHaveText("Browser Admin");
+  expect((await restoredSession).status()).toBe(200);
+  await expect(page.locator(".userName")).toHaveText("Browser Admin", { timeout: 15_000 });
   const csrf = await context.request.post(`${api}/api/v1/auth/logout`, {
     headers: { Origin: "https://untrusted.example", Cookie: `${cookie.name}=${cookie.value}` }
   });

@@ -458,6 +458,12 @@
     }
   },
   "auditActions": {
+    "telematics_mapping_created": "Telematics mapping created",
+    "telematics_connection_created": "Telematics connection created",
+    "telematics_connection_configured": "Telematics connection configured",
+    "telematics_odometer_synchronized": "Telematics odometer synchronized",
+    "telematics_odometer_policy_changed": "Telematics odometer policy changed",
+
     "accident_archived": "Accident archived",
     "accident_reported": "Accident reported",
     "accident_restored": "Accident restored",
@@ -574,6 +580,12 @@
     "vendor_charge_archived": "Vendor charge archived"
   },
   "auditDescriptions": {
+    "telematics_mapping_created": "Telematics mapping created ({{entity_type}} #{{entity_id}})",
+    "telematics_connection_created": "Telematics connection created ({{entity_type}} #{{entity_id}})",
+    "telematics_connection_configured": "Telematics connection configured ({{entity_type}} #{{entity_id}})",
+    "telematics_odometer_synchronized": "Telematics odometer synchronized ({{entity_type}} #{{entity_id}})",
+    "telematics_odometer_policy_changed": "Telematics odometer policy changed ({{entity_type}} #{{entity_id}})",
+
     "language_preference_changed": "The user's preferred language was changed.",
     "user_language_changed": "The user's preferred language was changed.",
     "login_failure": "A login attempt failed.",

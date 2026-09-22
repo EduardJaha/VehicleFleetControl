@@ -302,6 +302,8 @@ class Vehicle(TenantMixin, Base):
     vin_number = Column("VinNumber", String(50), nullable=True)
     year = Column("Year", Integer, nullable=True)
     odometer_km = Column("OdometerKm", Integer, nullable=True)
+    telematics_odometer_at = Column("TelematicsOdometerAt", DateTime)
+    odometer_manual_override = Column("OdometerManualOverride", Boolean, nullable=False, default=False, server_default="0")
     acquisition_date = Column("AcquisitionDate", Date, nullable=True)
     purchase_price = Column("PurchasePrice", Numeric(14, 2), nullable=True)
     supplier_id = Column("SupplierId", Integer, ForeignKey("Suppliers.Id", ondelete="SET NULL"), nullable=True)
@@ -1738,3 +1740,115 @@ class WebhookDelivery(TenantMixin, Base):
     delivered_at = Column("DeliveredAt", DateTime)
     resend_of = Column("ResendOf", Integer, ForeignKey("WebhookDeliveries.Id"))
     created_at = Column("CreatedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+
+class IntegrationConnection(TenantMixin, Base):
+    __tablename__ = "IntegrationConnections"
+    __table_args__ = (CheckConstraint("\"Status\" IN ('NotConfigured', 'Ready', 'Disabled')", name="ck_telematics_connection_status"),)
+    id = Column("Id", Integer, primary_key=True)
+    provider = Column("Provider", String(50), nullable=False)
+    status = Column("Status", String(30), nullable=False, default="NotConfigured")
+    credentials_reference = Column("CredentialsReference", String(200))
+    last_sync_at = Column("LastSyncAt", DateTime)
+    last_error = Column("LastError", String(100))  # Sanitized error code only.
+    settings = Column("Settings", JSON, nullable=False, default=dict)
+
+
+class ExternalVehicleMapping(TenantMixin, Base):
+    __tablename__ = "ExternalVehicleMappings"
+    __table_args__ = (
+        UniqueConstraint("CompanyId", "ConnectionId", "ExternalVehicleId", name="uq_telematics_external_vehicle"),
+        UniqueConstraint("CompanyId", "ConnectionId", "VehicleId", name="uq_telematics_internal_vehicle"),
+        UniqueConstraint("CompanyId", "ConnectionId", "ExternalDeviceId", name="uq_telematics_device"),
+        UniqueConstraint("CompanyId", "ConnectionId", "Vin", name="uq_telematics_vin"),
+    )
+    id = Column("Id", Integer, primary_key=True)
+    connection_id = Column("ConnectionId", Integer, ForeignKey("IntegrationConnections.Id"), nullable=False)
+    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id"), nullable=False)
+    external_vehicle_id = Column("ExternalVehicleId", String(200), nullable=False)
+    vin = Column("Vin", String(50))
+    external_device_id = Column("ExternalDeviceId", String(200))
+    odometer_sync_enabled = Column("OdometerSyncEnabled", Boolean, nullable=False, default=False)
+
+
+class TelematicsEventMixin:
+    id = Column("Id", Integer, primary_key=True)
+    connection_id = Column("ConnectionId", Integer, ForeignKey("IntegrationConnections.Id"), nullable=False)
+    vehicle_id = Column("VehicleId", Integer, ForeignKey("Vehicles.Id"), nullable=False)
+    provider = Column("Provider", String(50), nullable=False)
+    external_event_id = Column("ExternalEventId", String(200), nullable=False)
+    payload_hash = Column("PayloadHash", String(64), nullable=False)
+    occurred_at = Column("OccurredAt", DateTime, nullable=False)
+    received_at = Column("ReceivedAt", DateTime, nullable=False, default=datetime.utcnow)
+
+
+def _telematics_constraints(table):
+    return (
+        UniqueConstraint("CompanyId", "ConnectionId", "ExternalEventId", name=f"uq_{table}_event"),
+        Index(f"ix_{table}_vehicle_time", "CompanyId", "VehicleId", "OccurredAt"),
+    )
+
+
+class VehicleLocationEvent(TelematicsEventMixin, TenantMixin, Base):
+    __tablename__ = "VehicleLocationEvents"
+    __table_args__ = _telematics_constraints(__tablename__) + (
+        CheckConstraint('"Latitude" BETWEEN -90 AND 90 AND "Longitude" BETWEEN -180 AND 180', name="ck_telematics_coordinates"),
+        CheckConstraint('"SpeedKph" >= 0 AND "Heading" >= 0 AND "Heading" < 360', name="ck_telematics_motion"),
+    )
+    latitude = Column("Latitude", Numeric(10, 7), nullable=False)
+    longitude = Column("Longitude", Numeric(10, 7), nullable=False)
+    speed_kph = Column("SpeedKph", Numeric(9, 3))
+    heading = Column("Heading", Numeric(7, 3))
+    ignition = Column("Ignition", Boolean)
+    idling = Column("Idling", Boolean)
+
+
+class Trip(TelematicsEventMixin, TenantMixin, Base):
+    __tablename__ = "TelematicsTrips"
+    __table_args__ = _telematics_constraints(__tablename__) + (
+        CheckConstraint('"EndedAt" >= "OccurredAt"', name="ck_telematics_trip_time"),
+        CheckConstraint('"DistanceKm" >= 0 AND "IdleSeconds" >= 0', name="ck_telematics_trip_values"),
+    )
+    ended_at = Column("EndedAt", DateTime, nullable=False)
+    distance_km = Column("DistanceKm", Numeric(14, 3), nullable=False)
+    idle_seconds = Column("IdleSeconds", Integer, nullable=False)
+
+
+class OdometerEvent(TelematicsEventMixin, TenantMixin, Base):
+    __tablename__ = "OdometerEvents"
+    __table_args__ = _telematics_constraints(__tablename__) + (CheckConstraint('"OdometerKm" >= 0 AND "Confidence" BETWEEN 0 AND 1', name="ck_telematics_odometer"),)
+    odometer_km = Column("OdometerKm", Numeric(14, 3), nullable=False)
+    confidence = Column("Confidence", Numeric(5, 4), nullable=False)
+    sync_result = Column("SyncResult", String(40), nullable=False, default="disabled")
+
+
+class EngineHourEvent(TelematicsEventMixin, TenantMixin, Base):
+    __tablename__ = "EngineHourEvents"
+    __table_args__ = _telematics_constraints(__tablename__) + (CheckConstraint('"EngineHours" >= 0', name="ck_telematics_engine_hours"),)
+    engine_hours = Column("EngineHours", Numeric(14, 3), nullable=False)
+
+
+class FuelLevelEvent(TelematicsEventMixin, TenantMixin, Base):
+    __tablename__ = "FuelLevelEvents"
+    __table_args__ = _telematics_constraints(__tablename__) + (CheckConstraint('"FuelPercent" BETWEEN 0 AND 100', name="ck_telematics_fuel"),)
+    fuel_percent = Column("FuelPercent", Numeric(6, 3), nullable=False)
+
+
+class BatteryLevelEvent(TelematicsEventMixin, TenantMixin, Base):
+    __tablename__ = "BatteryLevelEvents"
+    __table_args__ = _telematics_constraints(__tablename__) + (CheckConstraint('"SocPercent" BETWEEN 0 AND 100', name="ck_telematics_battery"),)
+    soc_percent = Column("SocPercent", Numeric(6, 3), nullable=False)
+
+
+class DiagnosticCodeEvent(TelematicsEventMixin, TenantMixin, Base):
+    __tablename__ = "DiagnosticCodeEvents"
+    __table_args__ = _telematics_constraints(__tablename__)
+    code = Column("Code", String(50), nullable=False)
+    active = Column("Active", Boolean, nullable=False)
+
+
+class DriverBehaviorEvent(TelematicsEventMixin, TenantMixin, Base):
+    __tablename__ = "DriverBehaviorEvents"
+    __table_args__ = _telematics_constraints(__tablename__) + (CheckConstraint('"DurationSeconds" >= 0', name="ck_telematics_behavior"),)
+    behavior = Column("Behavior", String(50), nullable=False)
+    duration_seconds = Column("DurationSeconds", Integer)

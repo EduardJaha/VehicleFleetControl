@@ -125,5 +125,16 @@
   "integration_url_invalid": "Use a public HTTPS webhook URL on port 443.",
   "integration_not_found": "Integration record not found.",
   "integration_inactive": "Integration is revoked or expired.",
-  "integration_retry_unavailable": "This delivery cannot be resent now."
+  "integration_retry_unavailable": "This delivery cannot be resent now.",
+  "telematics_not_found": "Telematics record not found.",
+  "telematics_vehicle_archived": "This vehicle is archived.",
+  "telematics_mapping_conflict": "The vehicle, VIN or device conflicts with an existing mapping.",
+  "telematics_mapping_missing": "Map the provider vehicle before importing events.",
+  "telematics_event_conflict": "This event ID was already used for different data.",
+  "telematics_future_event": "Telematics events cannot be future dated.",
+  "telematics_inactive": "This telematics connection is not ready to receive events.",
+  "telematics_not_configured": "A provider adapter and operator-provisioned credentials are required.",
+  "telematics_webhook_auth": "Invalid webhook signature or inactive connection.",
+  "telematics_payload_size": "Telematics deliveries cannot exceed 1 MiB.",
+  "telematics_invalid_payload": "Invalid canonical telematics payload."
 }

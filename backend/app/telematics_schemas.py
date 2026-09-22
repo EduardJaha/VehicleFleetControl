@@ -15,6 +15,18 @@ class ConnectionSettings(StrictModel):
     online_after_seconds: int = Field(default=900, ge=60, le=86400)
 
 
+class ConnectionSettingsUpdate(StrictModel):
+    min_confidence: float | None = Field(default=None, ge=0.9, le=1)
+    max_reading_age_seconds: int | None = Field(default=None, ge=1, le=86400)
+    online_after_seconds: int | None = Field(default=None, ge=60, le=86400)
+
+    @model_validator(mode="after")
+    def reject_null_values(self):
+        if any(getattr(self, field) is None for field in self.model_fields_set):
+            raise ValueError("Settings fields cannot be null")
+        return self
+
+
 class ConnectionCreate(StrictModel):
     provider: Literal["generic", "geotab", "samsara", "motive", "oem"]
     credentials_reference: str | None = Field(default=None, pattern=r"^env:TELEMATICS_[A-Z0-9_]{1,100}$")
@@ -24,7 +36,7 @@ class ConnectionCreate(StrictModel):
 class ConnectionUpdate(StrictModel):
     enabled: bool
     credentials_reference: str | None = Field(default=None, pattern=r"^env:TELEMATICS_[A-Z0-9_]{1,100}$")
-    settings: ConnectionSettings = Field(default_factory=ConnectionSettings)
+    settings: ConnectionSettingsUpdate | None = None
 
 
 class ConnectionOut(BaseModel):

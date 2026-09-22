@@ -16,7 +16,7 @@ Migration: `20260918_0024`. Run `alembic upgrade head` from `backend/` during no
 
 1. Provision a random signing secret of at least 32 characters in the API process environment, e.g. `TELEMATICS_FLEET_A`. Use a distinct secret per connection; never put values in settings, requests or source control.
 2. `POST /api/v1/telematics/connections` with `{"provider":"generic","credentials_reference":"env:TELEMATICS_FLEET_A"}`. Only namespaced environment references are supported; an external secret manager can inject the value into the environment. References and secrets are excluded from responses/audits.
-3. `PUT /telematics/connections/{id}` with `{"enabled":true}`. This fails closed if the adapter or secret is missing. This operation can also replace the reference or settings, or disable reception.
+3. `PUT /telematics/connections/{id}` with `{"enabled":true}`. This fails closed if the adapter or secret is missing. This operation can also update the reference or settings, or disable reception. Omitted settings retain their current values; supplied setting fields merge with the current settings.
 4. `POST /telematics/connections/{id}/mappings` with `vehicle_id`, `external_vehicle_id`, and optional `vin` / `external_device_id`. Company is derived from authentication.
 5. Deliver signed batches to `/api/v1/telematics/webhooks/{id}`. Administrators can also submit canonical batches to `/telematics/connections/{id}/events` for testing/import. Both use the same transaction service.
 

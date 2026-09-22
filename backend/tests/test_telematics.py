@@ -68,6 +68,33 @@ def test_provider_readiness_and_secrets(setup):
         assert "credentials_reference" not in str([r.new_values for r in db.query(m.AuditLog)])
 
 
+def test_connection_toggle_preserves_settings_and_partial_updates(setup):
+    client, factory, cid, vid, *_ = setup
+    endpoint = BASE + f"/connections/{cid}"
+    settings = {"min_confidence": 0.99, "max_reading_age_seconds": 120, "online_after_seconds": 300}
+    response = client.put(endpoint, headers=auth(), json={"enabled": True, "settings": settings})
+    assert response.status_code == 200, response.text
+    assert response.json()["settings"] == settings
+
+    for enabled, status in ((False, "Disabled"), (True, "Ready")):
+        response = client.put(endpoint, headers=auth(), json={"enabled": enabled})
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == status
+        assert response.json()["settings"] == settings
+
+    response = client.put(endpoint, headers=auth(), json={"enabled": True, "settings": {"online_after_seconds": 600}})
+    assert response.status_code == 200, response.text
+    assert response.json()["settings"] == {**settings, "online_after_seconds": 600}
+    assert client.put(endpoint, headers=auth(), json={"enabled": True, "settings": {"min_confidence": None}}).status_code == 422
+
+    enable(setup)
+    response = send(setup, [event(eid="below_configured_confidence", confidence=0.95)])
+    assert response.status_code == 200, response.text
+    assert response.json()["results"][0]["result"] == "low_confidence"
+    with factory() as db:
+        assert db.get(m.Vehicle, vid).odometer_km == 100
+
+
 def test_mapping_conflicts_and_tenant_boundaries(setup):
     client, factory, cid, vid, other, mid=setup
     for payload in ({"vehicle_id":vid,"external_vehicle_id":"other"}, {"vehicle_id":vid,"external_vehicle_id":"gps-1"},

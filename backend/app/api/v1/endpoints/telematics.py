@@ -10,7 +10,7 @@ from app.services import telematics as service
 from app.services.audit import record_audit
 from app.services.telematics_providers import ADAPTERS, resolve_credentials
 from app.services.webhooks import verify_signature
-from app.telematics_schemas import (ConnectionCreate, ConnectionUpdate, ConnectionOut,
+from app.telematics_schemas import (ConnectionCreate, ConnectionSettings, ConnectionUpdate, ConnectionOut,
     MappingCreate, MappingOut, OdometerPolicy, EventBatch)
 
 router = APIRouter()
@@ -47,7 +47,9 @@ def configure_connection(connection_id: int, payload: ConnectionUpdate,
                          db: Session = Depends(get_db), user=Depends(administrator)):
     row = service.owned(db, m.IntegrationConnection, connection_id, lock=True)
     row.credentials_reference = payload.credentials_reference or row.credentials_reference
-    row.settings = payload.settings.model_dump()
+    if payload.settings is not None:
+        updates = payload.settings.model_dump(exclude_unset=True)
+        row.settings = ConnectionSettings.model_validate({**(row.settings or {}), **updates}).model_dump()
     if payload.enabled:
         if row.provider not in ADAPTERS or not resolve_credentials(row.credentials_reference):
             service.fail("not_configured", 503)

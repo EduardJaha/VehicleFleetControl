@@ -32,7 +32,9 @@ def context():
 
 
 def setup_record(db: Session, entity_type: str):
-    db.add_all([Company(id=1, name="Alpha", slug="alpha"), Company(id=2, name="Beta", slug="beta")])
+    for company_id, name, slug in ((1, "Alpha", "alpha"), (2, "Beta", "beta")):
+        if db.get(Company, company_id) is None:
+            db.add(Company(id=company_id, name=name, slug=slug))
     users = {
         name: User(company_id=company_id, email=f"{name}@example.test", full_name=name,
                    hashed_password="unused", role=role, is_active=True)
@@ -75,9 +77,14 @@ def setup_record(db: Session, entity_type: str):
     permission_code = "accidents.manage" if entity_type == "VehicleAccident" else "assignments.manage"
     view_code = "accidents.view" if entity_type == "VehicleAccident" else "assignments.view"
     role = Role(code=f"scoped_{entity_type}", name="Scoped manager", is_active=True)
-    permissions = [Permission(code=code, name=code, module="Files", description=code)
-                   for code in (permission_code, view_code)]
-    db.add_all([role, *permissions])
+    permissions = []
+    for code in (permission_code, view_code):
+        permission = db.query(Permission).filter_by(code=code).one_or_none()
+        if permission is None:
+            permission = Permission(code=code, name=code, module="Files", description=code)
+            db.add(permission)
+        permissions.append(permission)
+    db.add(role)
     db.flush()
     db.add_all([RolePermission(role_id=role.id, permission_id=permission.id) for permission in permissions])
     db.add(UserRole(user_id=users["scoped"].id, role_id=role.id, own_records_only=True))

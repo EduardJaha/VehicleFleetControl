@@ -1,5 +1,7 @@
 # Maintenance supply restoration
 
+Historical record of the 2026-09-13 restoration. Repository and database findings, the pre-edit plan, test counts, and migration state below describe that point in time; they are not current setup or verification guidance. Use `AGENTS.md` and `README.md` for current behavior and setup.
+
 ## Repository and database findings (2026-09-13)
 
 Analysis preceded source edits. The checkout was clean at `95062b5`, on

@@ -469,9 +469,9 @@ Run the dependency-free backend catalog tests from the `backend` directory:
 python -m unittest discover -s tests -v
 ```
 
-### First Admin User
+### Company Administrator Registration
 
-Authentication is required for `/api/v1` application endpoints. For a new local database, start the backend and frontend, open `http://localhost:3000/login`, and choose **Create first Admin user**. The public first-admin registration is only available while the `Users` table is empty; after that, an Admin must create additional users through the authenticated API.
+Authentication is required for `/api/v1` application endpoints. To onboard a company, start the backend and frontend, open `http://localhost:3000/login`, and choose **Create first Admin user**. `POST /api/v1/auth/register` remains available after the first company is created: each registration creates a new company and its administrator. Login email is globally unique across companies, so a new company administrator must use an email that is not already registered. An administrator creates additional users for an existing company through the authenticated administration API.
 
 Auth-related backend environment variables can be set in `backend/.env`:
 

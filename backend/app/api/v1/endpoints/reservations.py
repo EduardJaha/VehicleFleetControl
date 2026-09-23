@@ -5,14 +5,44 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.authorization import has_permission, require_permission
 from app.core.security import get_current_user
 from app.db.session import get_db
-from app.models import User, VehicleReservation
+from app.models import User, Vehicle, VehicleReservation
 from app.schemas import AddReservation, ReservationStatusUpdate, UserRole, VehicleReservationListOut
 from app.utils.dates import format_date, parse_date
-from app.utils.domain import find_vehicle_by_plate, parse_reservation_status, reservation_status_name
+from app.utils.domain import ReservationStatusEnum, find_vehicle_by_plate, parse_reservation_status, reservation_status_name
 from app.services.audit import record_audit, snapshot
 from app.services.notifications import notify_roles
 
 router = APIRouter(dependencies=[Depends(require_permission("reservations.view"))])
+
+BLOCKING_STATUSES = (ReservationStatusEnum.Pending, ReservationStatusEnum.Approved)
+
+
+def ensure_no_reservation_overlap(
+    db: Session,
+    *,
+    vehicle: Vehicle,
+    start: datetime,
+    end: datetime,
+    exclude_reservation_id: int | None = None,
+) -> None:
+    # Serialize reservation activation for one vehicle on databases with row locks
+    # (notably PostgreSQL). Locking existing reservations would miss empty ranges.
+    db.query(Vehicle).filter(
+        Vehicle.id == vehicle.id,
+        Vehicle.company_id == vehicle.company_id,
+    ).with_for_update().one()
+    query = db.query(VehicleReservation).filter(
+        VehicleReservation.company_id == vehicle.company_id,
+        VehicleReservation.vehicle_id == vehicle.id,
+        VehicleReservation.archived.is_(False),
+        VehicleReservation.status.in_(BLOCKING_STATUSES),
+        VehicleReservation.start_date <= end,
+        VehicleReservation.end_date >= start,
+    )
+    if exclude_reservation_id is not None:
+        query = query.filter(VehicleReservation.id != exclude_reservation_id)
+    if query.first():
+        raise HTTPException(status_code=409, detail="This vehicle is already reserved during the selected dates.")
 
 
 def reservation_out(reservation: VehicleReservation) -> VehicleReservationListOut:
@@ -38,20 +68,13 @@ def add_reservation(payload: AddReservation, db: Session = Depends(get_db), curr
     vehicle = find_vehicle_by_plate(db, payload.license_plate)
     if not vehicle:
         raise HTTPException(status_code=404, detail=f"No vehicle found with license plate '{payload.license_plate}'.")
+    if vehicle.archived:
+        raise HTTPException(status_code=400, detail="Archived Vehicles cannot receive new Reservations.")
     start = parse_date(payload.start_date, "StartDate")
     end = parse_date(payload.end_date, "EndDate")
     if end < start:
         raise HTTPException(status_code=400, detail="EndDate must be on or after StartDate.")
-    overlaps = (
-        db.query(VehicleReservation)
-        .filter(VehicleReservation.vehicle_id == vehicle.id)
-        .filter(VehicleReservation.archived.is_(False))
-        .filter(VehicleReservation.status != 3)
-        .filter(start <= VehicleReservation.end_date, end >= VehicleReservation.start_date)
-        .first()
-    )
-    if overlaps:
-        raise HTTPException(status_code=409, detail="This vehicle is already reserved during the selected dates.")
+    ensure_no_reservation_overlap(db, vehicle=vehicle, start=start, end=end)
     reservation = VehicleReservation(
         vehicle_id=vehicle.id,
         reserved_by=payload.reserved_by,
@@ -115,7 +138,13 @@ def update_status(reservation_id: int, payload: ReservationStatusUpdate, db: Ses
     if reservation.status == 4:
         raise HTTPException(status_code=409, detail="A completed Reservation cannot be reopened.")
     old_status = reservation.status
-    reservation.status = parse_reservation_status(payload.status)
+    new_status = parse_reservation_status(payload.status)
+    if new_status in BLOCKING_STATUSES:
+        ensure_no_reservation_overlap(
+            db, vehicle=reservation.vehicle, start=reservation.start_date,
+            end=reservation.end_date, exclude_reservation_id=reservation.id,
+        )
+    reservation.status = new_status
     action = {
         1: "Reservation approved", 2: "Reservation rejected", 3: "Reservation cancelled"
     }.get(reservation.status, "Reservation status changed")
@@ -135,6 +164,10 @@ def approve(reservation_id: int, db: Session = Depends(get_db), current_user: Us
         raise HTTPException(status_code=404, detail="Reservation not found.")
     if reservation.status == 4:
         raise HTTPException(status_code=409, detail="A completed Reservation cannot be reopened.")
+    ensure_no_reservation_overlap(
+        db, vehicle=reservation.vehicle, start=reservation.start_date,
+        end=reservation.end_date, exclude_reservation_id=reservation.id,
+    )
     reservation.status = 1
     record_audit(
         db, action="Reservation approved", entity_type="VehicleReservation", entity_id=reservation.id,
@@ -190,6 +223,11 @@ def restore_reservation(
     reservation = db.get(VehicleReservation, reservation_id)
     if not reservation:
         raise HTTPException(status_code=404, detail="Reservation not found.")
+    if reservation.status in BLOCKING_STATUSES:
+        ensure_no_reservation_overlap(
+            db, vehicle=reservation.vehicle, start=reservation.start_date,
+            end=reservation.end_date, exclude_reservation_id=reservation.id,
+        )
     reservation.archived = False
     reservation.archived_at = None
     reservation.archived_by = None

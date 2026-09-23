@@ -179,7 +179,8 @@ distribution, with the same filters and Excel export support as other reports.
 * Approve reservations
 * Reject reservations
 * Track reservation status
-* Prevent overlapping active reservations
+* Prevent inclusive date overlaps with unarchived Pending or Approved reservations when creating, approving, changing status, or restoring; Rejected, Cancelled, Completed, and archived reservations do not block dates
+* Keep Completed reservations closed to reopening and reject new reservations for archived vehicles
 * Search and filter reservations
 
 ---

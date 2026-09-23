@@ -42,14 +42,22 @@ ENTITY_MODELS = {
 }
 
 
-def authorize_entity_access(db: Session, current_user: User, entity_type: str, entity) -> None:
-    if entity_type == "VehicleAccident" and (active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "accidents.view")):
+def authorize_entity_access(db: Session, current_user: User, entity_type: str, entity, *, write: bool = False) -> None:
+    if entity_type == "VehicleAccident" and (
+        active_role(db, current_user) == UserRole.driver.value
+        or own_records_only(db, current_user, "accidents.view")
+        or (write and (own_records_only(db, current_user, "accidents.manage") or not has_permission(db, current_user, "accidents.manage")))
+    ):
         if not current_user.driver_profile or current_user.driver_profile.id != entity.driver_id:
             raise HTTPException(
                 status_code=403,
                 detail="Drivers can only access attachments for their own Accident records.",
             )
-    if entity_type == "VehicleConditionRecord" and (active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "assignments.view")):
+    if entity_type == "VehicleConditionRecord" and (
+        active_role(db, current_user) == UserRole.driver.value
+        or own_records_only(db, current_user, "assignments.view")
+        or (write and (own_records_only(db, current_user, "assignments.manage") or not has_permission(db, current_user, "assignments.manage")))
+    ):
         if not current_user.driver_profile or current_user.driver_profile.id != entity.driver_id:
             raise HTTPException(
                 status_code=403,
@@ -63,9 +71,28 @@ def authorize_entity_access(db: Session, current_user: User, entity_type: str, e
     if document is not None:
         if document.archived:
             raise HTTPException(status_code=404, detail="Related record not found.")
-        if active_role(db, current_user) == UserRole.driver.value or own_records_only(db, current_user, "documents.view"):
+        if (active_role(db, current_user) == UserRole.driver.value
+                or own_records_only(db, current_user, "documents.view")
+                or (write and own_records_only(db, current_user, "documents.upload"))):
             if not current_user.driver_profile or current_user.driver_profile.id != document.driver_id:
                 raise HTTPException(status_code=403, detail="Drivers can only access their own Documents.")
+
+
+def attachment_parent(db: Session, current_user: User, entity_type: str, entity_id: int, *, attachment: Attachment | None = None):
+    model = ENTITY_MODELS.get(entity_type)
+    entity = db.get(model, entity_id) if model else None
+    company_id = db.info.get("company_id", current_user.company_id)
+    if (not entity or getattr(entity, "archived", False)
+            or entity.company_id != company_id
+            or (attachment is not None and attachment.company_id != entity.company_id)):
+        raise HTTPException(status_code=404, detail="Related record not found.")
+    if entity_type == "VehicleConditionRecord":
+        assignment = entity.vehicle_assignment
+        if not assignment or assignment.archived or assignment.company_id != company_id:
+            raise HTTPException(status_code=404, detail="Related record not found.")
+    if entity_type == "DocumentVersion" and (not entity.document or entity.document.company_id != company_id):
+        raise HTTPException(status_code=404, detail="Related record not found.")
+    return entity
 
 
 READ_PERMISSIONS = {
@@ -76,13 +103,21 @@ READ_PERMISSIONS = {
 WRITE_PERMISSIONS = {
     "VehicleService": "maintenance.assign_work_order", "WorkOrder": "maintenance.assign_work_order",
     "VehicleFuel": "fuel.edit", "VehiclePaper": "documents.upload", "DocumentVersion": "documents.upload",
-    "VehicleAccident": "accidents.view", "Inspection": "inspections.create", "VehicleConditionRecord": "assignments.view",
+    "VehicleAccident": ("accidents.manage", "accidents.report"), "Inspection": "inspections.create",
+    "VehicleConditionRecord": ("assignments.manage", "assignments.self_service"),
+}
+ARCHIVE_PERMISSIONS = {
+    **WRITE_PERMISSIONS,
+    "VehicleAccident": "accidents.manage",
+    "Inspection": "inspections.manage",
+    "VehicleConditionRecord": "assignments.manage",
 }
 
 
-def authorize_entity_permission(db: Session, user: User, entity_type: str, *, write: bool = False) -> None:
-    permission = (WRITE_PERMISSIONS if write else READ_PERMISSIONS).get(entity_type)
-    if permission is None or not has_permission(db, user, permission):
+def authorize_entity_permission(db: Session, user: User, entity_type: str, *, write: bool = False, archive: bool = False) -> None:
+    permission = (ARCHIVE_PERMISSIONS if archive else WRITE_PERMISSIONS if write else READ_PERMISSIONS).get(entity_type)
+    permissions = (permission,) if isinstance(permission, str) else (permission or ())
+    if not any(has_permission(db, user, code) for code in permissions):
         raise HTTPException(status_code=403, detail="Insufficient permissions for this attachment.")
 
 
@@ -105,13 +140,11 @@ def list_files(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    model = ENTITY_MODELS.get(entity_type.strip())
-    entity = db.get(model, entity_id) if model else None
-    if not entity or getattr(entity, "archived", False):
-        raise HTTPException(status_code=404, detail="Related record not found.")
+    entity = attachment_parent(db, current_user, entity_type.strip(), entity_id)
     authorize_entity_permission(db, current_user, entity_type.strip())
     authorize_entity_access(db, current_user, entity_type.strip(), entity)
     rows = db.query(Attachment).filter(
+        Attachment.company_id == entity.company_id,
         Attachment.entity_type == entity_type.strip(),
         Attachment.entity_id == entity_id,
         Attachment.archived.is_(False),
@@ -137,11 +170,9 @@ async def upload_file_transaction(entity_type: str, entity_id: int, category: st
         raise HTTPException(status_code=422, detail="Unsupported attachment entity type.")
     if category not in {"auto", "document", "image"}:
         raise HTTPException(status_code=422, detail="category must be auto, document, or image.")
-    entity = db.get(ENTITY_MODELS[normalized_entity], entity_id)
-    if not entity or getattr(entity, "archived", False):
-        raise HTTPException(status_code=404, detail="Related record not found.")
+    entity = attachment_parent(db, current_user, normalized_entity, entity_id)
     authorize_entity_permission(db, current_user, normalized_entity, write=True)
-    authorize_entity_access(db, current_user, normalized_entity, entity)
+    authorize_entity_access(db, current_user, normalized_entity, entity, write=True)
     if normalized_entity == "Inspection" and entity.template_snapshot:
         from app.services.inspection_templates import can_record_results, fail
         if not can_record_results(db, current_user, entity):
@@ -229,10 +260,7 @@ def download_file(
     attachment = db.query(Attachment).filter(Attachment.id == file_id, Attachment.archived.is_(False)).first()
     if not attachment:
         raise HTTPException(status_code=404, detail="File not found.")
-    model = ENTITY_MODELS.get(attachment.entity_type)
-    entity = db.get(model, attachment.entity_id) if model else None
-    if not entity or getattr(entity, "archived", False):
-        raise HTTPException(status_code=404, detail="Related record not found.")
+    entity = attachment_parent(db, current_user, attachment.entity_type, attachment.entity_id, attachment=attachment)
     authorize_entity_permission(db, current_user, attachment.entity_type)
     authorize_entity_access(db, current_user, attachment.entity_type, entity)
     record_audit(
@@ -252,9 +280,11 @@ def archive_file(
     current_user: User = Depends(get_current_user),
 ):
     attachment = db.get(Attachment, file_id)
-    if not attachment:
+    if not attachment or attachment.archived:
         raise HTTPException(status_code=404, detail="File not found.")
-    authorize_entity_permission(db, current_user, attachment.entity_type, write=True)
+    entity = attachment_parent(db, current_user, attachment.entity_type, attachment.entity_id, attachment=attachment)
+    authorize_entity_permission(db, current_user, attachment.entity_type, archive=True)
+    authorize_entity_access(db, current_user, attachment.entity_type, entity, write=True)
     if attachment.entity_type == "Inspection":
         used = db.query(InspectionItem).filter(InspectionItem.inspection_id == attachment.entity_id).all()
         if any(attachment.id in (item.photo_attachment_ids or []) for item in used):

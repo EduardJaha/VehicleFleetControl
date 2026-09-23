@@ -172,16 +172,46 @@ def accident_out(accident: VehicleAccident, request: Request) -> AccidentOut:
     )
 
 
-def transition_status(accident: VehicleAccident, target: str) -> None:
+def transition_status(db: Session, accident: VehicleAccident, target: str, current_user: User) -> None:
     current = accident.status or AccidentStatus.reported.value
     if target not in STATUS_TRANSITIONS.get(current, set()):
         raise HTTPException(status_code=409, detail=f"Accident cannot transition from {current} to {target}.")
+    if target in {AccidentStatus.resolved.value, AccidentStatus.closed.value}:
+        incomplete = [
+            row.id for row in accident.work_orders
+            if not row.archived and row.status not in {"Completed", "Cancelled"}
+        ]
+        if incomplete:
+            raise HTTPException(status_code=409, detail=f"Complete linked Work Orders first: {incomplete}.")
+        if accident.claim and accident.claim.claim_status not in {"Closed", "Rejected"}:
+            action = "resolving" if target == AccidentStatus.resolved.value else "closing"
+            raise HTTPException(status_code=409, detail=f"Close or reject the Insurance Claim before {action} the Accident.")
+    if target == AccidentStatus.resolved.value and accident.actual_damage_cost is None and accident.work_orders:
+        accident.actual_damage_cost = sum((row.total_cost or Decimal("0")) for row in accident.work_orders)
     accident.status = target
     now = datetime.utcnow()
     if target == AccidentStatus.resolved.value:
         accident.resolved_at = now
+        record_audit(
+            db, action="Accident resolved", entity_type="VehicleAccident", entity_id=accident.id,
+            user=current_user, new_values=snapshot(accident),
+            description=f"Accident #{accident.id} resolved.",
+        )
+        resolve_by_prefix(db, f"accident:{accident.id}:")
+        notify_accident(db, accident, "Accident resolved", "Medium")
     if target == AccidentStatus.closed.value:
         accident.closed_at = now
+        record_audit(
+            db, action="Accident closed", entity_type="VehicleAccident", entity_id=accident.id,
+            user=current_user, new_values={"status": "Closed", "closed_at": accident.closed_at},
+            description=f"Accident #{accident.id} closed.",
+        )
+    if target not in {AccidentStatus.resolved.value, AccidentStatus.closed.value}:
+        record_audit(
+            db, action="Accident status changed", entity_type="VehicleAccident", entity_id=accident.id,
+            user=current_user, old_values={"status": current}, new_values={"status": target},
+            description=f"Accident #{accident.id} moved from {current} to {target}.",
+        )
 
 
 @router.post("", response_model=AccidentOut, status_code=201)
@@ -195,6 +225,8 @@ def create_accident(
 
 
 def create_accident_transaction(payload: AccidentCreate, request: Request, db: Session, current_user: User, *, commit: bool = True):
+    if payload.status in {AccidentStatus.resolved, AccidentStatus.closed}:
+        raise HTTPException(status_code=409, detail="Terminal Accident status requires a transition.")
     vehicle = db.get(Vehicle, payload.vehicle_id)
     if not vehicle or vehicle.archived:
         raise HTTPException(status_code=404, detail="Vehicle not found.")
@@ -414,13 +446,7 @@ def transition_accident(
     current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
-    old_status = accident.status
-    transition_status(accident, target_status.value)
-    record_audit(
-        db, action="Accident status changed", entity_type="VehicleAccident", entity_id=accident.id,
-        user=current_user, old_values={"status": old_status}, new_values={"status": accident.status},
-        description=f"Accident #{accident.id} moved from {old_status} to {accident.status}.",
-    )
+    transition_status(db, accident, target_status.value, current_user)
     db.commit()
     return accident_out(get_accident(db, accident.id), request)
 
@@ -619,24 +645,7 @@ def resolve_accident(
     current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
-    incomplete = [row.id for row in accident.work_orders if not row.archived and row.status not in {"Completed", "Cancelled"}]
-    if incomplete:
-        raise HTTPException(status_code=409, detail=f"Complete linked Work Orders first: {incomplete}.")
-    if accident.claim and accident.claim.claim_status not in {"Closed", "Rejected"}:
-        raise HTTPException(status_code=409, detail="Close or reject the Insurance Claim before resolving the Accident.")
-    if accident.status not in {"Repair Approved", "Repair In Progress"}:
-        raise HTTPException(status_code=409, detail="Accident must be in an active repair state before resolution.")
-    if accident.actual_damage_cost is None and accident.work_orders:
-        accident.actual_damage_cost = sum((row.total_cost or Decimal("0")) for row in accident.work_orders)
-    accident.status = "Resolved"
-    accident.resolved_at = datetime.utcnow()
-    record_audit(
-        db, action="Accident resolved", entity_type="VehicleAccident", entity_id=accident.id,
-        user=current_user, new_values=snapshot(accident),
-        description=f"Accident #{accident.id} resolved.",
-    )
-    resolve_by_prefix(db, f"accident:{accident.id}:")
-    notify_accident(db, accident, "Accident resolved", "Medium")
+    transition_status(db, accident, AccidentStatus.resolved.value, current_user)
     db.commit()
     return {"message": "Accident resolved."}
 
@@ -648,14 +657,7 @@ def close_accident(
     current_user: User = Depends(require_permission("accidents.manage")),
 ):
     accident = get_accident(db, accident_id)
-    if accident.status not in {"Resolved", "Rejected"}:
-        raise HTTPException(status_code=409, detail="Resolve or reject the Accident before closing it.")
-    transition_status(accident, "Closed")
-    record_audit(
-        db, action="Accident closed", entity_type="VehicleAccident", entity_id=accident.id,
-        user=current_user, new_values={"status": "Closed", "closed_at": accident.closed_at},
-        description=f"Accident #{accident.id} closed.",
-    )
+    transition_status(db, accident, AccidentStatus.closed.value, current_user)
     db.commit()
     return {"message": "Accident closed."}
 

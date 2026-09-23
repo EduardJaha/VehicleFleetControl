@@ -20,6 +20,7 @@ from app.api.v1.endpoints.accidents import (
     open_claim,
     resolve_accident,
     restore_accident,
+    transition_accident,
     update_claim,
 )
 from app.api.v1.endpoints.files import authorize_entity_access
@@ -42,6 +43,7 @@ from app.models import (
 from app.schemas import (
     AccidentClaimPayload,
     AccidentCreate,
+    AccidentStatus,
     AccidentWorkOrderPayload,
     UserRole,
 )
@@ -249,6 +251,108 @@ def test_workflow_guards_permissions_and_driver_attachment_scope(db: Session, re
     mark_vehicle_unavailable(accident.id, db, users["fleet_manager"])
     assert vehicle.status == 1
     assert accident.status == "Under Review"
+
+
+def test_generic_terminal_transitions_enforce_repair_and_claim_rules(db: Session, records):
+    users, vehicle, driver, assignment = records
+    created = create_accident(
+        AccidentCreate(
+            vehicle_id=vehicle.id, driver_id=driver.id, assignment_id=assignment.id,
+            accident_datetime=datetime.utcnow().isoformat(), location="Depot",
+            severity="Moderate", vehicle_available_after_accident=False,
+            estimated_damage_cost=Decimal("500.00"),
+        ),
+        request(), db, users["fleet_manager"],
+    )
+    accident = db.get(VehicleAccident, created.id)
+    transition_accident(accident.id, AccidentStatus.under_review, request(), db, users["fleet_manager"])
+    transition_accident(accident.id, AccidentStatus.repair_approved, request(), db, users["fleet_manager"])
+    order_id = create_accident_work_order(
+        accident.id, AccidentWorkOrderPayload(title="Repair damage"), db, users["mechanic"],
+    )["id"]
+    order = db.get(WorkOrder, order_id)
+    claim_payload = AccidentClaimPayload(
+        insurance_company="Fleet Mutual", policy_number="POLICY-88", claim_number="CLAIM-88",
+        claim_status="Open", claim_opened_date=datetime.utcnow().isoformat(),
+    )
+    open_claim(accident.id, claim_payload, db, users["finance"])
+
+    with pytest.raises(HTTPException) as unfinished:
+        transition_accident(accident.id, AccidentStatus.resolved, request(), db, users["fleet_manager"])
+    assert unfinished.value.status_code == 409
+    assert accident.status == "Repair In Progress" and accident.resolved_at is None
+
+    order.status = "Completed"
+    order.total_cost = Decimal("425.00")
+    db.commit()
+    with pytest.raises(HTTPException) as open_insurance:
+        transition_accident(accident.id, AccidentStatus.resolved, request(), db, users["fleet_manager"])
+    assert open_insurance.value.status_code == 409
+    assert accident.status == "Repair In Progress" and accident.actual_damage_cost is None
+
+    update_claim(
+        accident.id, claim_payload.model_copy(update={"claim_status": "Settled"}), db, users["finance"],
+    )
+    close_claim(accident.id, db, users["finance"])
+    transition_accident(accident.id, AccidentStatus.resolved, request(), db, users["fleet_manager"])
+    assert accident.status == "Resolved"
+    assert accident.resolved_at is not None
+    assert accident.actual_damage_cost == Decimal("425.00")
+    assert db.query(AuditLog).filter_by(entity_id=accident.id, action="Accident resolved").count() == 1
+    assert db.query(Notification).filter_by(entity_id=accident.id, notification_type="Accident resolved").count() >= 1
+
+    transition_accident(accident.id, AccidentStatus.closed, request(), db, users["fleet_manager"])
+    assert accident.status == "Closed" and accident.closed_at is not None
+    assert db.query(AuditLog).filter_by(entity_id=accident.id, action="Accident closed").count() == 1
+
+
+def test_rejected_accident_cannot_close_with_open_claim(db: Session, records):
+    users, vehicle, driver, assignment = records
+    created = create_accident(
+        AccidentCreate(
+            vehicle_id=vehicle.id, driver_id=driver.id, assignment_id=assignment.id,
+            accident_datetime=datetime.utcnow().isoformat(), location="Depot",
+            severity="Minor", vehicle_available_after_accident=True,
+        ),
+        request(), db, users["fleet_manager"],
+    )
+    accident = db.get(VehicleAccident, created.id)
+    claim_payload = AccidentClaimPayload(
+        insurance_company="Fleet Mutual", policy_number="POLICY-89", claim_number="CLAIM-89",
+        claim_status="Open", claim_opened_date=datetime.utcnow().isoformat(),
+    )
+    open_claim(accident.id, claim_payload, db, users["finance"])
+    transition_accident(accident.id, AccidentStatus.rejected, request(), db, users["fleet_manager"])
+    for close in (
+        lambda: transition_accident(accident.id, AccidentStatus.closed, request(), db, users["fleet_manager"]),
+        lambda: close_accident(accident.id, db, users["fleet_manager"]),
+    ):
+        with pytest.raises(HTTPException) as blocked:
+            close()
+        assert blocked.value.status_code == 409
+        assert accident.status == "Rejected" and accident.closed_at is None
+
+    update_claim(
+        accident.id, claim_payload.model_copy(update={"claim_status": "Rejected"}), db, users["finance"],
+    )
+    close_accident(accident.id, db, users["fleet_manager"])
+    assert accident.status == "Closed" and accident.closed_at is not None
+
+
+def test_new_accident_cannot_start_in_terminal_status(db: Session, records):
+    users, vehicle, driver, assignment = records
+    for status in (AccidentStatus.resolved, AccidentStatus.closed):
+        with pytest.raises(HTTPException) as blocked:
+            create_accident(
+                AccidentCreate(
+                    vehicle_id=vehicle.id, driver_id=driver.id, assignment_id=assignment.id,
+                    accident_datetime=datetime.utcnow().isoformat(), location="Depot",
+                    severity="Minor", vehicle_available_after_accident=True, status=status,
+                ),
+                request(), db, users["fleet_manager"],
+            )
+        assert blocked.value.status_code == 409
+    assert db.query(VehicleAccident).count() == 0
 
 
 def test_accident_workflow_translations_are_bilingual():

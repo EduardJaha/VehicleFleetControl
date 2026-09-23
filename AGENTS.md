@@ -163,7 +163,7 @@ All entities: `backend/app/models.py`. Primary keys are integer `id` / SQL `Id`;
 - Inspection precedence: Vehicle → Brand/Model → Category → FuelType → Location → Department; higher priority, then lowest assignment ID wins ties. Begin freezes template/item snapshots; updates submit original IDs/names; completion requires checked required items and locks results.
 - Failed items enforce configured comment/photo evidence, may create one order/item, set OutOfUse, and notify. Passing later does not clear safety status or close repair orders. Scheduled checkout inspections must be completed/passed for the current UTC day/handover cycle; return schedules create a snapshot per return. Details: `S/inspection_templates.py`, `docs/inspection-templates.md`.
 - Document status prioritizes archive/rejection/renewal state over expiry. Expiry today is Expiring Soon; expired means before today. Valid and Expiring Soon count compliant. Renewals preserve versions; country/category requirements apply to vehicles, driver requirements cannot have those filters (`S/document_compliance.py`).
-- Accident transition rules live in `E/accidents.py:STATUS_TRANSITIONS`. The dedicated resolve action requires finished/cancelled repair orders and a Closed/Rejected claim; close-claim requires Settled/Rejected/Approved. **Inconsistency:** generic transition handling checks the state graph without the dedicated resolve action's checks.
+- Accident transition rules live in `E/accidents.py:STATUS_TRANSITIONS`. Both the generic transition route and the dedicated resolve/close actions use `transition_status`: moving to Resolved or Closed requires all unarchived linked repair orders to be Completed/Cancelled and any claim to be Closed/Rejected. The close-claim action requires Settled/Rejected/Approved.
 - Fuel type/unit derive from Vehicle: Electric uses KWH; other supported types, including Hybrid, use L. Total = quantity × unit cost rounded half-up. Keep L/KWH totals separate, retain migration review flags, and honor `fuel.view_cost` redaction.
 
 ## 8. API Reference Map
@@ -237,7 +237,7 @@ Default document limit **10 MiB**, image limit **8 MiB**; PDF/JPEG/PNG/WebP only
 
 `Attachment` stores relative disk path, metadata, tenant, uploader, and entity type/ID. Legacy `ServiceBill`, `AccidentFile`, fuel/paper/version columns retain paths, often authenticated `/api/v1/files/{id}/download` URLs. Downloads check tenant/entity permissions and return attachment disposition, `nosniff`, private/no-store headers. No public `/uploads` static mount exists.
 
-Frontend uses `apiPostForm` with browser-generated multipart boundaries and authenticated blob downloads (`apiDownloadFile`, `filesApi`). Do not use bare `<a href>` for protected files or extend legacy `fileHref` as a public serving mechanism. Generic attachment ownership/archive checks vary (see §19). Physical `delete_upload` is a no-op; retention cleanup is not implemented. Disk writes precede DB commit, so later transaction failures can leave orphan files.
+Frontend uses `apiPostForm` with browser-generated multipart boundaries and authenticated blob downloads (`apiDownloadFile`, `filesApi`). Do not use bare `<a href>` for protected files or extend legacy `fileHref` as a public serving mechanism. Generic attachment archive checks parent existence, tenant ownership, entity permission, and entity access through the same helpers used by upload/download; archive uses its own permission mapping. Physical `delete_upload` is a no-op; retention cleanup is not implemented. Disk writes precede DB commit, so later transaction failures can leave orphan files.
 
 ## 11. Database
 
@@ -408,14 +408,14 @@ Contract → model/migration → transactional API/permissions → client/form/d
 
 - SQL Server portability, driver setup, and migration verification remain outstanding.
 - Large models/schemas/pages/supply router, endpoint cross-imports, duplicate enum/permission definitions, and inconsistent date/pagination contracts increase coupling.
-- Reservation overlap, generic accident transitions, and reminder date boundaries need attention (§7).
+- Reminder date boundaries need attention (§7).
 - Tenant/record scopes vary by handler; legacy membership fallbacks remain. UI gating cannot substitute for API scope checks.
-- Files: antivirus stub, permissive auto-size policy, transaction orphans. Legacy accident downloads now apply ownership checks; attachment archive still omits the upload/download entity-access helper.
+- Files: antivirus stub, permissive auto-size policy, and transaction orphans.
 - Browser authentication uses expiring HttpOnly cookies with CSRF checks and a shared database rate limiter; no refresh flow. Same-site hosting/HTTPS/trusted proxy configuration are deployment requirements. Script-restricting CSP, optional MFA and self-service recovery remain future work; see `docs/authentication-security.md`.
 - Company notification rules gate selected generation categories, not every event. Stored timezone/currency do not imply universal timezone conversion or currency conversion.
 - Imports reject formulas and bound expanded XLSX content to 100 MiB. Bulk import requires unrestricted domain grants; scoped bulk imports and live Active/Overdue assignment imports are not supported. Jobs run synchronously without distributed workers; a process crash during a claimed job requires operator recovery after verifying the process stopped.
 - Preserve legacy columns, metadata-coupled bootstrap migrations, and migration bridge compatibility (§11).
-- README's first-admin narrative and historical notes lag onboarding/features. Production Docker builds, CI and a dedicated scheduler now exist. Container integration checks use disposable PostgreSQL/MinIO; operational readiness still requires a production backup restore rehearsal.
+- Production Docker builds, CI and a dedicated scheduler now exist. Container integration checks use disposable PostgreSQL/MinIO; operational readiness still requires a production backup restore rehearsal. Historical analysis/restoration notes are dated records, not current implementation guidance.
 
 ## 20. Agent Rules
 

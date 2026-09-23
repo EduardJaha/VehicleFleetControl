@@ -1,4 +1,6 @@
-# Current project analysis
+# Historical project analysis
+
+Historical record of the earlier .NET-to-FastAPI migration plan. Its project inventory and recommended development order describe that earlier state and are outdated for the current repository. Use `AGENTS.md` and `README.md` for current architecture and setup.
 
 ## Existing structure
 
